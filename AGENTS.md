@@ -8,6 +8,10 @@
 
 本文件是后续 Codex 开发规范。用户明确指令优先；已有修改应保留。日常、可逆的实现选择可自主完成，不因普通阶段切换反复请求确认。
 
+日常开发基线与 Pull Request 默认目标为 `dev`。除用户明确指定外，不直接在 `main` 开发；`main` 用于接收阶段验收后的稳定快照。开始工作前检查并切换到实际的 `dev` 或由其创建的任务分支，不仅依赖 GitHub 页面当前选中的分支。
+
+本项目原创代码、文档与示例采用 `Apache-2.0`；保留根目录 `LICENSE`、`NOTICE` 和已有归属声明。第三方代码保持原许可证，具体边界见 [docs/LICENSING.md](docs/LICENSING.md)。
+
 ## 2. 开始任务前
 
 1. 读取本文件、[README](README.md)、[ROADMAP](ROADMAP.md)、[ARCHITECTURE](ARCHITECTURE.md)、[STATUS](docs/STATUS.md)。
@@ -42,6 +46,7 @@
 - M0 验证后写入精确 `rust-toolchain.toml`；不能永久使用浮动 `nightly`/`stable` 作为可复现基线。
 - 能用 stable 则用 stable。确需 nightly 功能时固定日期，并写出所需 feature 与原因。
 - 提交 workspace `Cargo.lock`；固定引导器、协议 crate、固件、测试软件的版本/提交与校验和。
+- 创建自有 Cargo package 时填写 `license = "Apache-2.0"`；新建自有源码使用 `SPDX-License-Identifier: Apache-2.0` 标记。第三方文件不能被批量改写成项目许可证。
 - 尽量复用质量可靠的 `no_std` crate；引入前检查功能、许可、unsafe、分配与运行时假设。
 - 下载须校验；禁止 `curl | sh`、静默执行未知脚本、把访问令牌写进镜像或日志。
 - 不假定 `x86_64-unknown-none` 提供 `std`；自定义 target JSON 也不自动获得用户态标准库支持。

@@ -6,6 +6,8 @@
 
 项目仓库：[ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS)。
 
+日常开发与 Pull Request 的目标分支为 **`dev`**；`main` 保留阶段验收后的稳定快照。分支约定见 [GitHub 协作说明](docs/GITHUB_SETUP.md)。
+
 ## 项目目标
 
 1. Rust 自研内核，采用 x86_64、UEFI、Limine，先在 QEMU/OVMF 上建立稳定基线。
@@ -47,6 +49,7 @@
 | [docs/FIRST_TASK.md](docs/FIRST_TASK.md) | 可直接交给 Codex 的第一批实施任务 |
 | [docs/STATUS.md](docs/STATUS.md) | 当前已实现能力和下一步 |
 | [docs/GITHUB_SETUP.md](docs/GITHUB_SETUP.md) | 仓库克隆、文档维护与提交约定 |
+| [docs/LICENSING.md](docs/LICENSING.md) | Apache-2.0 选择、使用与第三方许可边界 |
 
 ## 怎样才算“可以在系统上开发 app”
 
@@ -68,4 +71,8 @@
 
 ## 许可证
 
-本项目尚未选定自有代码许可证；公开可见不等于授予开源许可。引入第三方代码或分发编译器、libc、引导器时，应保留各自许可证与必要材料，并单独记录来源。许可证选择在正式发布前落实，不妨碍先完成规划。
+本项目的原创代码、文档和示例采用 **[Apache License 2.0](LICENSE)**，SPDX 标识为 `Apache-2.0`。Copyright 2026 ananwanan and the AnovaOS contributors.
+
+该许可证允许商用、修改和分发，也允许在遵守许可条件的前提下发布闭源衍生作品，并包含贡献者专利授权。分发时须履行许可证、归属声明与修改标记等要求；详见 [许可说明](docs/LICENSING.md) 与 [NOTICE](NOTICE)。
+
+第三方引导器、libc、编译器、依赖库与导入代码仍适用各自许可证，不因放入本仓库或系统镜像而改为 Apache-2.0。

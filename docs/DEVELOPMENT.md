@@ -6,6 +6,8 @@
 
 当前可以阅读文档并将 [FIRST_TASK](FIRST_TASK.md) 交给 Codex 开始 M0/M1。不要运行不存在的脚本，也不要用预设测试输出代替真实结果。
 
+日常开发以 `dev` 为基线，任务分支从 `dev` 创建，Pull Request 以 `dev` 为目标；`main` 接收阶段验收后的稳定快照。克隆时可以显式指定 `--branch dev`，避免工作区停留在旧分支。
+
 ## 宿主环境
 
 首个受测宿主选择 x86_64 Linux；Windows 用户可通过 WSL2 构建并采用 QEMU TCG。KVM 作为可选加速，不能作为 CI 或普通启动的强制前提。后续根据真实验证增加 Windows 原生/macOS 宿主说明。
