@@ -1,0 +1,37 @@
+# Rust and generated builds
+/target/
+/build/
+/dist/
+/cache/
+
+# Generated toolchains and sysroots (keep recipes and source patches)
+/toolchains/downloads/
+/toolchains/install/
+/sysroot/generated/
+
+# Generated disk/firmware images
+*.img
+*.iso
+*.qcow2
+*.vmdk
+*.vdi
+*.fd
+
+# Local credentials and machine configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+/local.toml
+
+# Editor/OS files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Cargo.lock should be committed once a workspace exists.
