@@ -2,11 +2,26 @@
 
 ## 当前可用内容
 
-仓库目前只有 Markdown 规划、git 忽略和文本格式配置。尚无 Cargo workspace、内核、镜像生成器和 CI；本页中的工程命令除明确标明外均为计划接口。
+仓库目前只有 Markdown 规划、git 忽略、文本格式配置与根目录 `rustfmt.toml`。尚无 Cargo workspace、内核、镜像生成器和 CI；本页中的工程命令除明确标明外均为计划接口。
 
 当前可以阅读文档并将 [FIRST_TASK](FIRST_TASK.md) 交给 Codex 开始 M0/M1。不要运行不存在的脚本，也不要用预设测试输出代替真实结果。
 
 日常开发以 `dev` 为基线，任务分支从 `dev` 创建，Pull Request 以 `dev` 为目标；`main` 接收阶段验收后的稳定快照。克隆时可以显式指定 `--branch dev`，避免工作区停留在旧分支。
+
+## 开发语言与 Rust 格式
+
+默认入口为英文 [README.md](../README.md)，中文翻译保留在 [README.zh-CN.md](../README.zh-CN.md)，共享内容变更时同步维护。代码标识符、注释、Rustdoc、`SAFETY:`/`TODO:` 说明、日志与错误消息、测试名称、提交消息和 PR 标题/描述均使用英文。新开发文档使用英文；现有中文规划文档与明确的翻译/本地化资源保留对应语言。
+
+完整规则见英文 [CODING_STYLE.md](CODING_STYLE.md)。根目录 [rustfmt.toml](../rustfmt.toml) 是统一格式依据：Rust 2024 parser/style edition、4 空格缩进、100 列建议宽度、LF 换行，仅使用稳定版选项。新建自有 Cargo package 声明 `edition = "2024"`。
+
+M0 验证并固定工具链时包含 `rustfmt`、`clippy` 组件。**以下标准命令需要先有真实 Cargo workspace；当前不能运行，也不能据此报告已通过：**
+
+```sh
+cargo fmt --all
+cargo fmt --all -- --check
+```
+
+编辑器使用项目工具链的 rustfmt 并读取根配置。配置只能控制布局，英文注释和安全前提需要单独审阅。
 
 ## 宿主环境
 

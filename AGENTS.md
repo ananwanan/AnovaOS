@@ -12,6 +12,15 @@
 
 本项目原创代码、文档与示例采用 `Apache-2.0`；保留根目录 `LICENSE`、`NOTICE` 和已有归属声明。第三方代码保持原许可证，具体边界见 [docs/LICENSING.md](docs/LICENSING.md)。
 
+## Development language and formatting (mandatory)
+
+- Use English for first-party identifiers, source filenames, comments, Rustdoc, `SAFETY:`/`TODO:`/`FIXME:` explanations, logs, errors, panic/assertion messages, CLI help, test names, commit messages, and pull request titles/descriptions.
+- Write new development documentation in English. Explicit translations, localization resources, multilingual test fixtures, quoted external text, and third-party notices may retain their original language. Existing Chinese planning documents may be maintained until translated.
+- Keep [README.md](README.md) as the default English README and [README.zh-CN.md](README.zh-CN.md) as its Chinese translation; update both together when shared content changes.
+- Follow [docs/CODING_STYLE.md](docs/CODING_STYLE.md) and the root [rustfmt.toml](rustfmt.toml). Use four spaces, LF, a preferred width of 100 columns, and Rust 2024 parser/style editions. First-party Cargo packages must declare `edition = "2024"` when created.
+- M0 must pin a tested toolchain with `rustfmt` and `clippy`. Once the workspace exists, run `cargo fmt --all -- --check` before delivery and use `cargo fmt --all` to apply formatting. Before then, validate only existing files/configuration and report the scope honestly.
+- Keep formatting options stable-compatible. Avoid nested configs, unexplained formatter skips, and reformatting third-party/generated code. Rustfmt does not enforce English or verify `SAFETY:` explanations; review those separately.
+
 ## 2. 开始任务前
 
 1. 读取本文件、[README](README.md)、[ROADMAP](ROADMAP.md)、[ARCHITECTURE](ARCHITECTURE.md)、[STATUS](docs/STATUS.md)。
@@ -43,7 +52,7 @@
 
 ## 5. 工具链与依赖
 
-- M0 验证后写入精确 `rust-toolchain.toml`；不能永久使用浮动 `nightly`/`stable` 作为可复现基线。
+- M0 验证后写入精确 `rust-toolchain.toml`，包含 `rustfmt`、`clippy` 组件；不能永久使用浮动 `nightly`/`stable` 作为可复现基线。
 - 能用 stable 则用 stable。确需 nightly 功能时固定日期，并写出所需 feature 与原因。
 - 提交 workspace `Cargo.lock`；固定引导器、协议 crate、固件、测试软件的版本/提交与校验和。
 - 创建自有 Cargo package 时填写 `license = "Apache-2.0"`；新建自有源码使用 `SPDX-License-Identifier: Apache-2.0` 标记。第三方文件不能被批量改写成项目许可证。
@@ -115,7 +124,7 @@ M0 应提供最小可构建入口；M1 结束前 build/image/run/smoke 必须真
 ## 11. 验证要求
 
 - 文档修改检查本地链接、阶段/状态一致性和命令是否被明确标为计划；无代码时不伪造 Rust 构建结果。
-- 有代码后运行适用的格式化、构建、clippy 和相关测试，不盲目对所有目标执行 `cargo test --workspace`。
+- 有 workspace 后运行 `cargo fmt --all -- --check`，并按目标运行适用的构建、clippy 和相关测试，不盲目对所有目标执行 `cargo test --workspace`。
 - 纯逻辑适合宿主测试；IRQ、分页、syscall、调度、真实驱动需要 QEMU/系统内测试。
 - 冒烟测试必须有超时、明确成功标记、失败路径和可解析的 QEMU 退出结果。仅搜到一次启动 banner 不够。
 - 至少验证相关负例：坏 ELF/越界指针、非法 syscall、OOM、磁盘边界、进程异常或阻塞唤醒，按改动范围选择。

@@ -11,7 +11,8 @@
 ## 1. 工程骨架
 
 - 建立最小 `kernel` + `xtask` workspace 和 Cargo alias。
-- 验证并固定精确 Rust 工具链；使用 `x86_64-unknown-none` 构建内核，宿主工具保持 host target。
+- 验证并固定精确 Rust 工具链，包含 `rustfmt`、`clippy` 组件；使用 `x86_64-unknown-none` 构建内核，宿主工具保持 host target。
+- 自有 Cargo package 声明 `edition = "2024"`，遵守根目录 `rustfmt.toml` 和 [CODING_STYLE](CODING_STYLE.md)；注释、Rustdoc、日志与错误消息使用英文。
 - 内核不依赖 `std`；设置 panic abort、独立 linker script、最小入口。
 - 根据实际协议选择匹配的 Limine 与 Rust 绑定，固定版本/提交与下载校验和。
 - 只创建本批需要的模块；不提前生成未实现的网络、GUI、兼容层和编译器目录。
@@ -43,6 +44,7 @@ doctor 报告缺依赖；image 校验外部输入；run 默认使用仓库内生
 
 ## 4. 必须实际验证
 
+- workspace 建立后运行 `cargo fmt --all -- --check`，再执行适用的目标构建与测试。
 - 在本次可用环境内构建内核 ELF并检查其架构/布局。
 - QEMU + OVMF 启动，串口出现最终成功标记。
 - 测试 runner 同时检查标记和可解析的测试退出结果。

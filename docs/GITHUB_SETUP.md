@@ -28,6 +28,8 @@ git clone --branch dev git@github.com:ananwanan/AnovaOS.git
 - 日常工作在 `dev` 或由 `dev` 创建的任务分支进行，Pull Request 默认提交到 `dev`。
 - 阶段验收后再将经过验证的内容同步到 `main`，不把试验性改动直接提交到稳定分支。
 - 提交前检查 `git status` 和 diff，保留用户已有修改。
+- 提交消息与 PR 标题/描述使用英文；代码注释、Rustdoc、日志等遵守 [CODING_STYLE.md](CODING_STYLE.md)，默认英文 README 与中文版同步维护。
+- workspace 建立后，提交前通过根目录 `rustfmt.toml` 对应的 `cargo fmt --all -- --check`。
 - 代码、ABI、路线图与实际状态同步更新，验证结果写清通过、失败和未执行的范围。
 - 保留远端已有历史；不通过删除仓库或强制推送覆盖已有提交。
 - 不提交磁盘镜像、工具链缓存、密钥、令牌或包含私人数据的日志。
