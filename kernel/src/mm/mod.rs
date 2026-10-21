@@ -50,6 +50,10 @@ struct MemoryManager {
 static MEMORY: IrqLock<Option<MemoryManager>> = IrqLock::new(None);
 static HEAP: IrqLock<BuddyHeap> = IrqLock::new(BuddyHeap::new());
 
+pub fn heap_used() -> usize {
+    HEAP.with(|heap| heap.used())
+}
+
 struct KernelAllocator;
 #[global_allocator]
 static ALLOCATOR: KernelAllocator = KernelAllocator;

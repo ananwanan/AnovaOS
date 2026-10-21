@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-// Enter one Ring 3 context, switch SYSCALL to its trusted stack, and return to
-// the saved kernel continuation after exit/fault. BSP only; no GS-based state.
+// Resume saved user GPR/FPU state and use its own trusted SYSCALL stack.
+// Every user trap returns to a single BSP scheduler continuation with IF=0.
 .section .bss
 .balign 8
 anova_user_saved_rsp: .quad 0
@@ -9,8 +9,8 @@ anova_user_kernel_top: .quad 0
 anova_user_rsp: .quad 0
 
 .section .text
-.global anova_run_user
-anova_run_user:
+.global anova_run_context
+anova_run_context:
     push rbx
     push rbp
     push r12
@@ -22,30 +22,9 @@ anova_run_user:
     mov [rip + anova_user_saved_cr3], rax
     mov [rip + anova_user_kernel_top], rcx
     mov cr3, rdi
-    push 0x2b
-    push rdx
-    push 0x202
-    push 0x33
-    push rsi
-    mov ax, 0x2b
-    mov ds, ax
-    mov es, ax
-    xor eax, eax
-    xor ebx, ebx
-    xor ecx, ecx
-    xor edx, edx
-    xor ebp, ebp
-    xor edi, edi
-    xor esi, esi
-    xor r8d, r8d
-    xor r9d, r9d
-    xor r10d, r10d
-    xor r11d, r11d
-    xor r12d, r12d
-    xor r13d, r13d
-    xor r14d, r14d
-    xor r15d, r15d
-    iretq
+    fxrstor64 [rdx]
+    mov rsp, rsi
+    jmp anova_restore_frame
 
 .global anova_syscall_entry
 anova_syscall_entry:
@@ -71,6 +50,9 @@ anova_leave_user:
     mov ax, 16
     mov ds, ax
     mov es, ax
+    xor eax,eax
+    mov fs,ax
+    mov gs,ax
     pop r15
     pop r14
     pop r13

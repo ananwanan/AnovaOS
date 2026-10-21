@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Adapt native ABI v1 syscalls to console, process lifecycle and system queries.
-//! Linux personality and filesystem descriptors are intentionally not implemented.
+//! Adapt native v1 console descriptors and system queries; task owns lifecycle calls.
+//! Console handles have per-process close semantics; VFS and Linux remain later work.
 use crate::{
     arch::x86_64::{apic, traps::TrapFrame},
     mm::{uaccess, user::UserSpace},
@@ -8,12 +8,20 @@ use crate::{
 };
 use anova_abi::*;
 
-pub fn syscall(frame: &TrapFrame, space: &UserSpace, pid: u64) -> i64 {
+pub fn syscall(
+    frame: &TrapFrame,
+    space: &UserSpace,
+    pid: u64,
+    files: &mut anova_sched::fd::Descriptors,
+) -> i64 {
     match frame.rax {
         SYS_EXIT => INVALID_ARGUMENT,
         SYS_WRITE => {
             if frame.rdi != 1 && frame.rdi != 2 {
                 return INVALID_ARGUMENT;
+            }
+            if !files.writable(frame.rdi) {
+                return BAD_DESCRIPTOR;
             }
             let Ok(length) = usize::try_from(frame.rdx) else {
                 return TOO_LONG;
@@ -46,6 +54,7 @@ pub fn syscall(frame: &TrapFrame, space: &UserSpace, pid: u64) -> i64 {
                 Err(e) => e,
             }
         }
+        SYS_CLOSE => files.close(frame.rdi).map_or_else(|error| error, |()| 0),
         _ => UNSUPPORTED,
     }
 }

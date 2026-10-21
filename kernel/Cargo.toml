@@ -19,6 +19,7 @@ anova-platform = { path = "../crates/platform" }
 anova-memory = { path = "../crates/memory" }
 anova-abi = { path = "../crates/abi" }
 anova-elf = { path = "../crates/elf" }
+anova-sched = { path = "../crates/sched" }
 
 [features]
 qemu-test = []

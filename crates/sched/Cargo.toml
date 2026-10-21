@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# Shares bounded process state, parent/wait semantics and round-robin policy with host tests.
+[package]
+name = "anova-sched"
+version.workspace = true
+edition = "2024"
+license.workspace = true
+
+[dependencies]
+anova-abi = { path = "../abi" }

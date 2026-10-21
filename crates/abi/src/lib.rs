@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #![no_std]
-//! Native v1 wire constants, checked user addresses and padding-free query layout.
+//! Native v1 constants, checked user addresses and padding-free process/query layouts.
 //! These are AnovaOS interfaces; they do not implement the Linux syscall ABI.
 
 pub const VERSION: u32 = 1;
@@ -8,10 +8,60 @@ pub const PERSONALITY: &str = "anova.native.v1";
 pub const SYS_WRITE: u64 = 0;
 pub const SYS_EXIT: u64 = 1;
 pub const SYS_INFO: u64 = 2;
+pub const SYS_YIELD: u64 = 3;
+pub const SYS_SLEEP: u64 = 4;
+pub const SYS_SPAWN: u64 = 5;
+pub const SYS_EXEC: u64 = 6;
+pub const SYS_WAIT: u64 = 7;
+pub const SYS_FORK: u64 = 8;
+pub const SYS_CLOSE: u64 = 9;
 pub const BAD_ADDRESS: i64 = -1;
 pub const UNSUPPORTED: i64 = -2;
 pub const INVALID_ARGUMENT: i64 = -3;
 pub const TOO_LONG: i64 = -4;
+pub const NO_CHILD: i64 = -5;
+pub const NO_MEMORY: i64 = -6;
+pub const NOT_FOUND: i64 = -7;
+pub const PROCESS_LIMIT: i64 = -8;
+pub const BAD_DESCRIPTOR: i64 = -9;
+pub const MAX_NAME: usize = 128;
+
+/// Explicit little-endian wire values; fields contain user addresses, never references.
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub struct ExecRequest {
+    pub name: u64,
+    pub name_len: u64,
+    pub argument: u64,
+    pub argument_len: u64,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[repr(C)]
+pub struct ExitStatus {
+    /// 0=exit, 1=CPU fault (code is vector), 2=unsafe return rejected.
+    pub reason: u32,
+    pub code: u32,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+#[repr(C)]
+pub struct WaitStatus {
+    pub pid: u64,
+    pub status: ExitStatus,
+}
+
+impl WaitStatus {
+    pub fn bytes(self) -> [u8; 16] {
+        let mut bytes = [0; 16];
+        bytes[..8].copy_from_slice(&self.pid.to_le_bytes());
+        bytes[8..12].copy_from_slice(&self.status.reason.to_le_bytes());
+        bytes[12..].copy_from_slice(&self.status.code.to_le_bytes());
+        bytes
+    }
+}
+
+const _: () = assert!(size_of::<ExecRequest>() == 32 && size_of::<WaitStatus>() == 16);
 pub const MAX_WRITE: usize = 4096;
 pub const USER_MIN: u64 = 0x1_0000;
 pub const USER_LIMIT: u64 = 1 << 47;

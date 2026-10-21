@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Exercise the real loader/syscall/fault boundaries and verify exact reclamation.
+//! Verify loader/syscall/fault containment plus transactional process/fork/exec failures.
 use super::*;
 use alloc::vec::Vec;
 
@@ -90,5 +90,59 @@ pub fn run(rust: &[u8]) {
     assert!(ticks > 0, "No timer IRQ interrupted Ring 3");
     serial::write(format_args!(
         "[USER:TEST] cases=11 repeated=8 pointers=rejected syscalls=checked faults=contained frames_restored=true user_irqs={ticks}\n"
+    ));
+    lifecycle_oom(rust);
+}
+
+fn lifecycle_oom(rust: &[u8]) {
+    let frames = mm::user::free_frames();
+    let heap = mm::heap_used();
+    {
+        let mut kernel = Kernel::new(100).unwrap();
+        let parent = kernel
+            .add(rust, &["hello-rust", "AnovaOS", "ring3"], 0)
+            .unwrap();
+        kernel.process_mut(parent).files.close(1).unwrap();
+        let root = kernel.process(parent).image.as_ref().unwrap().space.root();
+        let before = mm::user::free_frames();
+        let heap = mm::heap_used();
+        for operation in 0..3 {
+            mm::user::set_test_budget(3);
+            let error = match operation {
+                0 => kernel.fork(parent).map(|_| ()),
+                1 => kernel.exec(parent, rust, &["new-image"]),
+                _ => kernel.add(rust, &["child"], 100).map(|_| ()),
+            };
+            mm::user::set_test_budget(usize::MAX);
+            assert_eq!(
+                error,
+                Err(NO_MEMORY),
+                "Partial process allocation must fail"
+            );
+            assert_eq!(
+                mm::user::free_frames(),
+                before,
+                "Failed lifecycle leaked pages"
+            );
+            assert_eq!(
+                mm::heap_used(),
+                heap,
+                "Failed lifecycle leaked heap storage"
+            );
+            assert_eq!(
+                kernel.process(parent).image.as_ref().unwrap().space.root(),
+                root
+            );
+            assert!(
+                !kernel.process(parent).files.writable(1),
+                "Failed exec replaced descriptors"
+            );
+            assert!((1..CAPACITY).all(|i| kernel.policy.entry(i).state == State::Empty));
+        }
+    }
+    assert_eq!(mm::user::free_frames(), frames);
+    assert_eq!(mm::heap_used(), heap);
+    serial::write(format_args!(
+        "[PROC:OOM] spawn=rolled_back fork=rolled_back exec=retained frames_restored=true heap_restored=true\n"
     ));
 }

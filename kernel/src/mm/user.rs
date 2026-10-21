@@ -1,13 +1,45 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Own a single application's private lower-half pages and guarded kernel stack.
-//! Upper kernel tables are borrowed only while the permanent mappings stay stable.
+//! Own private user pages and independently allocated guarded process kernel stacks.
+//! BSP mutations occur on the permanent kernel root at IF=0; user roots share upper paths.
 use super::*;
 use alloc::vec::Vec;
 use anova_abi::UserAddr;
 
 const GUARD: u64 = MANAGED_BASE + 0x100_0000;
-const BOTTOM: u64 = GUARD + PAGE_SIZE;
-pub const KERNEL_TOP: u64 = BOTTOM + STACK_BYTES;
+const STRIDE: u64 = STACK_BYTES + 2 * PAGE_SIZE;
+
+pub struct KernelStack {
+    bottom: u64,
+}
+impl KernelStack {
+    pub fn new(slot: usize) -> Result<Self, Error> {
+        assert!(slot < anova_sched::CAPACITY);
+        let bottom = GUARD + slot as u64 * STRIDE + PAGE_SIZE;
+        MEMORY.with(|memory| {
+            memory.as_mut().expect("Memory not initialized").map_range(
+                VirtAddr(bottom),
+                STACK_BYTES,
+                Owner::ProcessStack,
+            )
+        })?;
+        Ok(Self { bottom })
+    }
+    pub fn top(&self) -> u64 {
+        self.bottom + STACK_BYTES
+    }
+}
+impl Drop for KernelStack {
+    fn drop(&mut self) {
+        MEMORY.with(|slot| {
+            let manager = slot.as_mut().expect("Memory not initialized");
+            for address in (self.bottom..self.top()).step_by(PAGE_SIZE as usize) {
+                manager
+                    .unmap_page(VirtAddr(address), Owner::ProcessStack)
+                    .expect("Invalid process stack release");
+            }
+        });
+    }
+}
 #[cfg(feature = "qemu-test")]
 static BUDGET: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(usize::MAX);
 #[cfg(feature = "qemu-test")]
@@ -34,30 +66,78 @@ impl UserSpace {
     pub fn new() -> Result<Self, Error> {
         MEMORY.with(|slot| {
             let manager = slot.as_mut().expect("Memory not initialized");
-            manager.map_range(VirtAddr(BOTTOM), STACK_BYTES, Owner::ProcessStack)?;
             let mut store = Store {
                 frames: &mut manager.frames,
                 direct: manager.direct,
                 boot: None,
                 active: false,
             };
-            match manager.tables.new_user(&mut store) {
-                Ok(tables) => Ok(Self {
-                    tables: Some(tables),
-                    pages: Vec::new(),
-                }),
-                Err(error) => {
-                    for address in (BOTTOM..KERNEL_TOP).step_by(PAGE_SIZE as usize) {
-                        manager.unmap_page(VirtAddr(address), Owner::ProcessStack)?;
-                    }
-                    Err(error)
-                }
-            }
+            Ok(Self {
+                tables: Some(manager.tables.new_user(&mut store)?),
+                pages: Vec::new(),
+            })
         })
     }
 
     pub fn root(&self) -> PhysAddr {
         self.tables.as_ref().expect("Closed user space").root()
+    }
+
+    /// Eager fork copy: duplicate every leaf and permission; drop rolls back partial OOM.
+    pub fn clone_eager(&self) -> Result<Self, Error> {
+        let mut child = Self::new()?;
+        for (address, source) in &self.pages {
+            let permissions = MEMORY.with(|slot| {
+                let manager = slot.as_mut().expect("Memory not initialized");
+                let mapping = self
+                    .tables
+                    .as_ref()
+                    .expect("Closed user space")
+                    .query(*address, &manager.store())?;
+                Ok::<_, Error>(Permissions {
+                    writable: mapping.writable,
+                    executable: mapping.executable,
+                    user: true,
+                    ..Permissions::READ_ONLY
+                })
+            })?;
+            child.map(address.0, permissions)?;
+            let target = child.pages.last().expect("Missing copied leaf").1;
+            MEMORY.with(|slot| {
+                let direct = slot.as_ref().expect("Memory not initialized").direct;
+                // SAFETY: Both leaves are exclusively owned, distinct live RAM frames.
+                // No process can run while the scheduler copies with IF=0 on this BSP.
+                unsafe {
+                    core::ptr::copy_nonoverlapping(
+                        direct_pointer(direct, *source),
+                        direct_pointer(direct, target),
+                        PAGE_SIZE as usize,
+                    );
+                }
+            });
+        }
+        Ok(child)
+    }
+
+    /// User copy runs as a non-preemptible BSP critical section, never across a switch.
+    pub fn with_active<R>(&self, action: impl FnOnce() -> R) -> R {
+        assert_eq!(
+            cpu::flags() & (1 << 9),
+            0,
+            "Address-space access requires IF=0"
+        );
+        let saved: u64;
+        // SAFETY: Private root and supervisor upper paths are live; IF=0 prevents scheduling.
+        unsafe {
+            asm!("mov {},cr3", out(reg) saved, options(nomem,nostack,preserves_flags));
+            asm!("mov cr3,{}", in(reg) self.root().0, options(nostack,preserves_flags));
+        }
+        let result = action();
+        // SAFETY: The caller's root remains live; reload also invalidates lower translations.
+        unsafe {
+            asm!("mov cr3,{}", in(reg) saved, options(nostack,preserves_flags));
+        }
+        result
     }
 
     pub fn map(&mut self, address: u64, mut permissions: Permissions) -> Result<(), Error> {
@@ -191,13 +271,18 @@ impl Drop for UserSpace {
                     .release(frame, Owner::User)
                     .expect("Invalid user page release");
             }
-            for address in (BOTTOM..KERNEL_TOP).step_by(PAGE_SIZE as usize) {
-                manager
-                    .unmap_page(VirtAddr(address), Owner::ProcessStack)
-                    .expect("Invalid process stack release");
-            }
         });
     }
+}
+
+pub fn kernel_root() -> u64 {
+    MEMORY.with(|slot| {
+        slot.as_ref()
+            .expect("Memory not initialized")
+            .tables
+            .root()
+            .0
+    })
 }
 
 pub fn restore_kernel_stack() {

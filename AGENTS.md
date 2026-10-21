@@ -1,10 +1,11 @@
+<!-- Define mandatory repository development, safety, validation and delivery conventions. -->
 # AGENTS.md — AnovaOS
 
 ## 1. 项目目标与当前事实
 
 这是 Rust 编写的 x86_64 自研操作系统。最终用户应能在系统自己的终端中编辑源码、使用 GCC/G++/Rust/Cargo 编译、链接并运行应用，同时逐步运行经过验证的现有 Linux 软件。
 
-当前 M0–M4 已通过本地 QEMU TCG 验证：内存所有权、Ring 3 独立 ELF、SYSCALL/IRETQ、用户复制故障恢复、Rust/C SDK 与退出回收已实现。外设 IRQ 全部屏蔽，CI 远端结果单独记录。**用户应用仅顺序运行；尚无调度、SMP 或 Linux 兼容；引导保留区未回收，堆固定 2 MiB。** 先读 [STATUS](docs/STATUS.md)、[M4_USERSPACE](docs/M4_USERSPACE.md)、[M3_MEMORY](docs/M3_MEMORY.md) 和 [开发需求](docs/REQUIREMENTS.md)，再检查真实代码与 git 状态。
+当前 M0–M5 已通过本地 QEMU TCG 验证：隔离原生进程、CPU/FPU 保存、用户态定时抢占、阻塞 sleep/wait、spawn/exec/eager fork 与资源回收已实现。外设 IRQ 全部屏蔽，CI 远端结果单独记录。**单核，最多 32 个单线程进程；内核不可抢占；无 VFS、SMP 或 Linux 兼容；引导保留区未回收，堆固定 2 MiB。** 先读 [STATUS](docs/STATUS.md)、[M5_PROCESSES](docs/M5_PROCESSES.md)、[M4_USERSPACE](docs/M4_USERSPACE.md) 和 [开发需求](docs/REQUIREMENTS.md)，再检查真实代码与 git 状态。
 
 本文件是后续 Codex 开发规范。用户明确指令优先；已有修改应保留。日常、可逆的实现选择可自主完成，不因普通阶段切换反复请求确认。
 
@@ -85,7 +86,7 @@
 - 回收 bootloader-reclaimable 内存前完成数据拷贝和生命周期核查；设备地址不能当普通 RAM。
 - 独立的异常栈/guard page、防双重故障路径、用户/内核权限、NX 与 W^X 应逐步建立并测试。
 - 不在异常返回前恢复中断到错误状态；APIC IRQ 要按协议 EOI。
-- 内核初期不生成浮点/SIMD；用户 ELF 可能使用 SSE2。M4 运行此类用户代码前就要正确初始化 CPU 状态，M5 切换任务前实现相应状态保存恢复，不能等到多线程后才考虑。
+- 内核初期不生成浮点/SIMD；用户 ELF 可能使用 SSE2。M5 已保存 x87/MMX/XMM0–15/MXCSR，并禁用 XSAVE/AVX/FSGSBASE 与 FFXSR 省略 XMM 的行为；扩展 CPU 状态或启用线程前必须补齐对应上下文。
 - 时钟、调度和时间单位集中定义，超时不能用未经校准的忙循环充当稳定实现。
 
 ## 8. 应用 ABI 与 Linux 兼容
@@ -126,7 +127,7 @@ cargo xtask check-apps
 cargo xtask check-files
 ```
 
-`fetch` 下载并校验锁定输入；`doctor` 对缺少依赖明确报错。`verify` 的 13 种场景要求正常启动通过内存所有权/压力检查、断点返回和至少 8 次定时 IRQ；受控 panic/超时、#UD/#GP/#PF/#DF、普通栈 guard、只读写入、普通/NX 直映别名执行、解除映射后访问和堆 OOM 必须到达真实注入点、符合诊断与退出码并被拒绝。正常测试镜像还必须通过 Rust/C Ring 3 应用、11 个用户隔离用例、两类真实复制故障恢复、部分装载 OOM 回滚和 8 次重复执行的回收检查。完整压力检查仅在测试镜像运行。`test-host` 覆盖 frame/buddy/page-table 的边界、保留、复用与 OOM 回滚，以及 ACPI/PM/异常判定。CPU 上下文见 [M2_CPU](docs/M2_CPU.md)，当前内存和锁规则见 [M3_MEMORY](docs/M3_MEMORY.md)。将来 `cargo xtask test-compat` 等入口随能力落地再加入文档。
+`fetch` 下载并校验锁定输入；`doctor` 对缺少依赖明确报错。`verify` 的 13 种场景要求正常启动通过内存所有权/压力检查、断点返回和至少 8 次定时 IRQ；受控 panic/超时、#UD/#GP/#PF/#DF、普通栈 guard、只读写入、普通/NX 直映别名执行、解除映射后访问和堆 OOM 必须到达真实注入点、符合诊断与退出码并被拒绝。正常测试镜像还必须通过 Rust/C Ring 3 应用、11 个用户隔离用例、两类真实复制故障恢复、部分装载 OOM 回滚和 8 次重复执行的回收检查。M5 还要求两个计算进程保留完整 GPR/FPU 状态、真实抢占切换、阻塞/HLT、fork/exec/wait/孤儿与 32 槽复用、三个生命周期 OOM 回滚，以及物理页和堆恢复。完整压力检查仅在测试镜像运行。`test-host` 覆盖 frame/buddy/page-table 的边界、保留、复用与 OOM 回滚，以及 ACPI/PM/异常判定。CPU 上下文见 [M2_CPU](docs/M2_CPU.md)，当前内存和锁规则见 [M3_MEMORY](docs/M3_MEMORY.md)。将来 `cargo xtask test-compat` 等入口随能力落地再加入文档。
 
 ## 11. 验证要求
 

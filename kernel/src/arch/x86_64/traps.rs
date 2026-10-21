@@ -191,6 +191,7 @@ pub fn init(mapper: &mut EarlyMapper<'_>) {
 
 /// Hardware and assembly layout: 15 GPRs, vector/error, five 64-bit CPU words.
 #[repr(C)]
+#[derive(Clone, Copy, Default)]
 pub struct TrapFrame {
     r15: u64,
     r14: u64,
@@ -237,10 +238,11 @@ extern "C" fn anova_trap_dispatch(frame: &mut TrapFrame) {
     }
     match frame.vector {
         0x40 => {
+            apic::timer_irq();
             if frame.cs & 3 == 3 {
                 crate::task::note_timer();
+                crate::task::dispatch(frame);
             }
-            apic::timer_irq();
             return;
         }
         0xff => return, // APIC spurious interrupts do not enter the ISR: no EOI.

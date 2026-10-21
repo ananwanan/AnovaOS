@@ -21,6 +21,7 @@ dependencies = [
  "anova-elf",
  "anova-memory",
  "anova-platform",
+ "anova-sched",
  "limine",
 ]
 
@@ -34,6 +35,13 @@ dependencies = [
 [[package]]
 name = "anova-platform"
 version = "0.1.0"
+
+[[package]]
+name = "anova-sched"
+version = "0.1.0"
+dependencies = [
+ "anova-abi",
+]
 
 [[package]]
 name = "bitflags"

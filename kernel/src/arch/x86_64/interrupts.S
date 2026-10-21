@@ -40,6 +40,8 @@ anova_isr_common:
     and rsp, -16
     call anova_trap_dispatch
     mov rsp, r12
+.global anova_restore_frame
+anova_restore_frame:
     pop r15
     pop r14
     pop r13

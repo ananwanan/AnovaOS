@@ -1,3 +1,4 @@
+<!-- Introduce AnovaOS, its verified capabilities, build entry points and project goals. -->
 # AnovaOS
 
 **English** | [简体中文](README.zh-CN.md)
@@ -6,10 +7,10 @@ An x86_64 operating system built from scratch in Rust. The goal is to edit,
 compile, debug, and run applications inside AnovaOS itself, while gradually
 supporting selected existing Linux software.
 
-**Current status: M0–M4 are locally verified on QEMU q35/TCG. The kernel has
-owned memory and runs independent Rust/C ELF applications in Ring 3 with native
-syscalls, checked user copying, fault containment and complete page reclamation.
-Scheduling and Linux compatibility are pending; external device IRQs remain masked.**
+**Current status: M0–M5 are locally verified on QEMU q35/TCG. Native Rust/C
+processes have private memory/stacks, saved CPU/FPU state, timer preemption,
+blocking sleep/wait, spawn/exec/eager fork and complete resource reclamation.
+VFS and Linux compatibility remain pending; external device IRQs stay masked.**
 
 Repository: [ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS).
 
@@ -78,6 +79,8 @@ development language and formatting guide is in English.
 | [docs/validation/M3.md](docs/validation/M3.md) | Actual M3 memory and protection validation evidence |
 | [docs/M4_USERSPACE.md](docs/M4_USERSPACE.md) | Ring 3, ELF, native v1 ABI, user copying and Rust/C SDK |
 | [docs/validation/M4.md](docs/validation/M4.md) | Actual M4 isolation and application validation evidence |
+| [docs/M5_PROCESSES.md](docs/M5_PROCESSES.md) | Scheduling, process ownership, native lifecycle ABI and limits |
+| [docs/validation/M5.md](docs/validation/M5.md) | Actual multiprocess, CPU/FPU, OOM and reclamation evidence |
 | [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) | Mandatory owner requirements, including file-purpose explanations |
 | [docs/FILE_PURPOSES.md](docs/FILE_PURPOSES.md) | Purpose of every repository file |
 | [docs/STATUS.md](docs/STATUS.md) | Current implementation status and next steps |
@@ -142,21 +145,21 @@ cargo xtask build       # Build and inspect the bare-metal kernel ELF
 cargo xtask apps        # Build standalone native Rust/C ELFs and ABI/hash inventory
 cargo xtask check-files # Check per-file purpose explanations and inventory
 cargo xtask image       # Build build/images/anova-normal.iso, including native apps
-cargo xtask run         # Run Rust/C apps, then keep the BSP interruptible and idle
-cargo xtask smoke       # Memory/CPU checks, 11 user cases, 8 repeated apps AND exit 33
+cargo xtask run         # Run Rust/C apps and concurrent workers, then interruptible idle
+cargo xtask smoke       # Memory, 11 isolation cases, process/FPU/lifecycle suite AND exit 33
 cargo xtask verify      # 13 cases: boot passes; fault, panic, timeout and OOM fail
 ```
 
 These commands now exist in the host `xtask` package. Images, caches, logs, and
 disposable firmware variable copies stay in `build/`. Normal runs attach no data
 disk or network. GitHub Actions is configured to run the same checks; its status
-is reported separately from [local validation](docs/validation/M4.md).
+is reported separately from [local validation](docs/validation/M5.md).
 
 ## Next steps
 
-M5 adds multiple processes, saved CPU/FPU contexts and blocking/preemptive
-scheduling on the isolated M4 execution baseline. External IRQ routing follows
-its first device driver. See the [user-space design](docs/M4_USERSPACE.md),
+M6 adds VFS, init, basic shell, file descriptors and pipes on the M5 process
+baseline. External IRQ routing follows its first device driver. See the
+[process design](docs/M5_PROCESSES.md),
 [current status](docs/STATUS.md) and [roadmap](ROADMAP.md).
 
 ## License

@@ -202,6 +202,8 @@ fn execute() -> Result<()> {
             "anova-abi",
             "-p",
             "anova-elf",
+            "-p",
+            "anova-sched",
         ])),
         "help" | "--help" | "-h" => {
             println!(
