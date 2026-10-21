@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Borrow Limine data through boot and M2. No allocator or reclamation
-//! exists: bootloader stacks, page tables, responses, ACPI and modules stay live.
+//! Borrow retained Limine data. M3 allocates only USABLE RAM; bootloader data,
+//! original stacks/tables, modules, firmware and the early pool remain reserved.
 use limine::{
     BaseRevision,
     firmware_type::FirmwareType,
@@ -148,6 +148,14 @@ pub fn validate() -> BootInfo {
 }
 
 impl BootInfo {
+    pub fn entries(&self) -> &[&Entry] {
+        self.entries
+    }
+
+    pub fn direct_map(&self) -> VirtAddr {
+        self.hhdm
+    }
+
     pub fn rsdp(&self) -> PhysAddr {
         PhysAddr(
             RSDP.get_response()
@@ -249,7 +257,7 @@ impl BootInfo {
             }
         }
         serial::write(format_args!(
-            "[BOOT:OWNERSHIP] all memory retained; no allocator, no reclamation\n"
+            "[BOOT:OWNERSHIP] boot data and non-usable memory reserved; M3 claims only usable RAM\n"
         ));
         if let Some(rsdp) = RSDP.get_response() {
             // Base revision 3 returns a physical address. Do not dereference it

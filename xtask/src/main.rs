@@ -25,6 +25,12 @@ enum Mode {
     GeneralProtection,
     PageFault,
     DoubleFault,
+    StackGuard,
+    ReadOnly,
+    NoExecute,
+    DirectNoExecute,
+    Unmapped,
+    Oom,
 }
 
 impl Mode {
@@ -38,6 +44,12 @@ impl Mode {
             Self::GeneralProtection => "general-protection",
             Self::PageFault => "page-fault",
             Self::DoubleFault => "double-fault",
+            Self::StackGuard => "stack-guard",
+            Self::ReadOnly => "read-only",
+            Self::NoExecute => "no-execute",
+            Self::DirectNoExecute => "direct-no-execute",
+            Self::Unmapped => "unmapped",
+            Self::Oom => "oom",
         }
     }
     fn features(self) -> Option<&'static str> {
@@ -50,6 +62,12 @@ impl Mode {
             Self::GeneralProtection => Some("test-general-protection"),
             Self::PageFault => Some("test-page-fault"),
             Self::DoubleFault => Some("test-double-fault"),
+            Self::StackGuard => Some("test-stack-guard"),
+            Self::ReadOnly => Some("test-read-only"),
+            Self::NoExecute => Some("test-no-execute"),
+            Self::DirectNoExecute => Some("test-direct-no-execute"),
+            Self::Unmapped => Some("test-unmapped"),
+            Self::Oom => Some("test-oom"),
         }
     }
 
@@ -78,6 +96,20 @@ impl Mode {
                 vector: 8,
                 error: "0x0",
                 ist: 1,
+            },
+            Self::StackGuard
+            | Self::ReadOnly
+            | Self::NoExecute
+            | Self::DirectNoExecute
+            | Self::Unmapped => smoke::Fault {
+                name: self.name(),
+                vector: 14,
+                error: match self {
+                    Self::ReadOnly => "0x3",
+                    Self::NoExecute | Self::DirectNoExecute => "0x11",
+                    _ => "0x2",
+                },
+                ist: 2,
             },
             _ => return None,
         })
@@ -134,6 +166,12 @@ fn execute() -> Result<()> {
                 (Mode::GeneralProtection, 30, Err(smoke::Failure::Exception)),
                 (Mode::PageFault, 30, Err(smoke::Failure::Exception)),
                 (Mode::DoubleFault, 30, Err(smoke::Failure::Exception)),
+                (Mode::StackGuard, 30, Err(smoke::Failure::Exception)),
+                (Mode::ReadOnly, 30, Err(smoke::Failure::Exception)),
+                (Mode::NoExecute, 30, Err(smoke::Failure::Exception)),
+                (Mode::DirectNoExecute, 30, Err(smoke::Failure::Exception)),
+                (Mode::Unmapped, 30, Err(smoke::Failure::Exception)),
+                (Mode::Oom, 30, Err(smoke::Failure::Panic)),
             ] {
                 let actual = smoke(&root, mode, timeout)?;
                 if actual != expected {
@@ -152,10 +190,12 @@ fn execute() -> Result<()> {
             "xtask",
             "-p",
             "anova-platform",
+            "-p",
+            "anova-memory",
         ])),
         "help" | "--help" | "-h" => {
             println!(
-                "AnovaOS host tools\n\n  cargo xtask doctor\n  cargo xtask fetch\n  cargo xtask build\n  cargo xtask image\n  cargo xtask run\n  cargo xtask smoke [--case CASE] [--timeout-secs 1..300]\n  cargo xtask verify\n  cargo xtask test-host\n\nCASE: boot, panic, timeout, invalid-opcode, general-protection, page-fault, double-fault.\nOutputs stay in build/; run uses a disposable OVMF variable copy. TCG is mandatory."
+                "AnovaOS host tools\n\n  cargo xtask doctor\n  cargo xtask fetch\n  cargo xtask build\n  cargo xtask image\n  cargo xtask run\n  cargo xtask smoke [--case CASE] [--timeout-secs 1..300]\n  cargo xtask verify\n  cargo xtask test-host\n\nCASE: boot, panic, timeout, invalid-opcode, general-protection, page-fault, double-fault, stack-guard, read-only, no-execute, direct-no-execute, unmapped, oom.\nOutputs stay in build/; run uses a disposable OVMF variable copy. TCG is mandatory."
             );
             Ok(())
         }
@@ -178,6 +218,12 @@ fn smoke_args(args: &[String]) -> Result<(Mode, u64)> {
                     "general-protection" => Mode::GeneralProtection,
                     "page-fault" => Mode::PageFault,
                     "double-fault" => Mode::DoubleFault,
+                    "stack-guard" => Mode::StackGuard,
+                    "read-only" => Mode::ReadOnly,
+                    "no-execute" => Mode::NoExecute,
+                    "direct-no-execute" => Mode::DirectNoExecute,
+                    "unmapped" => Mode::Unmapped,
+                    "oom" => Mode::Oom,
                     _ => return Err("Unknown smoke case".into()),
                 }
             }
@@ -557,6 +603,9 @@ fn smoke(root: &Path, mode: Mode, seconds: u64) -> Result<std::result::Result<()
     }
     if mode == Mode::Timeout && (!timed_out || !transcript.contains("[TEST:HANG]")) {
         return Err("Timeout injection did not reach the controlled guest hang".into());
+    }
+    if mode == Mode::Oom && !smoke::reached_oom(&transcript, code) {
+        return Err("OOM injection did not reach alloc's default panic handler and exit 35".into());
     }
     if let Some(fault) = mode.fault()
         && (timed_out || !smoke::reached_fault(&transcript, code, fault))

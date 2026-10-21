@@ -2,8 +2,11 @@
 #![no_std]
 #![no_main]
 
+extern crate alloc;
+
 mod arch;
 mod boot;
+mod mm;
 mod serial;
 use arch::x86_64::{acpi, apic, cpu, paging::EarlyMapper, traps};
 
@@ -20,6 +23,12 @@ const _: () = assert!(
         + cfg!(feature = "test-general-protection") as u8
         + cfg!(feature = "test-page-fault") as u8
         + cfg!(feature = "test-double-fault") as u8
+        + cfg!(feature = "test-stack-guard") as u8
+        + cfg!(feature = "test-read-only") as u8
+        + cfg!(feature = "test-no-execute") as u8
+        + cfg!(feature = "test-direct-no-execute") as u8
+        + cfg!(feature = "test-unmapped") as u8
+        + cfg!(feature = "test-oom") as u8
         <= 1,
     "Select only one fault injection feature"
 );
@@ -61,7 +70,25 @@ pub extern "C" fn _start() -> ! {
     let platform = acpi::discover(&info, &mut mapper);
     apic::init(&platform, &mut mapper);
     PHASE.store(4, Ordering::Relaxed);
-    apic::verify_ticks(platform.pm_timer);
+    let stack_top = mm::init(&info, mapper);
+    // SAFETY: init returned the new owned, aligned stack. IF is still clear;
+    // only copied timer values cross the boundary and no boot local is reused.
+    unsafe {
+        mm::enter_stack(
+            stack_top,
+            u64::from(platform.pm_timer.port),
+            u64::from(platform.pm_timer.mask),
+        )
+    }
+}
+
+extern "C" fn kernel_main(timer_port: u64, timer_mask: u64) -> ! {
+    PHASE.store(5, Ordering::Relaxed);
+    mm::verify();
+    apic::verify_ticks(anova_platform::acpi::PmTimer {
+        port: timer_port as u16,
+        mask: timer_mask as u32,
+    });
     // Check that an exception also returns with IF restored when interrupted
     // code has IRQs enabled. The timer handler itself never logs or allocates.
     // SAFETY: GDT/TSS/IDT/APIC are installed and all external IRQs stay masked.
@@ -70,9 +97,10 @@ pub extern "C" fn _start() -> ! {
     }
     traps::breakpoint_test();
     assert!(cpu::flags() & (1 << 9) != 0, "IRET failed to restore IF");
-    PHASE.store(5, Ordering::Relaxed);
+    PHASE.store(6, Ordering::Relaxed);
+    mm::inject_fault();
     serial::write(format_args!(
-        "[BOOT:OK] M2 CPU exceptions and periodic timer ready; BSP idle, interrupts enabled\n"
+        "[BOOT:OK] M3 owned memory and heap ready; BSP idle, interrupts enabled\n"
     ));
     #[cfg(feature = "qemu-test")]
     {

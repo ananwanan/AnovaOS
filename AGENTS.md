@@ -4,7 +4,7 @@
 
 这是 Rust 编写的 x86_64 自研操作系统。最终用户应能在系统自己的终端中编辑源码、使用 GCC/G++/Rust/Cargo 编译、链接并运行应用，同时逐步运行经过验证的现有 Linux 软件。
 
-当前 M0/M1 与 M2 BSP 异常/时钟基线已通过本地 QEMU TCG 验证：workspace、工具链、UEFI 镜像、串口、GDT/TSS/IDT、guard/IST、异常诊断和 LAPIC 定时 IRQ 均已存在。外设 IRQ 仍全部屏蔽，CI 远端结果单独记录。**不能由 BSP 定时中断推断已有分配器、用户态、SMP 或软件兼容。** 实施时先读 [docs/STATUS.md](docs/STATUS.md)，再检查真实文件和 git 状态，以代码与验证记录为准。
+当前 M0–M3 已通过本地 QEMU TCG 验证：workspace、UEFI/串口、BSP 异常/时钟、物理页分配/回收、完整页表所有权、普通栈双 guard 与 Rust `alloc` 堆均已实现。外设 IRQ 仍全部屏蔽，CI 远端结果单独记录。**尚无用户态、SMP 或软件兼容；引导数据与非 USABLE 区域仍保留，堆固定为 2 MiB。** 实施时先读 [docs/STATUS.md](docs/STATUS.md) 和 [M3_MEMORY](docs/M3_MEMORY.md)，再检查真实文件和 git 状态，以代码与验证记录为准。
 
 本文件是后续 Codex 开发规范。用户明确指令优先；已有修改应保留。日常、可逆的实现选择可自主完成，不因普通阶段切换反复请求确认。
 
@@ -35,7 +35,7 @@
 
 - x86_64，小端，4 级页表，先 BSP 单核；CPU 特性必须探测。
 - UEFI + Limine；首个参考机器是 QEMU q35 + OVMF，TCG 基线可运行。
-- Rust 模块化单体内核，`#![no_std]`，分配器完成后才使用 `alloc`。
+- Rust 模块化单体内核，`#![no_std]`；M3 已启用 `alloc`，初始化堆前禁止分配。
 - 内核采用 `x86_64-unknown-none`、内核链接脚本、无 red zone、初期 panic abort。
 - 内核不得依赖宿主机 libc/`std`。FFI 和汇编仅放在清楚界定的边界内。
 - 宿主 `xtask` 使用宿主目标；native 用户程序、Linux 兼容程序使用各自用户态目标。禁止把内核的 code model、链接脚本、red-zone/FPU 假设误用于普通用户程序。
@@ -121,7 +121,7 @@ cargo xtask verify
 cargo xtask test-host
 ```
 
-`fetch` 下载并校验锁定输入；`doctor` 对缺少依赖明确报错。`verify` 要求正常启动、断点返回和至少 8 次定时 IRQ 通过；受控 panic/超时及 #UD/#GP/#PF/#DF 必须到达真实注入点、符合诊断和退出码并被拒绝。`test-host` 还覆盖 ACPI 解析、PM 计数器回绕及异常判定。CPU 上下文和早期映射规则见 [M2_CPU](docs/M2_CPU.md)。将来 `cargo xtask test-compat` 等入口随能力落地再加入文档。
+`fetch` 下载并校验锁定输入；`doctor` 对缺少依赖明确报错。`verify` 的 13 种场景要求正常启动通过内存所有权/压力检查、断点返回和至少 8 次定时 IRQ；受控 panic/超时、#UD/#GP/#PF/#DF、普通栈 guard、只读写入、普通/NX 直映别名执行、解除映射后访问和堆 OOM 必须到达真实注入点、符合诊断与退出码并被拒绝。完整压力检查仅在测试镜像运行。`test-host` 覆盖 frame/buddy/page-table 的边界、保留、复用与 OOM 回滚，以及 ACPI/PM/异常判定。CPU 上下文见 [M2_CPU](docs/M2_CPU.md)，当前内存和锁规则见 [M3_MEMORY](docs/M3_MEMORY.md)。将来 `cargo xtask test-compat` 等入口随能力落地再加入文档。
 
 ## 11. 验证要求
 

@@ -35,6 +35,13 @@ pub fn assess(log: &str, code: Option<i32>, timed_out: bool) -> Result<(), Failu
         "[CPU:ACPI]",
         "[CPU:IOAPIC]",
         "[CPU:APIC]",
+        "[MM:FRAMES]",
+        "[MM:TABLES]",
+        "[MM:HEAP]",
+        "[MM:STACK]",
+        "[MM:TEST]",
+        "[MM:ALLOC]",
+        "[MM:READY]",
         "[CPU:TIMER]",
         "[TRAP:BREAKPOINT]",
         "[BOOT:OK]",
@@ -59,6 +66,32 @@ pub fn assess(log: &str, code: Option<i32>, timed_out: bool) -> Result<(), Failu
         || ticks.checked_mul(10_000_000) != Some(nanoseconds)
         || !log.contains("saved_if=0 return=iretq")
         || !log.contains("saved_if=1 return=iretq")
+    {
+        return Err(Failure::Markers);
+    }
+    let tables = log
+        .lines()
+        .find(|line| line.starts_with("[MM:TABLES]"))
+        .ok_or(Failure::Markers)?;
+    let memory = log
+        .lines()
+        .find(|line| line.starts_with("[MM:TEST]"))
+        .ok_or(Failure::Markers)?;
+    let heap = log
+        .lines()
+        .find(|line| line.starts_with("[MM:ALLOC]"))
+        .ok_or(Failure::Markers)?;
+    if field(tables, "boot_table_refs") != Some("0")
+        || field(tables, "NX") != Some("on")
+        || field(tables, "WP") != Some("on")
+        || field(tables, "direct_map") != Some("NX")
+        || field(memory, "mappings") != Some("256")
+        || field(memory, "invalid_free") != Some("rejected")
+        || field(memory, "frame_oom") != Some("recovered")
+        || field(memory, "map_oom") != Some("rolled_back")
+        || field(heap, "coalesced") != Some("true")
+        || field(heap, "fallible_oom") != Some("recovered")
+        || field(heap, "used") != Some("0")
     {
         return Err(Failure::Markers);
     }
@@ -95,7 +128,12 @@ pub fn reached_fault(log: &str, code: Option<i32>, fault: Fault) -> bool {
     };
     let values_match = field(exception, "vector").and_then(|n| n.parse().ok())
         == Some(fault.vector)
-        && field(exception, "name") == Some(fault.name)
+        && field(exception, "name")
+            == Some(if fault.vector == 14 {
+                "page-fault"
+            } else {
+                fault.name
+            })
         && field(exception, "error") == Some(fault.error)
         && field(exception, "ist").and_then(|n| n.parse().ok()) == Some(fault.ist)
         && field(exception, "current_if") == Some("0");
@@ -104,7 +142,11 @@ pub fn reached_fault(log: &str, code: Option<i32>, fault: Fault) -> bool {
         14 => {
             field(injected_line, "address")
                 .is_some_and(|address| field(exception, "cr2") == Some(address))
-                && log.contains("[PAGE:ERROR] present=0 write=1 user=0 reserved=0 instruction=0")
+                && log.contains(match fault.error {
+                    "0x3" => "[PAGE:ERROR] present=1 write=1 user=0 reserved=0 instruction=0",
+                    "0x11" => "[PAGE:ERROR] present=1 write=0 user=0 reserved=0 instruction=1",
+                    _ => "[PAGE:ERROR] present=0 write=1 user=0 reserved=0 instruction=0",
+                })
         }
         8 => field(injected_line, "guard")
             .and_then(|g| u64::from_str_radix(g.strip_prefix("0x")?, 16).ok())
@@ -116,13 +158,33 @@ pub fn reached_fault(log: &str, code: Option<i32>, fault: Fault) -> bool {
         13 => log.contains("[GP:ERROR] external=0 table=0 selector_index=8191"),
         _ => true,
     };
-    values_match && address_matches && log.contains("[REGISTERS]")
+    let m3 = matches!(
+        fault.name,
+        "stack-guard" | "read-only" | "no-execute" | "direct-no-execute" | "unmapped"
+    );
+    values_match
+        && address_matches
+        && log.contains("[REGISTERS]")
+        && (!m3 || before.contains("[MM:READY]"))
+}
+
+pub fn reached_oom(log: &str, code: Option<i32>) -> bool {
+    let Some((before, after)) = log.split_once("[TEST:INJECT] oom") else {
+        return false;
+    };
+    code == Some(35)
+        && before.contains("[MM:READY]")
+        && after.contains("[MM:OOM] size=4194304")
+        && after.contains("[PANIC]")
+        && after.contains("memory allocation of 4194304 bytes failed")
+        && !log.contains("[TEST:PASS]")
+        && !log.contains("[EXCEPTION]")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    const GOOD: &str = "[BOOT:ENTRY]\n[BOOT:PROTOCOL]\n[BOOT:MEMORY]\n[CPU:PAGING]\n[CPU:TABLES]\n[TRAP:BREAKPOINT] saved_if=0 return=iretq\n[CPU:ACPI]\n[CPU:IOAPIC]\n[CPU:APIC]\n[CPU:TIMER] ticks=8 monotonic_ns=80000000\n[TRAP:BREAKPOINT] saved_if=1 return=iretq\n[BOOT:OK]\n[TEST:PASS]\n";
+    const GOOD: &str = "[BOOT:ENTRY]\n[BOOT:PROTOCOL]\n[BOOT:MEMORY]\n[CPU:PAGING]\n[CPU:TABLES]\n[TRAP:BREAKPOINT] saved_if=0 return=iretq\n[CPU:ACPI]\n[CPU:IOAPIC]\n[CPU:APIC]\n[MM:FRAMES]\n[MM:TABLES] boot_table_refs=0 NX=on WP=on direct_map=NX\n[MM:HEAP]\n[MM:STACK]\n[MM:TEST] mappings=256 invalid_free=rejected frame_oom=recovered map_oom=rolled_back\n[MM:ALLOC] coalesced=true fallible_oom=recovered used=0\n[MM:READY]\n[CPU:TIMER] ticks=8 monotonic_ns=80000000\n[TRAP:BREAKPOINT] saved_if=1 return=iretq\n[BOOT:OK]\n[TEST:PASS]\n";
 
     #[test]
     fn requires_both_ordered_stages_and_debug_exit() {
@@ -180,5 +242,28 @@ mod tests {
         ] {
             assert!(!reached_fault(&log.replace(old, new), Some(37), fault()));
         }
+    }
+
+    #[test]
+    fn m3_gate_requires_memory_checks_and_actual_oom_panic() {
+        for (old, new) in [
+            ("[MM:READY]", "[MM:NOTREADY]"),
+            ("boot_table_refs=0", "boot_table_refs=1"),
+            ("WP=on", "WP=off"),
+            ("coalesced=true", "coalesced=false"),
+            ("used=0", "used=16"),
+        ] {
+            assert_eq!(
+                assess(&GOOD.replace(old, new), Some(33), false),
+                Err(Failure::Markers)
+            );
+        }
+        let log = "[MM:READY]\n[TEST:INJECT] oom\n[MM:OOM] size=4194304 align=1 used=0 capacity=2097152\n[PANIC] memory allocation of 4194304 bytes failed";
+        assert!(reached_oom(log, Some(35)));
+        assert!(!reached_oom(log, Some(33)));
+        assert!(!reached_oom(
+            &log.replace("memory allocation of", "unrelated panic"),
+            Some(35)
+        ));
     }
 }

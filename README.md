@@ -6,9 +6,9 @@ An x86_64 operating system built from scratch in Rust. The goal is to edit,
 compile, debug, and run applications inside AnovaOS itself, while gradually
 supporting selected existing Linux software.
 
-**Current status: M0/M1 and the M2 BSP exception/timer baseline are locally
-verified on QEMU q35/TCG. The kernel has GDT/TSS/IDT, guarded exception stacks,
-fault diagnostics and a calibrated periodic LAPIC timer. User space and Linux
+**Current status: M0–M3 are locally verified on QEMU q35/TCG. The kernel has
+BSP exceptions/timer, checked physical frames, fully owned page tables, a guarded
+normal stack and a reclaiming heap with Rust `alloc`. User space and Linux
 compatibility are pending; external device IRQs remain masked.**
 
 Repository: [ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS).
@@ -43,7 +43,7 @@ C/C++ or other languages; rewriting mature tools is not a prerequisite.
 | --- | --- | --- |
 | Architecture | x86_64, four-level paging, initially one CPU | No initial 32-bit or x32 ABI support |
 | Boot | UEFI + Limine, ELF kernel | Secure Boot signing comes later |
-| Kernel | Modular monolithic kernel, Rust `no_std`; `alloc` after M3 | `panic=abort`; minimal necessary assembly |
+| Kernel | Modular monolithic kernel, Rust `no_std` + `alloc` since M3 | `panic=abort`; minimal necessary assembly |
 | Compilation target | `x86_64-unknown-none` for the kernel | Separate targets and linker configuration for user applications |
 | Reference platform | QEMU q35, OVMF, serial output, modern virtio PCI | TCG must work; KVM is optional |
 | User space | ELF64, System V AMD64 function calling convention | Document native and Linux ABIs separately |
@@ -74,6 +74,8 @@ development language and formatting guide is in English.
 | [docs/validation/M0-M1.md](docs/validation/M0-M1.md) | Actual local build and boot validation evidence |
 | [docs/M2_CPU.md](docs/M2_CPU.md) | CPU tables, guarded stacks, ACPI/APIC, timing and context rules |
 | [docs/validation/M2.md](docs/validation/M2.md) | Actual M2 timer and exception validation evidence |
+| [docs/M3_MEMORY.md](docs/M3_MEMORY.md) | Frame/table ownership, stack, heap, permissions and OOM |
+| [docs/validation/M3.md](docs/validation/M3.md) | Actual M3 memory and protection validation evidence |
 | [docs/STATUS.md](docs/STATUS.md) | Current implementation status and next steps |
 | [docs/GITHUB_SETUP.md](docs/GITHUB_SETUP.md) | Cloning, documentation maintenance, and contribution conventions |
 | [docs/LICENSING.md](docs/LICENSING.md) | Apache-2.0 usage and third-party licensing boundaries |
@@ -130,20 +132,20 @@ cargo xtask doctor      # Report all missing or mismatched prerequisites
 cargo xtask build       # Build and inspect the bare-metal kernel ELF
 cargo xtask image       # Build build/images/anova-normal.iso
 cargo xtask run         # Serial console; the normal kernel stays idle
-cargo xtask smoke       # Boot, returning breakpoints, 8+ timer IRQs AND QEMU exit 33
-cargo xtask verify      # Boot passes; panic, timeout and four CPU faults are rejected
+cargo xtask smoke       # Memory checks, returning breakpoints, 8+ IRQs AND exit 33
+cargo xtask verify      # 13 cases: boot passes; fault, panic, timeout and OOM fail
 ```
 
 These commands now exist in the host `xtask` package. Images, caches, logs, and
 disposable firmware variable copies stay in `build/`. Normal runs attach no data
 disk or network. GitHub Actions is configured to run the same checks; its status
-is reported separately from [local validation](docs/validation/M2.md).
+is reported separately from [local validation](docs/validation/M3.md).
 
 ## Next steps
 
-M3 adds explicit memory ownership, a physical page allocator, managed page
-tables and a heap. External IRQ routing will be enabled and tested with its
-first device driver. See the [CPU baseline](docs/M2_CPU.md),
+M4 adds the first isolated Ring 3 ELF application, a native syscall ABI and a
+minimal SDK on the M3 memory baseline. External IRQ routing will be enabled and tested with its
+first device driver. See the [memory design](docs/M3_MEMORY.md),
 [current status](docs/STATUS.md) and [roadmap](ROADMAP.md).
 
 ## License

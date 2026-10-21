@@ -4,7 +4,7 @@
 
 用 Rust 从零开发的 x86_64 操作系统，目标是在自己的系统中编辑、编译、调试和运行应用，并逐步兼容部分现有 Linux 软件。
 
-**当前状态：M0/M1 与 M2 的 BSP 异常/时钟基线已通过本地 QEMU q35/TCG 验证。内核已有 GDT/TSS/IDT、带保护页的异常栈、故障诊断和校准后的周期 LAPIC 定时器；用户态和 Linux 兼容尚待实现，外设 IRQ 保持屏蔽。**
+**当前状态：M0–M3 已通过本地 QEMU q35/TCG 验证。内核已有 BSP 异常/时钟、带所有权检查的物理页分配器、完整接管的页表、带保护页的普通内核栈，以及支持 Rust `alloc` 的可回收堆；用户态和 Linux 兼容尚待实现，外设 IRQ 保持屏蔽。**
 
 项目仓库：[ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS)。
 
@@ -27,7 +27,7 @@
 | --- | --- | --- |
 | 架构 | x86_64，4 级页表，先单核 | 首版不承担 32 位/x32 ABI |
 | 启动 | UEFI + Limine，内核 ELF | Secure Boot 签名链后置 |
-| 内核 | 模块化单体内核，Rust `no_std`；M3 后启用 `alloc` | `panic=abort`，少量必要汇编 |
+| 内核 | 模块化单体内核，Rust `no_std` + `alloc`（M3 已启用） | `panic=abort`，少量必要汇编 |
 | 编译目标 | 内核使用 `x86_64-unknown-none` | 用户程序使用独立目标和链接配置 |
 | 参考平台 | QEMU q35、OVMF、串口、现代 virtio PCI | TCG 必须可用，KVM 可选 |
 | 用户态 | ELF64、System V AMD64 函数调用约定 | native ABI 与 Linux ABI 独立建档 |
@@ -55,6 +55,8 @@
 | [docs/validation/M0-M1.md](docs/validation/M0-M1.md) | 实际本地构建和启动验证记录 |
 | [docs/M2_CPU.md](docs/M2_CPU.md) | CPU 表、异常栈、ACPI/APIC、时钟和上下文规则 |
 | [docs/validation/M2.md](docs/validation/M2.md) | 实际 M2 定时器与异常验证记录 |
+| [docs/M3_MEMORY.md](docs/M3_MEMORY.md) | 物理页/页表所有权、栈、堆、权限与 OOM |
+| [docs/validation/M3.md](docs/validation/M3.md) | 实际 M3 内存与保护验证记录 |
 | [docs/STATUS.md](docs/STATUS.md) | 当前已实现能力和下一步 |
 | [docs/GITHUB_SETUP.md](docs/GITHUB_SETUP.md) | 仓库克隆、文档维护与提交约定 |
 | [docs/LICENSING.md](docs/LICENSING.md) | Apache-2.0 选择、使用与第三方许可边界 |
@@ -94,15 +96,15 @@ cargo xtask doctor      # 汇总缺失依赖与版本不符
 cargo xtask build       # 构建并检查裸机内核 ELF
 cargo xtask image       # 生成 build/images/anova-normal.iso
 cargo xtask run         # 串口控制台；普通内核保持 idle
-cargo xtask smoke       # 要求启动/断点返回、至少 8 次定时 IRQ 和退出码 33
-cargo xtask verify      # 正常启动通过；panic、超时及四类 CPU 故障被拒绝
+cargo xtask smoke       # 要求内存检查、断点返回、至少 8 次 IRQ 和退出码 33
+cargo xtask verify      # 13 场景：启动通过，故障、panic、超时和 OOM 被拒绝
 ```
 
-以上命令已在宿主 `xtask` 包中实现。镜像、缓存、日志和临时固件变量副本均位于 `build/`；普通启动不连接数据盘和网络。GitHub Actions 已配置相同检查，其运行结果与 [本地验收](docs/validation/M2.md) 分开记录。
+以上命令已在宿主 `xtask` 包中实现。镜像、缓存、日志和临时固件变量副本均位于 `build/`；普通启动不连接数据盘和网络。GitHub Actions 已配置相同检查，其运行结果与 [本地验收](docs/validation/M3.md) 分开记录。
 
 ## 下一步
 
-M3 实现显式内存所有权、物理页分配器、受管页表和堆。外设 IRQ 路由随首个设备驱动启用并验证。详情见 [CPU 基线](docs/M2_CPU.md)、[当前状态](docs/STATUS.md) 和 [路线图](ROADMAP.md)。
+M4 将在 M3 内存基线上实现首个隔离的 Ring 3 ELF 应用、原生 syscall ABI 和最小 SDK。外设 IRQ 路由随首个设备驱动启用并验证。详情见 [内存设计](docs/M3_MEMORY.md)、[当前状态](docs/STATUS.md) 和 [路线图](ROADMAP.md)。
 
 ## 许可证
 

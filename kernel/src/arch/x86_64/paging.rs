@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //! A bounded BSP-only copy-on-write extension of the retained Limine tables.
-//! M3 must replace this pool with explicit address-space ownership before reclaiming memory.
+//! M3 consumes this mapper and clones every live table into owned frame storage.
 use super::cpu;
 use crate::{boot::BootInfo, serial};
 use anova_platform::{PhysAddr, VirtAddr, acpi::MAX_TABLE};
@@ -38,6 +38,10 @@ pub struct EarlyMapper<'a> {
 }
 
 impl<'a> EarlyMapper<'a> {
+    pub fn into_root(self) -> PhysAddr {
+        PhysAddr(self.physical_base)
+    }
+
     pub fn new(info: &'a BootInfo) -> Self {
         assert_eq!(cpu::flags() & (1 << 9), 0, "Early mapping requires IF=0");
         assert!(

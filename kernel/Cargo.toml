@@ -15,6 +15,7 @@ bench = false
 [dependencies]
 limine = "=0.5.0"
 anova-platform = { path = "../crates/platform" }
+anova-memory = { path = "../crates/memory" }
 
 [features]
 qemu-test = []
@@ -24,4 +25,10 @@ test-invalid-opcode = ["qemu-test"]
 test-general-protection = ["qemu-test"]
 test-page-fault = ["qemu-test"]
 test-double-fault = ["qemu-test"]
+test-stack-guard = ["qemu-test"]
+test-read-only = ["qemu-test"]
+test-no-execute = ["qemu-test"]
+test-direct-no-execute = ["qemu-test"]
+test-unmapped = ["qemu-test"]
+test-oom = ["qemu-test"]
 
