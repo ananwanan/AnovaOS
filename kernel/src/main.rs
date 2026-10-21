@@ -8,6 +8,7 @@ extern crate alloc;
 mod abi;
 mod arch;
 mod boot;
+mod drivers;
 mod fs;
 mod mm;
 mod serial;
@@ -89,6 +90,7 @@ pub extern "C" fn _start() -> ! {
 extern "C" fn kernel_main(timer_port: u64, timer_mask: u64) -> ! {
     PHASE.store(5, Ordering::Relaxed);
     mm::verify();
+    drivers::discover();
     apic::verify_ticks(anova_platform::acpi::PmTimer {
         port: timer_port as u16,
         mask: timer_mask as u32,

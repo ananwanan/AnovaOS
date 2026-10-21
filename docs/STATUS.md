@@ -3,7 +3,7 @@
 **M7 feature branch checkpoint (unverified):** `feat/m7-persistent-storage`
 now contains a separately packaged native line editor and a host-testable
 `anova-storage` crate for checked sector access, constrained ext2 direct-file
-I/O, PCI capability parsing and modern virtio protocol layouts. This is **not**
+I/O, PCI capability parsing, a BSP read-only PCI device probe, and modern virtio\nprotocol layouts. This is **not**
 a connected disk driver or an accepted persistent mount; the M6 boot status
 below remains unchanged. See [M7_STORAGE.md](M7_STORAGE.md) and
 [validation/M7.md](validation/M7.md) for outstanding work and test status.

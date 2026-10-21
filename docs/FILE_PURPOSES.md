@@ -86,6 +86,8 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `kernel/src/arch/x86_64/user.S` | Resume saved user GPR/FPU state and use its own trusted SYSCALL stack. Every user trap returns to a single BSP scheduler continuation with IF=0. |
 | `kernel/src/arch/x86_64/user.rs` | BSP saved GPR/segment/x87/SSE2 contexts, native SYSCALL and IRETQ transitions. Each user trap returns to the trusted scheduler root/stack; kernel code remains SIMD-free. |
 | `kernel/src/boot.rs` | Borrow retained Limine data. M3 allocates only USABLE RAM; bootloader data, original stacks/tables, modules, firmware and the early pool remain reserved. Retained native ELF modules support isolation tests; a tagged archive supplies the M6 root. |
+| `kernel/src/drivers/mod.rs` | Isolate non-DMA hardware discovery entry points from task and VFS code. |
+| `kernel/src/drivers/pci.rs` | Read PCI config mechanism #1 on the BSP to detect modern virtio-blk without enabling DMA. |
 | `kernel/src/fs/mod.rs` | Bridge checked native user buffers to the shared VFS and polled canonical terminal. Calls run on the BSP at IF=0; blocking retains only a copied syscall frame, never a lock. |
 | `kernel/src/main.rs` | Boot owned memory/CPU state and run isolated, preemptively scheduled native processes. |
 | `kernel/src/mm/lock.rs` | Non-sleeping BSP locks. Order: memory manager before heap; the fixed heap never calls the frame allocator. IRQ/NMI/fatal paths must not take either. |
