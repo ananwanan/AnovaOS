@@ -2,9 +2,10 @@
 
 M0/M1 provide the Cargo workspace, host xtask, bare-metal kernel and UEFI ISO.
 The M2 BSP baseline adds CPU tables, guarded exception stacks, ACPI discovery
-and a calibrated periodic LAPIC IRQ. Start from dev or its task branch; read
-[STATUS.md](STATUS.md), [M2_CPU.md](M2_CPU.md) and [AGENTS.md](../AGENTS.md).
-There is still no allocator, user space or external device IRQ delivery.
+and a calibrated periodic LAPIC IRQ. M3 adds checked frames, a fully owned table
+hierarchy, a guarded normal stack and a reclaiming `alloc` heap. Start from dev
+or its task branch; read [STATUS.md](STATUS.md), [M3_MEMORY.md](M3_MEMORY.md)
+and [AGENTS.md](../AGENTS.md). User space and external device IRQ delivery remain pending.
 
 ## Host setup
 
@@ -46,16 +47,23 @@ Run from the repository root:
 | `cargo xtask build` | target/x86_64-unknown-none/debug/anova-kernel and ELF checks | Build/link/ELF failure returns 1 |
 | `cargo xtask image` | build/images/anova-normal.iso | Missing/corrupt inputs stop image generation |
 | `cargo xtask run` | UEFI boot, serial on stdio, then idle | Process errors propagate; stop QEMU with Ctrl+C |
-| `cargo xtask smoke` | Test ISO and build/logs/boot.*; 8+ IRQs and returning breakpoints | Missing CPU stages, fatal fault, wrong exit or deadline returns 1 |
+| `cargo xtask smoke` | Test ISO and build/logs/boot.*; memory stress, 8+ IRQs and returning traps | Missing memory/CPU stages, fatal fault, wrong exit or deadline returns 1 |
 | `cargo xtask smoke --case panic` | Controlled panic and QEMU 35 | Intentionally returns 1 |
 | `cargo xtask smoke --case timeout --timeout-secs 8` | Controlled hang, killed by watchdog | Intentionally returns 1 |
 | `cargo xtask smoke --case page-fault` | Real guard write faults on IST2, QEMU 37 | Intentionally returns 1 |
 | `cargo xtask smoke --case double-fault` | Real stack failure reaches #DF on IST1, QEMU 37 | Intentionally returns 1 |
-| `cargo xtask verify` | Boot passes; six reached failure injections are rejected | Wrong vector/error/IST/address, unexpected outcome or unreached injection fails |
-| `cargo xtask test-host` | Transcript/exception gates, ACPI bounds/checksums, PM wrap, ELF and CLI tests | Test failures propagate |
+| `cargo xtask smoke --case read-only` | Real supervisor write to RO RAM, QEMU 37 | Intentionally returns 1 |
+| `cargo xtask smoke --case no-execute` | Real instruction fetch from NX RAM, QEMU 37 | Intentionally returns 1 |
+| `cargo xtask smoke --case direct-no-execute` | Real NX fetch through the HHDM alias, QEMU 37 | Intentionally returns 1 |
+| `cargo xtask smoke --case stack-guard` | Write to the owned normal-stack guard, QEMU 37 | Intentionally returns 1 |
+| `cargo xtask smoke --case unmapped` | Access after unmap and TLB flush, QEMU 37 | Intentionally returns 1 |
+| `cargo xtask smoke --case oom` | Infallible allocation panic, QEMU 35 | Intentionally returns 1 |
+| `cargo xtask verify` | Boot passes; twelve reached failure injections are rejected | Wrong vector/error/IST/address, unexpected outcome or unreached injection fails |
+| `cargo xtask test-host` | Frame/buddy/table boundaries and rollback; transcript/ACPI/PM/ELF/CLI tests | Test failures propagate |
 
 smoke accepts --case boot/panic/timeout/invalid-opcode/general-protection/page-fault/
-double-fault and --timeout-secs 1..300; its default is 30 seconds. verify uses
+double-fault/stack-guard/read-only/no-execute/direct-no-execute/unmapped/oom
+and --timeout-secs 1..300; its default is 30 seconds. verify uses
 30 seconds per case, except 8 seconds for the deliberately hung image. Deadlines bound the QEMU process;
 compilation and downloads have their own failure behavior.
 
@@ -64,8 +72,9 @@ compilation and downloads have their own failure behavior.
 The alias runs host xtask. No global build.target is configured; default-members
 excludes the kernel from accidental host builds. Kernel build.rs rejects the
 wrong target and selects its own linker script. The bare-metal target defaults
-to soft-float/no SIMD, kernel code model and no red zone; no host libc, allocator
-or std is linked. Future user targets need their own configuration.
+to soft-float/no SIMD, kernel code model and no red zone; no host libc, system
+allocator or std is linked. M3 supplies its own global buddy allocator. Future
+user targets need their own configuration.
 
 The linker retains writable Limine requests between delimiters and separates
 RX/R/RW segments at 0xffffffff80000000. build checks ELF class/endian/machine,
@@ -83,9 +92,10 @@ persistence.
 
 ```sh
 cargo fmt --all -- --check
-cargo clippy --locked -p xtask -p anova-platform --all-targets -- -D warnings
+cargo clippy --locked -p xtask -p anova-platform -p anova-memory --all-targets -- -D warnings
 cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features qemu-test -- -D warnings
 cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features test-double-fault -- -D warnings
+cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features test-no-execute -- -D warnings
 cargo xtask test-host
 cargo xtask build
 cargo xtask fetch
@@ -93,10 +103,10 @@ cargo xtask doctor
 cargo xtask verify
 ```
 
-Do not use cargo test --workspace for the hardware kernel or enable both fault
+Do not use cargo test --workspace for the hardware kernel or enable multiple fault
 injection features together. The kernel has no host test harness.
 
-Success requires ordered boot/CPU/timer markers, 8+ IRQs with consistent
+Success requires ordered boot/memory/CPU/timer markers, 8+ IRQs with consistent
 nanoseconds, both returning breakpoint IF states, TEST:PASS and QEMU 33.
 isa-debug-exit maps guest values as (value << 1) | 1: success 0x10 becomes 33,
 panic 0x11 becomes 35, and exception 0x12 becomes 37. Exit 0 is rejected.
@@ -113,10 +123,11 @@ A banner alone never passes.
 ## CI and evidence
 
 [boot.yml](../.github/workflows/boot.yml) runs the above checks on Ubuntu 24.04,
-including all seven QEMU cases, and uploads logs even on failure. Actions are
+including all 13 QEMU cases, and uploads logs even on failure. Actions are
 pinned to commits. Configured CI and remote CI execution are separate facts.
-Current local evidence is in [validation/M2.md](validation/M2.md);
-[validation/M0-M1.md](validation/M0-M1.md) records the historical gate.
+Current local evidence is in [validation/M3.md](validation/M3.md);
+[validation/M2.md](validation/M2.md) and
+[validation/M0-M1.md](validation/M0-M1.md) record the historical gates.
 
 Record source baseline, host/tool versions, input hashes, commands, results and
 artifact hashes for boot changes. Debug paths and ISO timestamps still affect

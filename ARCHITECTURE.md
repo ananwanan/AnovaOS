@@ -1,6 +1,6 @@
 # 架构设计
 
-本文描述目标架构；仅以下启动与 M2 BSP 异常/时钟子集已实现，其余部分仍为规划。当前能力见 [STATUS](docs/STATUS.md)。
+本文描述目标架构；以下启动、M2 BSP 异常/时钟和 M3 内存子集已实现，其余部分仍为规划。当前能力见 [STATUS](docs/STATUS.md)。
 
 ## 1. 总体结构
 
@@ -42,7 +42,8 @@ UEFI 固件启动 Limine；Limine 装载内核 ELF 和 initramfs，并按锁定�
 - A bounded 32-page pool clones the active root and only the modified table
   paths. It preserves all other Limine mappings. Guard pages and explicit
   read-only NX ACPI / UC NX APIC windows do not require a frame allocator.
-  This is partial early ownership: M3 must take over before any reclamation.
+  This remains the early-boot boundary; M3 subsequently clones every live table
+  into checked frame storage before switching to the owned hierarchy.
 - The shared `anova-platform` crate decodes bounded ACPI bytes with checksum and
   length checks. Required tables are RSDP, XSDT/RSDT, MADT and FADT. The APIC CPU
   feature, MSR base, MADT identity, NX and PAT assumptions are checked.
@@ -62,6 +63,24 @@ UEFI 固件启动 Limine；Limine 装载内核 ELF 和 initramfs，并按锁定�
 See [M2 CPU details](docs/M2_CPU.md) for exact bounds, contexts and limitations,
 [M0/M1 evidence](docs/validation/M0-M1.md) for the historical boot gate, and
 [M2 evidence](docs/validation/M2.md) for the current validation.
+
+### Current M3 memory implementation
+
+- `anova-memory` shares checked usable-frame allocation, buddy-heap policies and
+  four-level page-table algorithms with host tests. State metadata has an explicit
+  page-rounded reservation; bootloader memory and all non-USABLE ranges stay reserved.
+- Every active table is cloned into owned frames. New paths roll back on OOM;
+  empty tables are unlinked, locally flushed and reclaimed. Dynamic edits use
+  4 KiB leaves; imported huge leaves retain backing and cache attributes.
+- NX covers HHDM aliases and new data mappings; CR0.WP is enabled. A new 64 KiB
+  execution stack has two absent guards and owns RSP0. A 2 MiB buddy heap enables
+  stable Rust `alloc`, fallible OOM and a terminal allocation error diagnostic.
+- Test-only pressure validation covers complete frame exhaustion, map rollback,
+  reuse, container lifetimes and coalescing. The full gate has 13 independent
+  images, including real read-only/NX/guard/unmap faults and infallible heap OOM.
+
+See [M3 memory design](docs/M3_MEMORY.md) and [M3 evidence](docs/validation/M3.md).
+User address spaces, SMP shootdown, DMA drivers and boot-memory reclamation remain pending.
 
 ## 3. 目录规划
 

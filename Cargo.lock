@@ -6,8 +6,16 @@ version = 4
 name = "anova-kernel"
 version = "0.1.0"
 dependencies = [
+ "anova-memory",
  "anova-platform",
  "limine",
+]
+
+[[package]]
+name = "anova-memory"
+version = "0.1.0"
+dependencies = [
+ "anova-platform",
 ]
 
 [[package]]

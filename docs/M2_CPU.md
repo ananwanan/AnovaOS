@@ -1,8 +1,9 @@
 # M2 BSP exceptions and timer
 
 This baseline targets one q35/TCG CPU with the pinned OVMF/Limine inputs.
-It adds real exception handling and a local timer without allocating or
-reclaiming physical pages. See [validation/M2.md](validation/M2.md).
+It describes the early-boot exception/timer boundary before M3. M3 now follows
+it with [owned frame/table/stack/heap management](M3_MEMORY.md). M2 setup itself
+does not allocate or reclaim physical pages. See [validation/M2.md](validation/M2.md).
 
 ## CPU tables and entry boundary
 
@@ -63,8 +64,9 @@ MADT records and, for LAPIC, must match the CPU APIC-base MSR.
 
 All original mappings and boot data remain retained. Removing a guard mapping
 does not free its physical backing; HHDM can still alias kernel data. This is
-limited early ownership, not a frame allocator or a complete M3 memory manager.
-M3 must retain both the pool and every still-referenced original table/page.
+limited early ownership. M3 subsequently clones every reachable table, while
+retaining the pool, boot data and original backing reservations; see
+[M3_MEMORY.md](M3_MEMORY.md).
 
 ## ACPI and interrupt controllers
 
@@ -115,7 +117,8 @@ their own context, locking, per-CPU and table ownership rules.
 
 ## Fault validation
 
-`cargo xtask verify` boots seven independent images. Standalone negative cases
+The original M2 gate booted seven independent images. M3 expands the current
+`cargo xtask verify` gate to 13 images; the original seven keep these requirements. Standalone negative cases
 always return 1; QEMU exit 37 never counts as successful smoke. The gate requires
 the actual expected vector, error, stack, injection and terminal exit. #PF also
 matches CR2 to the injected guard address and checks decoded error bits. #DF

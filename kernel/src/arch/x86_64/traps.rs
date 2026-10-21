@@ -328,6 +328,14 @@ pub fn breakpoint_test() {
     assert_eq!(value, 0x1234_5678_9abc_def0, "Trap clobbered a GPR");
 }
 
+pub fn set_kernel_stack(top: u64) {
+    assert_eq!(cpu::flags() & (1 << 9), 0, "TSS stack update requires IF=0");
+    assert_eq!(top & 15, 0, "Kernel stack top must be aligned");
+    // SAFETY: Only the BSP owns the initialized TSS; IRQs are disabled, there
+    // is no Ring 3 entry yet, and no Rust reference to the packed field escapes.
+    unsafe { ptr::addr_of_mut!((*TABLES.0.get()).tss.rsp[0]).write_unaligned(top) };
+}
+
 pub fn inject_fault() {
     if cfg!(feature = "test-invalid-opcode") {
         serial::write(format_args!("[TEST:INJECT] invalid-opcode\n"));
