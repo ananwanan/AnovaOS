@@ -45,6 +45,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "anova-storage"
+version = "0.1.0"
+
+[[package]]
 name = "anova-vfs"
 version = "0.1.0"
 dependencies = [
