@@ -1,61 +1,58 @@
-# 交给 Codex 的第一批任务
+# M0/M1 implementation order and acceptance
 
-## 任务目标
+The starting revision was `847f7c66ddef25616c27a088d0c7044c6f9e8c0d` on `dev`:
+planning documents only. No Cargo command or kernel was assumed to exist.
+This change implements the following sequence. Follow [AGENTS.md](../AGENTS.md);
+actual outcomes are in [validation/M0-M1.md](validation/M0-M1.md).
 
-请遵守根目录 [AGENTS](../AGENTS.md)，在现有规划基础上实现 M0 和 M1，做到：一条构建/镜像入口可启动 Rust x86_64 内核，串口输出可诊断，冒烟测试能可靠判断成功、panic 与超时。
+| Order | Implementation | Executable check | Completion criterion |
+| --- | --- | --- | --- |
+| 1 | Inspect branch, status, instructions and real files | `git status --short --branch` | Start from dev; preserve existing changes and identify absent commands |
+| 2 | Create workspace, real kernel/host xtask and alias | `cargo metadata --locked --no-deps` | Host tools use host std; no global bare-metal target |
+| 3 | Pin tested Rust, target, rustfmt/Clippy and Cargo.lock | `cargo fmt --all -- --check` | Rust 1.90.0 works; first-party packages use Rust 2024/Apache-2.0 |
+| 4 | Add no_std entry, abort panic and kernel-only linker script | `cargo xtask build` | Static ELF64 x86_64 ET_EXEC; high-half entry in RX segment; no PT_INTERP/PT_DYNAMIC/RWX |
+| 5 | Lock and verify boot inputs; implement diagnostics | `cargo xtask fetch`; `cargo xtask doctor` | Limine/OVMF hashes verified; missing tools and modified inputs return nonzero |
+| 6 | Retain requests and validate protocol responses | `cargo xtask smoke` | Base 3, UEFI64, four-level paging, HHDM, map and kernel reservation validated |
+| 7 | Initialize COM1 and independent panic output | `cargo xtask smoke --case panic` | Identity/phase logged; controlled panic and QEMU 35 observed; xtask returns 1 |
+| 8 | Retain boot memory and report optional data | Inspect boot.serial.log | Map/reservations reported; no allocation/reclamation; framebuffer can be absent |
+| 9 | Generate UEFI ISO and run QEMU/OVMF | `cargo xtask image`; `cargo xtask run` | Normal kernel reaches BOOT:OK then idle; CODE read-only, VARS copied per run |
+| 10 | Implement watchdog and fault injections | `cargo xtask verify` | Ordered stages plus final marker plus QEMU 33 pass; reached panic/hang are rejected |
+| 11 | Synchronize status, commands, evidence and CI | Targeted Clippy, host tests, workflow | Implemented commands are used; remote CI results remain separate from local evidence |
 
-当前仓库仅有规划文档。先核对文件和可用工具，保留既有用户改动。可以分成数个连贯的小批次完成，但不要只生成一套未验证的文件后宣称系统可用。
+The alias and executable are created before the first `cargo xtask` invocation.
+`fetch` downloads; `doctor` only checks and never installs host packages.
+See [DEVELOPMENT.md](DEVELOPMENT.md) for setup and command contracts.
 
-本批在 `dev` 或基于 `dev` 的任务分支实施，Pull Request 目标为 `dev`。新建自有代码采用 Apache-2.0，并按根目录 AGENTS 保留相应标识与归属声明。
+## M0 gate
 
-## 1. 工程骨架
+Host xtask builds with host std and linker. The kernel uses precompiled bare-metal
+core and bundled LLD; nightly and custom target JSON are unnecessary. Formatting,
+separate host/kernel Clippy, and actual host logic tests pass. Tool versions,
+boot-input commits and checksums are recorded. Missing dependencies return 1.
 
-- 建立最小 `kernel` + `xtask` workspace 和 Cargo alias。
-- 验证并固定精确 Rust 工具链，包含 `rustfmt`、`clippy` 组件；使用 `x86_64-unknown-none` 构建内核，宿主工具保持 host target。
-- 自有 Cargo package 声明 `edition = "2024"`，遵守根目录 `rustfmt.toml` 和 [CODING_STYLE](CODING_STYLE.md)；注释、Rustdoc、日志与错误消息使用英文。
-- 内核不依赖 `std`；设置 panic abort、独立 linker script、最小入口。
-- 根据实际协议选择匹配的 Limine 与 Rust 绑定，固定版本/提交与下载校验和。
-- 只创建本批需要的模块；不提前生成未实现的网络、GUI、兼容层和编译器目录。
+## M1 gate
 
-## 2. 引导闭环
+q35/TCG + OVMF + Limine boots the actual Rust ELF with 256 MiB and one vCPU.
+Success requires ordered `[BOOT:ENTRY]`, `[BOOT:PROTOCOL]`, `[BOOT:MEMORY]`,
+`[BOOT:OK]`, `[TEST:PASS]`, no `[PANIC]`, and QEMU exit 33.
 
-- 生成可由 OVMF 启动的 UEFI 镜像；固件路径可检测/配置。
-- 实现 COM1 输出和 panic 尽力日志，报告版本、阶段和关键信息。
-- 校验 Limine base revision 与必需响应，正确保留所有仍使用的启动内存。
-- 打印内存图摘要、framebuffer 信息（如果存在），安全停止或进入明确的 idle 循环。
-- 非必需 framebuffer 缺失不能阻止串口诊断。
-- 不使用 UEFI target 代替真正的裸机内核，不访问已经失效的 Boot Services。
+Controlled panic must reach its injection text and QEMU 35. Controlled timeout
+must reach `[TEST:HANG]` before the watchdog kills and reaps QEMU. The standalone
+negative smoke commands return 1. `verify` expects those failures; an unreached
+injection point fails the whole gate. Corrupt input stops image generation.
 
-## 3. 操作入口
+Normal startup stays in `cli; hlt`, with no test exit device access. Firmware
+source hashes stay unchanged and outputs remain under target/ or build/.
 
-实现以下约定并同步真实使用说明：
+## Ownership and next task
 
-```sh
-cargo xtask doctor
-cargo xtask build
-cargo xtask image
-cargo xtask run
-cargo xtask smoke
-```
+BootInfo borrows the immutable Limine map for all of M1. There is no allocator;
+all memory remains retained, including bootloader stack, page tables, responses,
+ACPI, kernel and modules. Reserved entries may overlap; usable and bootloader
+reclaimable ranges are checked for alignment and overlap. M3 must establish
+explicit ownership before reclaiming anything.
 
-doctor 报告缺依赖；image 校验外部输入；run 默认使用仓库内生成的普通镜像和临时变量盘；smoke 使用 TCG 可运行，KVM 可选。
-
-`test-host` 可以在确有可独立测试的逻辑时加入，不需要为打印 banner 写镜像式测试。
-
-## 4. 必须实际验证
-
-- workspace 建立后运行 `cargo fmt --all -- --check`，再执行适用的目标构建与测试。
-- 在本次可用环境内构建内核 ELF并检查其架构/布局。
-- QEMU + OVMF 启动，串口出现最终成功标记。
-- 测试 runner 同时检查标记和可解析的测试退出结果。
-- 人为 panic 和超时各有一次受控验证，runner 返回失败。
-- 缺依赖或校验和不符时明确失败，不自动改系统配置。
-- 检查生成流程不会写真实块设备或修改宿主固件。
-
-如果环境缺少 QEMU/固件或外部下载受限，继续完成能做的实现与静态/构建检查，准确列出未执行项目。此时 M1 必须保持未验收，不能把计划中的日志当成实际输出。
-
-## 5. 文档与交付
-
-更新 [STATUS](STATUS.md)、[ROADMAP](../ROADMAP.md) 和 [DEVELOPMENT](DEVELOPMENT.md)；写入实际工具版本、运行命令和验证记录。简明交代已实现、已验证、限制和下一步。
-
-M0/M1 完成后，下一批是 M2 的 CPU 异常与定时中断，再推进内存管理；不要因为有 framebuffer 就转而把桌面当主线。
+Base revision 3 supplies a physical RSDP address. M1 reports it without parsing
+ACPI, using firmware services, drawing to the framebuffer, or executing modules.
+M2 next adds GDT/TSS/IDT, diagnostic exceptions, a double fault path and a timer
+interrupt. Page allocation and a heap follow the roadmap dependencies.

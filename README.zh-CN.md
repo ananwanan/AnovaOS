@@ -4,7 +4,7 @@
 
 用 Rust 从零开发的 x86_64 操作系统，目标是在自己的系统中编辑、编译、调试和运行应用，并逐步兼容部分现有 Linux 软件。
 
-**当前状态：仅完成项目规划和 Codex 工作规范；尚无内核、启动镜像或已验证的软件兼容能力。**
+**当前状态：M0/M1 已实现并通过本地验证。Rust 裸机内核可经 OVMF/Limine 在 QEMU TCG 启动，通过 COM1 报告启动数据，并通过成功、panic、超时验证。用户态和 Linux 兼容尚待实现。**
 
 项目仓库：[ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS)。
 
@@ -27,7 +27,7 @@
 | --- | --- | --- |
 | 架构 | x86_64，4 级页表，先单核 | 首版不承担 32 位/x32 ABI |
 | 启动 | UEFI + Limine，内核 ELF | Secure Boot 签名链后置 |
-| 内核 | 模块化单体内核，Rust `no_std` + `alloc` | 初期 `panic=abort`，少量必要汇编 |
+| 内核 | 模块化单体内核，Rust `no_std`；M3 后启用 `alloc` | `panic=abort`，少量必要汇编 |
 | 编译目标 | 内核使用 `x86_64-unknown-none` | 用户程序使用独立目标和链接配置 |
 | 参考平台 | QEMU q35、OVMF、串口、现代 virtio PCI | TCG 必须可用，KVM 可选 |
 | 用户态 | ELF64、System V AMD64 函数调用约定 | native ABI 与 Linux ABI 独立建档 |
@@ -49,9 +49,10 @@
 | [ARCHITECTURE.md](ARCHITECTURE.md) | 内核、应用、ABI、驱动和目录边界 |
 | [COMPATIBILITY.md](COMPATIBILITY.md) | 现有软件兼容策略、ABI 需求和验证矩阵 |
 | [docs/TOOLCHAINS.md](docs/TOOLCHAINS.md) | GCC/G++/Rust 从交叉编译到系统内开发 |
-| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | 宿主环境、计划命令、验证与版本记录 |
+| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | 宿主配置、已实现命令、产物和失败处理 |
 | [docs/CODING_STYLE.md](docs/CODING_STYLE.md) | 英文开发语言约定与 Rust 格式规范 |
-| [docs/FIRST_TASK.md](docs/FIRST_TASK.md) | 可直接交给 Codex 的第一批实施任务 |
+| [docs/FIRST_TASK.md](docs/FIRST_TASK.md) | M0/M1 的实现顺序与每步完成标准 |
+| [docs/validation/M0-M1.md](docs/validation/M0-M1.md) | 实际本地构建和启动验证记录 |
 | [docs/STATUS.md](docs/STATUS.md) | 当前已实现能力和下一步 |
 | [docs/GITHUB_SETUP.md](docs/GITHUB_SETUP.md) | 仓库克隆、文档维护与提交约定 |
 | [docs/LICENSING.md](docs/LICENSING.md) | Apache-2.0 选择、使用与第三方许可边界 |
@@ -60,14 +61,14 @@
 
 自有代码的标识符、注释、Rustdoc、安全说明、日志、错误消息、CLI 帮助、测试、提交消息、PR 标题/描述和新开发文档统一使用英文。明确的翻译与本地化资源可以使用目标语言；第三方文本及现有中文规划文档按 [代码规范](docs/CODING_STYLE.md) 保留相应语言。
 
-Rust 格式由根目录 [rustfmt.toml](rustfmt.toml) 定义：4 空格缩进、100 列建议宽度、LF 换行、Rust 2024 parser/style edition，仅使用稳定版 rustfmt 选项。建立 Cargo workspace 后，在仓库根目录执行：
+Rust 格式由根目录 [rustfmt.toml](rustfmt.toml) 定义：4 空格缩进、100 列建议宽度、LF 换行、Rust 2024 parser/style edition，仅使用稳定版 rustfmt 选项。在仓库根目录执行：
 
 ```sh
 cargo fmt --all
 cargo fmt --all -- --check
 ```
 
-这些命令需要真实的 `Cargo.toml`，当前仓库尚无此文件。共享项目信息变更时，同步维护默认英文 [README.md](README.md) 与本中文版。
+共享项目信息变更时，同步维护默认英文 [README.md](README.md) 与本中文版。
 
 ## 怎样才算“可以在系统上开发 app”
 
@@ -81,11 +82,25 @@ cargo fmt --all -- --check
 
 可以先通过 Linux 兼容层运行这些工具链；这仍是应用在自研内核上的系统内开发。AnovaOS 专用 target 和原生 `std` 移植另设阶段，避免混淆进度。
 
+## 构建与启动
+
+宿主使用 x86_64 Ubuntu 24.04 或 WSL2，安装 rustup、QEMU 8.2.2、xorriso、curl 和 dpkg-deb。仓库固定 Rust 1.90.0、rustfmt、Clippy 与裸机目标；依赖安装和固件路径见 [开发说明](docs/DEVELOPMENT.md)。
+
+```sh
+cargo xtask fetch       # 下载并校验固定的 Limine/OVMF 输入
+cargo xtask doctor      # 汇总缺失依赖与版本不符
+cargo xtask build       # 构建并检查裸机内核 ELF
+cargo xtask image       # 生成 build/images/anova-normal.iso
+cargo xtask run         # 串口控制台；普通内核保持 idle
+cargo xtask smoke       # 同时要求阶段标记和 QEMU 退出码 33
+cargo xtask verify      # 正常启动通过；受控 panic 和超时被拒绝
+```
+
+以上命令已在宿主 `xtask` 包中实现。镜像、缓存、日志和临时固件变量副本均位于 `build/`；普通启动不连接数据盘和网络。GitHub Actions 已配置相同检查，其运行结果与 [本地验收](docs/validation/M0-M1.md) 分开记录。
+
 ## 下一步
 
-从 [第一批任务](docs/FIRST_TASK.md) 实现 M0 与 M1：工程入口、锁定工具链、QEMU 启动、串口日志、可判定失败的冒烟验证。
-
-目前文档中的 `cargo xtask ...` 是后续需要实现的接口，不能当作现有命令运行。当前没有 `Cargo.toml`，也没有 CI 工作流。
+M2 实现 GDT/TSS/IDT、可诊断异常与定时中断。内存分配、用户应用、文件系统和编译器移植继续按 [路线图](ROADMAP.md) 的依赖推进。
 
 ## 许可证
 

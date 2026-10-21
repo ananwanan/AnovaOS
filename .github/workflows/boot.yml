@@ -1,0 +1,49 @@
+# SPDX-License-Identifier: Apache-2.0
+name: Bare-metal boot
+
+on:
+  pull_request:
+    branches: [dev]
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  boot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Install host utilities
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 xorriso curl dpkg-dev
+      - name: Load the pinned Rust toolchain
+        run: rustup show active-toolchain
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Check host tools
+        run: cargo clippy --locked -p xtask --all-targets -- -D warnings
+      - name: Check the bare-metal kernel
+        run: cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features qemu-test -- -D warnings
+      - name: Test host logic
+        run: cargo xtask test-host
+      - name: Build the kernel
+        run: cargo xtask build
+      - name: Fetch verified boot inputs
+        run: cargo xtask fetch
+      - name: Check prerequisites
+        run: cargo xtask doctor
+      - name: Verify boot, panic and timeout
+        run: cargo xtask verify
+      - name: Upload boot evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: qemu-boot-evidence
+          path: build/logs/
+          if-no-files-found: ignore
+

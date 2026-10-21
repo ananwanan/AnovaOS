@@ -4,7 +4,7 @@
 
 这是 Rust 编写的 x86_64 自研操作系统。最终用户应能在系统自己的终端中编辑源码、使用 GCC/G++/Rust/Cargo 编译、链接并运行应用，同时逐步运行经过验证的现有 Linux 软件。
 
-当前仓库只有设计文档，没有 Rust workspace、内核、镜像或工作流。**不能声称任何内核功能已经实现。** 实施时先读 [docs/STATUS.md](docs/STATUS.md)，再检查真实文件和 git 状态，以代码与验证记录为准。
+当前 M0/M1 已实现并通过本地 QEMU TCG 验证：workspace、固定工具链、内核 ELF、UEFI 镜像、串口与失败可判定的测试入口均已存在。CI 工作流已配置，远端结果单独记录。**不能由启动成功推断已有中断、分配器、用户态或软件兼容。** 实施时先读 [docs/STATUS.md](docs/STATUS.md)，再检查真实文件和 git 状态，以代码与验证记录为准。
 
 本文件是后续 Codex 开发规范。用户明确指令优先；已有修改应保留。日常、可逆的实现选择可自主完成，不因普通阶段切换反复请求确认。
 
@@ -106,20 +106,22 @@
 
 系统内应用开发验收必须记录编辑/保存 → 编译 → 链接 → 运行 → 重启保留的全流程。Cargo 先离线依赖，再在线，再 build.rs/proc-macro/C FFI；分别报告，不用 `hello world` 概括所有 Cargo 功能。
 
-## 10. 计划中的统一命令
+## 10. 已实现的统一命令
 
-以下命令目前不存在，由 M0/M1 实现后才能作为实际操作说明：
+以下命令由 M0/M1 的宿主 `xtask` 提供；完整说明见 [DEVELOPMENT](docs/DEVELOPMENT.md)：
 
 ```sh
 cargo xtask doctor
+cargo xtask fetch
 cargo xtask build
 cargo xtask image
 cargo xtask run
 cargo xtask smoke
+cargo xtask verify
 cargo xtask test-host
 ```
 
-M0 应提供最小可构建入口；M1 结束前 build/image/run/smoke 必须真实工作。`doctor` 对缺少依赖明确报错，`test-host` 只测实际存在的纯逻辑，不创建镜像式空测试。将来 `cargo xtask test-compat` 等入口随能力落地再加入文档。
+`fetch` 下载并校验锁定输入；`doctor` 对缺少依赖明确报错。`verify` 要求正常启动通过、受控 panic/超时确实到达注入点并被拒绝。`test-host` 测试退出判定、校验和、ELF 和参数边界。将来 `cargo xtask test-compat` 等入口随能力落地再加入文档。
 
 ## 11. 验证要求
 

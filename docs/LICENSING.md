@@ -33,7 +33,7 @@ AnovaOS 的原创代码、文档、测试和示例采用 [Apache License, Versio
 license = "Apache-2.0"
 ```
 
-当前没有 Cargo workspace，不为放置许可字段创建空的 Cargo.toml。导入第三方文件时保留原声明，不能把其标记批量替换为 Apache-2.0。
+当前 workspace 的自有 package 已声明 Apache-2.0。导入第三方文件时保留原声明，不能把其标记批量替换为 Apache-2.0。
 
 ## 第三方边界
 
@@ -49,3 +49,17 @@ license = "Apache-2.0"
 - [Apache 许可常见问题](https://www.apache.org/foundation/license-faq.html)
 
 上述链接用于解释许可；仓库中的正式文本为根目录 [LICENSE](../LICENSE)。
+
+## Boot implementation dependencies
+
+M0/M1 uses limine 0.5.0 (MIT OR Apache-2.0) and its locked registry dependencies.
+Host xtask dependencies retain their upstream licenses; Cargo.lock records exact
+versions and archive hashes. Limine 9.5.0 binary inputs retain the upstream BSD
+license, fetched with SHA-256 verification and included at boot/limine/LICENSE in
+the ISO. Its additional component acknowledgments are available in the
+[matching source release](https://github.com/Limine-Bootloader/Limine/blob/e05e09072f04aef0b58ec2c95600b679b767cce4/3RDPARTY.md).
+
+OVMF is an external host firmware input, extracted from a pinned Ubuntu package
+and excluded from the ISO. The extracted package retains its copyright and
+license files under build/firmware/usr/share/doc/ovmf/. QEMU and xorriso are host
+tools and are not embedded in the kernel or ISO.
