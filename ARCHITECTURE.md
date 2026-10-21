@@ -238,3 +238,13 @@ native SDK 从 M4 的 `no_std` 应用与最小 runtime 开始。开发者可先�
 应用开发链涉及三种不同输出：内核 ELF、native 用户 ELF、Linux 兼容 ELF。构建元数据必须记录 ABI/编译器/sysroot，避免同名文件混装。
 
 系统软件包安装在约定根目录；编译器有独立 sysroot；`/tmp`、`/dev`、必要的 `/proc` 接口和动态解释器路径按实测需要提供。包内容和内核不是同一种发布单元。
+
+## Implemented M8 Linux boundary
+
+The explicit initramfs Linux executable kind selects a separate syscall personality.
+`kernel/task/linux.rs` translates Linux registers, errno, stat/dirent formats,
+TLS and bounded process/memory calls; generic VFS and scheduler policy retain
+backend-neutral types. Startup stacks expose checked argv/envp/auxv. Native disk
+image policy remains native v1. Static musl and a pinned BusyBox profile are
+verified; custom signal handlers, dynamic loading, threads and general Linux
+compatibility are not implemented. See [M8 design](docs/M8_LINUX.md).

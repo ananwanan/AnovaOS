@@ -1,10 +1,9 @@
 # Implementation status
 
 This document records verified capabilities, remaining limits and the next task.
-Recorded 2026-10-21 (Asia/Shanghai). M7 source baseline:
-`20a5d4094ab0fc1a225603a5044881b291281166` on `dev` (merged M6).
-Task branch: `feat/m7-persistent-storage`. The change introducing
-[validation/M7.md](validation/M7.md) identifies the implementation revision.
+Recorded 2026-10-21 (Asia/Shanghai). M8 source baseline:
+`3dfdf6e` on `dev` (merged M7). Task branch: `feat/m8-linux-static`.
+See [M8 design](M8_LINUX.md) and [validation/M8.md](validation/M8.md).
 
 ## Implemented and locally verified
 
@@ -35,7 +34,12 @@ Task branch: `feat/m7-persistent-storage`. The change introducing
   copied ELF SHA-256 match; the app executes after reboot; e2fsck passes.
   Read-only devices, unsupported ext2 features and actual virtio write/flush
   failures produce errors while the kernel remains usable.
-- 56 host tests (including storage, ACPI-power and shell-parser coverage),
+- M8: explicit static Linux ELF identity, checked argc/argv/envp/auxv, separate
+  syscall/errno/flags/layout translation, bounded anonymous memory, FS TLS,
+  RDRAND, descriptor CLOEXEC, fork/exec/wait, basic signal masks/default/ignore
+  and the selected static musl/BusyBox CLI tests. Full signal handlers remain
+  unsupported and return ENOSYS.
+- 61 host tests (including storage, ACPI-power and shell-parser coverage),
   formatting, Clippy with warnings denied, source-purpose coverage, all 13
   QEMU regression classifications and both terminal-input boots pass.
   Remote CI execution is recorded separately and has not been run for M7.
@@ -51,9 +55,10 @@ Task branch: `feat/m7-persistent-storage`. The change introducing
 | Atomic rename/save, journaling and crash recovery | Not implemented |
 | External IRQ/NMI delivery, hotplug and asynchronous block I/O | Not implemented |
 | Bootloader/firmware reclamation, heap growth and general DMA pool | Not implemented |
-| Linux ABI, existing Linux software and networking | Not implemented or verified |
+| M8 static Linux ABI, musl and selected BusyBox CLI | Locally accepted within the documented profile |
+| General Linux compatibility and networking | Not implemented or verified |
 | GCC/G++, rustc/Cargo running inside AnovaOS | Not implemented or verified |
-| Threads, signals, PTY/termios, COW, SMP, GUI and physical hardware | Not implemented or verified |
+| Threads, custom signal handlers, PTY/termios, COW, SMP, GUI and physical hardware | Not implemented or verified |
 
 The non-preemptible BSP polls each block request with a two-second deadline;
 long kernel I/O delays processes and delivered IRQ time. Root stays read-only
@@ -65,13 +70,13 @@ See [M7_STORAGE.md](M7_STORAGE.md) for exact limits and ownership contracts.
 
 ## Next task
 
-Implement M8: a separate Linux x86_64 syscall personality, native/Linux image
-selection and fixed static CLI compatibility tests. Derive each syscall/layout
-requirement from pinned program traces and retain real errors for unsupported
-operations. The native ABI and ext2 data volume remain explicit foundations;
-editing source and running a host-built ELF is not guest-hosted compilation.
+Implement M9: real signal frames/rt_sigreturn and handlers, interruption/restart
+semantics, threads/clone/futex, terminal behavior and controlled dynamic musl.
+Preserve the pinned static CLI profile and add each capability with negative
+and reclamation tests. Guest-hosted compilers remain M11/M12; running these
+host-built static ELFs does not claim compilation inside AnovaOS.
 
 Follow [DEV-001](REQUIREMENTS.md), preserve existing negative cases, maintain
 English purpose explanations and synchronize both READMEs. Keep Limine
 reservations until every live reference is replaced. Do not claim arbitrary
-power-loss safety, Linux compatibility or guest compilers from the M7 tests.
+power-loss safety, general Linux compatibility or guest compilers from these tests.

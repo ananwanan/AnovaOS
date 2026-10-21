@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Drive real COM1 input in two ordinary boots, checking line editing, shell EOF and volatile tmpfs.
+//! Drive native/Linux CLI through COM1 in ordinary boots, checking editing, EOF and volatile tmpfs.
 //! Watchdogs kill only these disposable QEMU guests; a prompt alone is never success evidence.
 use super::*;
 use std::io::Write;
@@ -46,7 +46,11 @@ fn session(root: &Path, iso: &Path, reboot: bool) -> Result<()> {
                 "anova> echo terminal-file > /tmp/terminal",
                 b"cat /tmp/terminal\r",
             ),
-            ("\r\nterminal-file\r\n", b"\x04"),
+            ("\r\nterminal-file\r\n", b"linux-musl test\r"),
+            ("[LINUX:MUSL] TLS=true malloc=true errno=true file=true", b"/linux/sh\r"),
+            ("[LINUX:ENOSYS] nr=13", b"/linux/echo M8-UART | /linux/cat > /tmp/linux-uart; /linux/cat /tmp/linux-uart; exit\r"),
+            ("\r\nM8-UART\r\n", b"status\r"),
+            ("[SHELL:STATUS] code=0", b"\x04"),
         ]
     };
     let start = Instant::now();

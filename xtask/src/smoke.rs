@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Require CPU/memory/process/filesystem/storage proof together with the real QEMU exit result.
+//! Require CPU/memory/native/Linux/process/filesystem/storage proof and the real QEMU exit result.
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Failure {
@@ -81,6 +81,15 @@ pub fn assess(log: &str, code: Option<i32>, timed_out: bool) -> Result<(), Failu
         remaining = &remaining[index + marker.len()..];
     }
     for marker in [
+        "[LINUX:MEMORY] partial_oom=rolled_back overlap=retained frames_restored=true heap_restored=true",
+        "[LINUX:PROBE] errno=true mmap=true TLS=true fork=true wait=true exec=true env=true CLOEXEC=true SIGPIPE=true random=true sleep=true",
+        "[LINUX:MUSL] TLS=true malloc=true errno=true file=true",
+        "[LINUX:BUSYBOX] applet=echo passed=true",
+        "[LINUX:BUSYBOX] applet=ls passed=true",
+        "[LINUX:BUSYBOX] applet=cat passed=true",
+        "[LINUX:SHELL] bytes=12 redirection=true verified=true",
+        "[LINUX:SHELL] bytes=5000 redirection=true verified=true",
+        "M8-status-1",
         "[PCI:BLK]",
         "[BLK:BOUNDS] last_sector=ok capacity=reject overflow=reject flush=ok",
         "[DISK:MOUNT] /persist=ext2:rw",
@@ -329,6 +338,7 @@ pub fn reached_oom(log: &str, code: Option<i32>) -> bool {
 mod tests {
     use super::*;
     const GOOD: &str = concat!(
+        "[LINUX:MEMORY] partial_oom=rolled_back overlap=retained frames_restored=true heap_restored=true\n[LINUX:PROBE] errno=true mmap=true TLS=true fork=true wait=true exec=true env=true CLOEXEC=true SIGPIPE=true random=true sleep=true\n[LINUX:MUSL] TLS=true malloc=true errno=true file=true\n[LINUX:BUSYBOX] applet=echo passed=true\n[LINUX:BUSYBOX] applet=ls passed=true\n[LINUX:BUSYBOX] applet=cat passed=true\n[LINUX:SHELL] bytes=12 redirection=true verified=true\n[LINUX:SHELL] bytes=5000 redirection=true verified=true\nM8-status-1\n",
         "[BOOT:ENTRY]\n[BOOT:PROTOCOL]\n[BOOT:MEMORY]\n[CPU:PAGING]\n[CPU:TABLES]\n[TRAP:BREAKPOINT] saved_if=0 return=iretq\n[CPU:ACPI]\n[CPU:IOAPIC]\n[CPU:APIC]\n[MM:FRAMES]\n[MM:TABLES] boot_table_refs=0 NX=on WP=on direct_map=NX\n[MM:HEAP]\n[MM:STACK]\n[MM:TEST] mappings=256 invalid_free=rejected frame_oom=recovered map_oom=rolled_back\n[MM:ALLOC] coalesced=true fallible_oom=recovered used=0\n[MM:READY]\n[CPU:TIMER] ticks=8 monotonic_ns=80000000\n[TRAP:BREAKPOINT] saved_if=1 return=iretq\n",
         "[USER:CPU] syscall=true return=iretq\n[APP:RUST] args: hello-rust AnovaOS ring3; BSS=zero x87/SSE2=ok\n[USER:EXIT] pid=1 status=0\n[APP:C] args: hello-c native-v1; BSS=zero SSE2=ok\n[USER:EXIT] pid=2 status=7\n[USER:COPYFAULT] write=false recovered=true\n[USER:COPYFAULT] write=true recovered=true\n[USER:LOADER] partial_oom=rolled_back\n[USER:CASE] name=syscalls passed=true\n[USER:CASE] name=timer passed=true\n[USER:CASE] name=page-fault passed=true\n[USER:CASE] name=kernel-read passed=true\n[USER:CASE] name=kernel-write passed=true\n[USER:CASE] name=stack-guard passed=true\n[USER:CASE] name=invalid-opcode passed=true\n[USER:CASE] name=privileged passed=true\n[USER:CASE] name=bad-rsp passed=true\n[USER:CASE] name=read-only passed=true\n[USER:CASE] name=no-execute passed=true\n[USER:TEST] cases=11 repeated=8 pointers=rejected syscalls=checked faults=contained frames_restored=true user_irqs=1\n",
         "[PROC:OOM] spawn=rolled_back fork=rolled_back exec=retained frames_restored=true heap_restored=true\n[PROC:WORKER] GPR/XMM0-15/x87/MXCSR preserved\n[PROC:WORKER] GPR/XMM0-15/x87/MXCSR preserved\n[PROC:CASE] preemption-fpu-fault passed=true\n[PROC:CASE] fork-private-fd passed=true\n[PROC:CASE] fork-cpu-state passed=true\n[PROC:CASE] exec-reset-retain-fd passed=true\n[PROC:CASE] wait-any-orphan-repeat passed=true\n[PROC:CASE] capacity-reuse passed=true\n[SCHED:TEST] preemptions=4 preempt_switches=3 switches=8 sleeps=4 waits=16 idle_halts=3 forks=2 execs=1 spawns=55 reaps=57\n[SCHED:READY] processes_reclaimed=true descriptors=0 frames_restored=true heap_restored=true\n[USER:READY]\n[VFS:MOUNTS]\n[PCI:BLK]\n[BLK:READY]\n[BLK:BOUNDS] last_sector=ok capacity=reject overflow=reject flush=ok\n[DISK:MOUNT] /persist=ext2:rw\n[INIT:START] pid=1\n[FS:CASE] paths-copy-offset-fork-exec-cwd passed=true\n[FS:CASE] pipe-block-drain-eof-broken passed=true\n[FS:CASE] limits-rollback-reuse passed=true\n[FS:CASE] tmpfs-oom-rollback passed=true\n[DISK:TEST] offsets=true fork=true indirect=true sparse=true unlink=true reuse=true negatives=true\n[FS:TEST] passed=true\n[SHELL:STATUS] code=0\n[SHELL:STATUS] code=7\n[SHELL:STATUS] code=127\n[SHELL:STATUS] code=1\n[SHELL:STATUS] code=2\n[SHELL:TEST] files=verified pipeline_bytes=5000 redirection=true cwd=true\n[INIT:TEST] shell_status=0 children_reaped=true\n[VFS:IO] blocks=3 wakes=3 open_descriptions=0 pipes=0\n[BLK:RESET] acknowledged=true dma_released=true\n[VFS:READY] frames_restored=true heap_restored=true tmpfs=volatile\n[BOOT:OK]\n[TEST:PASS]\n",

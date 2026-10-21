@@ -236,3 +236,54 @@ fn global_open_and_pipe_limits_reject_new_objects_and_recover_after_close() {
     fs.clear(&mut extra);
     assert_eq!(fs.live_objects(), (0, 0));
 }
+
+#[test]
+fn descriptor_exec_flags_are_per_slot_and_inherited_without_losing_shared_offsets() {
+    let image = image();
+    let mut fs = Vfs::new(&image).unwrap();
+    let mut parent = Descriptors::default();
+    let fd = fs.open(&mut parent, ROOT, "/etc/text", OPEN_READ).unwrap();
+    parent.set_close_on_exec(fd, true).unwrap();
+    fs.dup2(&mut parent, fd, 9).unwrap();
+    assert!(!parent.close_on_exec(9).unwrap());
+    let mut child = fs.inherit(&parent);
+    fs.close_exec(&mut child);
+    assert!(!child.contains(fd));
+    assert!(child.contains(9) && parent.contains(fd));
+    let mut bytes = [0; 3];
+    assert_eq!(fs.read(&parent, fd, &mut bytes), Ok(3));
+    assert_eq!(&bytes, b"abc");
+    assert_eq!(fs.read(&child, 9, &mut bytes), Ok(3));
+    assert_eq!(&bytes, b"def");
+    fs.clear(&mut parent);
+    fs.clear(&mut child);
+    assert_eq!(fs.live_objects(), (0, 0));
+}
+
+#[test]
+fn directory_peek_does_not_consume_and_device_truncate_does_not_create_storage() {
+    let image = image();
+    let mut fs = Vfs::new(&image).unwrap();
+    let mut fds = Descriptors::default();
+    let directory = fs
+        .open(&mut fds, ROOT, "/etc", OPEN_READ | OPEN_DIRECTORY)
+        .unwrap();
+    let a = fs.peek_readdir(&fds, directory).unwrap().unwrap();
+    let b = fs.peek_readdir(&fds, directory).unwrap().unwrap();
+    assert_eq!(a.inode, b.inode);
+    assert_eq!(fs.readdir(&fds, directory).unwrap().unwrap().inode, a.inode);
+    assert!(fs.peek_readdir(&fds, directory).unwrap().is_none());
+    let null = fs
+        .open(
+            &mut fds,
+            ROOT,
+            "/dev/null",
+            OPEN_WRITE | OPEN_TRUNCATE | OPEN_CREATE,
+        )
+        .unwrap();
+    assert_eq!(fs.write(&fds, null, b"discard"), Ok(7));
+    assert_eq!(fs.descriptor_metadata(&fds, null).unwrap().2, 0);
+    assert_eq!(fs.metadata_nofollow(ROOT, "/text").unwrap().1, 3);
+    assert_eq!(fs.metadata(ROOT, "/text").unwrap().1, 1);
+    fs.clear(&mut fds);
+}

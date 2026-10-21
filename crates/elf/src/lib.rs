@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #![no_std]
 //! Validate a deliberately bounded static ELF64 ET_EXEC subset before allocation.
-//! No host casts, untrusted references, relocation, interpreter or TLS processing.
+//! No host casts, relocation or interpreter; static Linux TLS metadata is checked for libc initialization.
 
 pub mod stack;
 use anova_abi::USER_MIN;
@@ -46,6 +46,8 @@ impl Segment {
 #[derive(Debug)]
 pub struct Image {
     pub entry: u64,
+    pub phdr: u64,
+    pub phnum: u64,
     segments: [Segment; MAX_SEGMENTS],
     count: usize,
 }
@@ -68,6 +70,14 @@ fn integer(bytes: &[u8], offset: usize, length: usize) -> Result<u64, Error> {
 }
 
 pub fn parse(bytes: &[u8]) -> Result<Image, Error> {
+    parse_personality(bytes, false)
+}
+
+pub fn parse_linux(bytes: &[u8]) -> Result<Image, Error> {
+    parse_personality(bytes, true)
+}
+
+fn parse_personality(bytes: &[u8], linux: bool) -> Result<Image, Error> {
     if bytes.len() < 64 || bytes.len() > 8 * 1024 * 1024 || bytes[..7] != *b"\x7fELF\x02\x01\x01" {
         return Err(Error::Header);
     }
@@ -94,10 +104,13 @@ pub fn parse(bytes: &[u8]) -> Result<Image, Error> {
     }
     let mut image = Image {
         entry: at(24, 8)?,
+        phdr: 0,
+        phnum: count as u64,
         segments: [Segment::default(); MAX_SEGMENTS],
         count: 0,
     };
     let mut memory = 0_u64;
+    let mut tls = None;
     for header in bytes[offset..offset + count * 56].chunks_exact(56) {
         let p = |offset, length| integer(header, offset, length);
         let (kind, flags) = (p(0, 4)?, p(4, 4)?);
@@ -112,6 +125,14 @@ pub fn parse(bytes: &[u8]) -> Result<Image, Error> {
         match kind {
             0 | 4 | 6 => continue, // NULL, NOTE and PHDR metadata need no runtime action.
             0x6474_e551 if flags & 1 == 0 => continue, // Non-executable GNU_STACK.
+            7 if linux => {
+                if tls.is_some() || filesz > memsz || (align > 1 && !align.is_power_of_two()) {
+                    return Err(Error::Bounds);
+                }
+                tls = Some((file, address, filesz, memsz));
+                continue;
+            }
+            0x6474_e552 if linux => continue, // Static libc handles its own relocation; RELRO protection is not yet enforced.
             1 => {}
             _ => return Err(Error::Unsupported),
         }
@@ -132,6 +153,11 @@ pub fn parse(bytes: &[u8]) -> Result<Image, Error> {
         let end = address.checked_add(memsz).ok_or(Error::Address)?;
         if address < USER_MIN || end > IMAGE_LIMIT {
             return Err(Error::Address);
+        }
+        if file <= offset as u64 && file + filesz >= (offset + count * 56) as u64 {
+            image.phdr = address
+                .checked_add(offset as u64 - file)
+                .ok_or(Error::Address)?;
         }
         let segment = Segment {
             address,
@@ -161,6 +187,21 @@ pub fn parse(bytes: &[u8]) -> Result<Image, Error> {
         }
         image.segments[image.count] = segment;
         image.count += 1;
+    }
+    if linux && image.phdr == 0 {
+        return Err(Error::Unsupported);
+    }
+    if let Some((file, address, filesz, memsz)) = tls {
+        let end = address.checked_add(memsz).ok_or(Error::Address)?;
+        if !image.segments().iter().any(|s| {
+            address >= s.address
+                && end <= s.address + s.memory_size
+                && file >= s.file_offset as u64
+                && file + filesz <= (s.file_offset + s.file_size) as u64
+                && address - s.address == file - s.file_offset as u64
+        }) {
+            return Err(Error::Bounds);
+        }
     }
     if !image.segments().iter().any(|segment| {
         segment.executable
@@ -242,6 +283,34 @@ mod tests {
                 "offset {offset} value {value}"
             );
         }
+    }
+    #[test]
+    fn linux_requires_mapped_headers_and_valid_static_tls_but_native_rejects_tls() {
+        let mut bytes = valid();
+        assert_eq!(parse_linux(&bytes).unwrap_err(), Error::Unsupported);
+        put(&mut bytes, 72, 0, 8);
+        put(&mut bytes, 96, 8192, 8);
+        put(&mut bytes, 104, 8192, 8);
+        put(&mut bytes, 56, 2, 2);
+        for (offset, value, count) in [
+            (120, 7, 4),
+            (124, 4, 4),
+            (128, 4096, 8),
+            (136, 0x401000, 8),
+            (152, 4, 8),
+            (160, 32, 8),
+            (168, 4, 8),
+        ] {
+            put(&mut bytes, offset, value, count);
+        }
+        assert_eq!(parse(&bytes).unwrap_err(), Error::Unsupported);
+        let image = parse_linux(&bytes).unwrap();
+        assert_eq!(image.phdr, 0x400040);
+        assert_eq!(image.phnum, 2);
+        put(&mut bytes, 160, 8192, 8);
+        assert_eq!(parse_linux(&bytes).unwrap_err(), Error::Bounds);
+        put(&mut bytes, 160, 2, 8);
+        assert_eq!(parse_linux(&bytes).unwrap_err(), Error::Bounds);
     }
     #[test]
     fn rejects_page_overlap_before_mapping_or_allocation() {

@@ -7,12 +7,15 @@ An x86_64 operating system built from scratch in Rust. The goal is to edit,
 compile, debug, and run applications inside AnovaOS itself, while gradually
 supporting selected existing Linux software.
 
-**Current status: M0–M7 are locally verified on QEMU q35/TCG. Native processes,
+**Current status: M0–M8 are locally verified on QEMU q35/TCG. Native processes,
 VFS, pipes, init and a serial shell now include modern virtio-blk, a checked
 ext2 data volume at `/persist`, a text editor, sync/fsync and clean ACPI shutdown.
 Sources and native binaries survive a verified shutdown/reboot with the same
 explicit persistent image. Plain `run` uses a disposable disk; `/tmp` stays
-volatile. Linux compatibility remains pending and device IRQs stay masked.**
+volatile. An explicit static Linux ABI now runs a musl 1.2.4 probe and a pinned
+BusyBox 1.36.1 echo/ls/cat/ash profile, including tested pipes and redirection.
+Custom signal handlers, dynamic linking and general Linux compatibility remain
+pending; device IRQs stay masked.**
 
 Repository: [ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS).
 
@@ -185,3 +188,8 @@ notice requirements. See the [licensing guide](docs/LICENSING.md) and
 Third-party bootloaders, libc implementations, compilers, libraries, and imported
 code retain their respective licenses when included in this repository or a
 system image.
+
+See [M8 static Linux CLI](docs/M8_LINUX.md) for exact limits, build dependencies
+and the compatibility commands `cargo xtask trace-compat` / `cargo xtask test-compat`.
+The normal UART session can launch `/linux/sh`; inside it use `/linux/echo`,
+`/linux/cat` and `/linux/ls`.

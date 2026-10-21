@@ -5,7 +5,7 @@
 
 这是 Rust 编写的 x86_64 自研操作系统。最终用户应能在系统自己的终端中编辑源码、使用 GCC/G++/Rust/Cargo 编译、链接并运行应用，同时逐步运行经过验证的现有 Linux 软件。
 
-当前 M0–M7 已通过本地 QEMU TCG 验证：原生进程、VFS、init/shell 与现代 virtio-blk、受限 ext2 `/persist`、文本编辑器和 sync/fsync/正常关机已实现。持久盘经过正常关机/重启后源码与原生 ELF 校验一致；默认运行使用临时盘。外设 IRQ 全部屏蔽，串口和块完成由 BSP 轮询，CI 远端结果单独记录。**单核，最多 32 个单线程进程；内核不可抢占；tmpfs 重启丢失；ext2 无日志和断电恢复、单文件最多 1 MiB；无 SMP 或 Linux 兼容；引导保留区未回收，堆固定 2 MiB。** 先读 [STATUS](docs/STATUS.md)、[M7_STORAGE](docs/M7_STORAGE.md)、[M6_FILESYSTEM](docs/M6_FILESYSTEM.md)、[M5_PROCESSES](docs/M5_PROCESSES.md) 和 [开发需求](docs/REQUIREMENTS.md)，再检查真实代码与 git 状态。
+当前 M0–M8 已通过本地 QEMU TCG 验证：原生进程、VFS、init/shell 与现代 virtio-blk、受限 ext2 `/persist`、文本编辑器和 sync/fsync/正常关机已实现。持久盘经过正常关机/重启后源码与原生 ELF 校验一致；默认运行使用临时盘。外设 IRQ 全部屏蔽，串口和块完成由 BSP 轮询，CI 远端结果单独记录。**单核，最多 32 个单线程进程；内核不可抢占；tmpfs 重启丢失；ext2 无日志和断电恢复、单文件最多 1 MiB；无 SMP 或通用 Linux 兼容；引导保留区未回收，堆固定 2 MiB。** M8 现支持显式静态 Linux personality、musl 和受限 BusyBox CLI；自定义信号处理器返回 ENOSYS。先读 [M8_LINUX](docs/M8_LINUX.md)、[STATUS](docs/STATUS.md)、[M7_STORAGE](docs/M7_STORAGE.md)、[M6_FILESYSTEM](docs/M6_FILESYSTEM.md)、[M5_PROCESSES](docs/M5_PROCESSES.md) 和 [开发需求](docs/REQUIREMENTS.md)，再检查真实代码与 git 状态。
 
 本文件是后续 Codex 开发规范。用户明确指令优先；已有修改应保留。日常、可逆的实现选择可自主完成，不因普通阶段切换反复请求确认。
 
@@ -129,9 +129,11 @@ cargo xtask terminal-test
 cargo xtask root-image build/disks/NAME.ext2
 cargo xtask run --disk build/disks/NAME.ext2
 cargo xtask persistence-test
+cargo xtask trace-compat
+cargo xtask test-compat
 ```
 
-`fetch` 下载并校验锁定输入；`doctor` 对缺少依赖明确报错。`verify` 的 13 种场景要求正常启动通过内存所有权/压力检查、断点返回和至少 8 次定时 IRQ；受控 panic/超时、#UD/#GP/#PF/#DF、普通栈 guard、只读写入、普通/NX 直映别名执行、解除映射后访问和堆 OOM 必须到达真实注入点、符合诊断与退出码并被拒绝。正常测试镜像还必须通过 Rust/C Ring 3 应用、11 个用户隔离用例、两类真实复制故障恢复、部分装载 OOM 回滚和 8 次重复执行的回收检查。M5 还要求两个计算进程保留完整 GPR/FPU 状态、真实抢占切换、阻塞/HLT、fork/exec/wait/孤儿与 32 槽复用、三个生命周期 OOM 回滚，以及物理页和堆恢复。M6 还验证文件/路径/共享偏移、fork/spawn/exec/cwd、fd 限额回滚、真实 tmpfs 堆耗尽恢复、管道阻塞/EOF/断管，以及 shell 5,000 字节管道和错误退出码。`terminal-test` 用两次普通启动验证串口退格/CRLF/Ctrl+D、shell 重启与 tmpfs 丢失。M7 还要求真实 PCI/virtio 队列与边界检查、ext2 间接块/稀疏/共享偏移/解除链接与复用、成功 reset 后 DMA/物理页/堆回收。`persistence-test` 用普通串口启动验证编辑器保存、源码字节和 ELF SHA-256、重启执行、e2fsck、只读盘、未知特性与真实 write/flush 错误。完整压力检查仅在测试镜像运行。`test-host` 覆盖 frame/buddy/page-table 的边界、保留、复用与 OOM 回滚，以及 ACPI/PM/异常判定。CPU 上下文见 [M2_CPU](docs/M2_CPU.md)，当前内存和锁规则见 [M3_MEMORY](docs/M3_MEMORY.md)。将来 `cargo xtask test-compat` 等入口随能力落地再加入文档。
+`fetch` 下载并校验锁定输入；`doctor` 对缺少依赖明确报错。`verify` 的 13 种场景要求正常启动通过内存所有权/压力检查、断点返回和至少 8 次定时 IRQ；受控 panic/超时、#UD/#GP/#PF/#DF、普通栈 guard、只读写入、普通/NX 直映别名执行、解除映射后访问和堆 OOM 必须到达真实注入点、符合诊断与退出码并被拒绝。正常测试镜像还必须通过 Rust/C Ring 3 应用、11 个用户隔离用例、两类真实复制故障恢复、部分装载 OOM 回滚和 8 次重复执行的回收检查。M5 还要求两个计算进程保留完整 GPR/FPU 状态、真实抢占切换、阻塞/HLT、fork/exec/wait/孤儿与 32 槽复用、三个生命周期 OOM 回滚，以及物理页和堆恢复。M6 还验证文件/路径/共享偏移、fork/spawn/exec/cwd、fd 限额回滚、真实 tmpfs 堆耗尽恢复、管道阻塞/EOF/断管，以及 shell 5,000 字节管道和错误退出码。`terminal-test` 用两次普通启动验证串口退格/CRLF/Ctrl+D、shell 重启与 tmpfs 丢失。M7 还要求真实 PCI/virtio 队列与边界检查、ext2 间接块/稀疏/共享偏移/解除链接与复用、成功 reset 后 DMA/物理页/堆回收。`persistence-test` 用普通串口启动验证编辑器保存、源码字节和 ELF SHA-256、重启执行、e2fsck、只读盘、未知特性与真实 write/flush 错误。完整压力检查仅在测试镜像运行。`test-host` 覆盖 frame/buddy/page-table 的边界、保留、复用与 OOM 回滚，以及 ACPI/PM/异常判定。CPU 上下文见 [M2_CPU](docs/M2_CPU.md)，当前内存和锁规则见 [M3_MEMORY](docs/M3_MEMORY.md)。M8 `test-compat` 要求 Linux 探针、musl 和 BusyBox CLI、5,000 字节 ash 管道、CLOEXEC、TLS、exec/env、信号默认/忽略、OOM 回滚和资源回收；`trace-compat` 保存 Linux 宿主 QEMU-user trace。
 
 ## 11. 验证要求
 

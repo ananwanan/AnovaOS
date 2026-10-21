@@ -4,16 +4,27 @@
 use anova_abi::{BAD_DESCRIPTOR, FILE_LIMIT};
 pub const FD_LIMIT: usize = 32;
 pub struct Descriptors {
+    pub(crate) close_on_exec: [bool; FD_LIMIT],
     pub(crate) slots: [Option<usize>; FD_LIMIT],
 }
 impl Default for Descriptors {
     fn default() -> Self {
         Self {
             slots: [None; FD_LIMIT],
+            close_on_exec: [false; FD_LIMIT],
         }
     }
 }
 impl Descriptors {
+    pub fn set_close_on_exec(&mut self, fd: u64, value: bool) -> Result<(), i64> {
+        self.handle(fd)?;
+        self.close_on_exec[fd as usize] = value;
+        Ok(())
+    }
+    pub fn close_on_exec(&self, fd: u64) -> Result<bool, i64> {
+        self.handle(fd)?;
+        Ok(self.close_on_exec[fd as usize])
+    }
     pub fn count(&self) -> usize {
         self.slots.iter().flatten().count()
     }

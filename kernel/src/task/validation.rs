@@ -5,6 +5,29 @@ use alloc::vec::Vec;
 
 pub fn run(rust: &[u8]) {
     mm::uaccess::verify_recovery();
+    let frames = mm::user::free_frames();
+    let heap = mm::heap_used();
+    {
+        let mut space = mm::user::UserSpace::new().unwrap();
+        let before = mm::user::free_frames();
+        mm::user::set_test_budget(2);
+        assert!(space.map_anonymous(0x5000_0000, 0x5000_4000).is_err());
+        mm::user::set_test_budget(usize::MAX);
+        assert_eq!(
+            before,
+            mm::user::free_frames(),
+            "Anonymous OOM leaked frames"
+        );
+        assert!(!space.accessible(UserAddr(0x5000_0000), 1, false, false));
+        space.map_anonymous(0x5000_0000, 0x5000_2000).unwrap();
+        assert!(space.map_anonymous(0x4fff_f000, 0x5000_1000).is_err());
+        assert!(!space.accessible(UserAddr(0x4fff_f000), 1, false, false));
+    }
+    assert_eq!(frames, mm::user::free_frames());
+    assert_eq!(heap, mm::heap_used());
+    serial::write(format_args!(
+        "[LINUX:MEMORY] partial_oom=rolled_back overlap=retained frames_restored=true heap_restored=true\n"
+    ));
     let before = mm::user::free_frames();
     assert!(matches!(
         loader::load(b"bad ELF", PERSONALITY, &["bad"]),

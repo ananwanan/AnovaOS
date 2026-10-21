@@ -1,7 +1,7 @@
 <!-- Separate verified native support from planned existing-software ABI compatibility. -->
 # 现有软件兼容策略
 
-本文记录现有软件兼容策略与验证矩阵。当前 **M0–M6 仅验证自有 native Rust/C 应用、进程调度、VFS 和原生 shell，没有实现或验证现有 Linux 软件兼容。** 其余内容仍为目标与验收计划；native ABI 边界见 [M4_USERSPACE](docs/M4_USERSPACE.md) 、[M5_PROCESSES](docs/M5_PROCESSES.md) 和 [M6_FILESYSTEM](docs/M6_FILESYSTEM.md)。
+本文记录现有软件兼容策略与验证矩阵。当前 **M0–M8 已验证自有 native Rust/C 应用、持久存储，以及显式静态 Linux personality 下的 musl 1.2.4 和受限 BusyBox 1.36.1。** 不代表通用 Linux 兼容。静态 ABI 的确切范围见 [M8_LINUX](docs/M8_LINUX.md)；native ABI 和存储仍保持各自边界。
 
 ## 1. 兼容层次
 
@@ -75,9 +75,9 @@ musl 和 glibc 是不同的用户态组合。不能混用不匹配的解释器�
 | --- | --- | --- | --- |
 | 自有 native Rust `no_std` | M4 | write/exit/info、参数、BSS、x87/SSE2、坏指针隔离 | q35/TCG 本地通过 |
 | 自有 native C freestanding | M4 | write/exit/info、参数、BSS、SSE2、退出码 7 | q35/TCG 本地通过 |
-| 自有 Linux syscall ELF | M8 | 无 libc 的调用与 errno | 计划 |
-| 静态 musl hello/file | M8 | 启动、分配、文件读写 | 计划 |
-| BusyBox 精选静态构建 | M8 | echo/ls/cat、sh 管道重定向 | 计划 |
+| 自有 Linux syscall ELF | M8 | errno、auxv、TLS、fork/exec/env/wait、CLOEXEC、SIGPIPE、匿名内存 | q35/TCG 本地通过 |
+| 静态 musl 1.2.4 hello/file | M8 | TLS、errno、malloc、文件读写 | q35/TCG 本地通过 |
+| BusyBox 1.36.1 受限静态构建 | M8 | echo/ls/cat、指定 sh 管道重定向及退出码 | q35/TCG 本地通过；其他 applet 未验证 |
 | 动态 musl 小程序 | M9 | PT_INTERP、共享库、TLS | 计划 |
 | pthread/futex/信号样例 | M9 | 线程同步、join、信号返回 | 计划 |
 | make 与基础构建工具 | M11 | 子进程、文件时间、失败传播 | 计划 |
@@ -107,3 +107,5 @@ musl 和 glibc 是不同的用户态组合。不能混用不匹配的解释器�
 先在受控 Linux 环境对相同二进制记录行为；随后在 AnovaOS 上运行相同输入，比较输出、退出码、文件结果与关键系统调用语义。宿主 `strace` 只是发现线索，不能证明 guest 正确。
 
 重点负例包括：坏地址、部分 I/O、EINTR、无效 fd、EOF、并发关闭、超时、资源不足、文件截断、缺解释器/共享库。按软件需求逐步扩展，不一次追求完整 Linux 测试集。
+
+M8 的确切构建、syscall 子集与限制见 [M8_LINUX](docs/M8_LINUX.md) 和 [验证记录](docs/validation/M8.md)。自定义信号处理器返回 ENOSYS；上述 shell 测试不代表支持 trap、Ctrl+C、作业控制或任意脚本。

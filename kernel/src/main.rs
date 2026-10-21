@@ -107,7 +107,7 @@ extern "C" fn kernel_main(timer_port: u64, timer_mask: u64) -> ! {
     mm::inject_fault();
     task::start();
     serial::write(format_args!(
-        "[BOOT:OK] M7 init/shell/storage/files/pipes reclaimed; BSP idle, interrupts enabled\n"
+        "[BOOT:OK] M8 native/Linux CLI processes reclaimed; BSP idle, interrupts enabled\n"
     ));
     #[cfg(feature = "qemu-test")]
     {

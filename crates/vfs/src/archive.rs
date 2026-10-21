@@ -8,6 +8,7 @@ pub const FILE: u8 = 1;
 pub const DIRECTORY: u8 = 2;
 pub const SYMLINK: u8 = 3;
 pub const EXECUTABLE: u8 = 4;
+pub const LINUX_EXECUTABLE: u8 = 5;
 
 pub struct Entry<'a> {
     pub kind: u8,
@@ -54,7 +55,7 @@ impl<'a> Archive<'a> {
         let data_len = usize::try_from(u64::from_le_bytes(header[4..12].try_into().unwrap()))
             .map_err(|_| INVALID_ARGUMENT)?;
         if header[1] != 0
-            || !(FILE..=EXECUTABLE).contains(&kind)
+            || !(FILE..=LINUX_EXECUTABLE).contains(&kind)
             || path_len == 0
             || path_len > 128
             || (kind == DIRECTORY && data_len != 0)

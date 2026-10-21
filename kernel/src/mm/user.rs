@@ -179,6 +179,50 @@ impl UserSpace {
         Ok(())
     }
 
+    /// Remove only owned private leaves on the inactive scheduler root.
+    pub fn unmap(&mut self, address: u64) -> Result<(), Error> {
+        let Some(index) = self.pages.iter().position(|(v, _)| v.0 == address) else {
+            return Ok(());
+        };
+        MEMORY.with(|slot| {
+            let manager = slot.as_mut().expect("Memory not initialized");
+            let mut store = Store {
+                frames: &mut manager.frames,
+                direct: manager.direct,
+                boot: None,
+                active: false,
+            };
+            let frame = self
+                .tables
+                .as_mut()
+                .expect("Closed user space")
+                .unmap(VirtAddr(address), &mut store)?;
+            manager.frames.release(frame, Owner::User)
+        })?;
+        self.pages.swap_remove(index);
+        Ok(())
+    }
+    /// Eager anonymous mapping with complete leaf rollback on partial allocation failure.
+    pub fn map_anonymous(&mut self, start: u64, end: u64) -> Result<(), Error> {
+        if start & 4095 != 0 || end & 4095 != 0 || start >= end || end - start > 8 * 1024 * 1024 {
+            return Err(Error::InvalidRange);
+        }
+        for page in (start..end).step_by(4096) {
+            if self.accessible(UserAddr(page), 1, false, false) {
+                return Err(Error::InvalidRange);
+            }
+        }
+        for page in (start..end).step_by(4096) {
+            if let Err(error) = self.map(page, Permissions::DATA) {
+                for rollback in (start..page).step_by(4096) {
+                    self.unmap(rollback)?;
+                }
+                return Err(error);
+            }
+        }
+        Ok(())
+    }
+
     /// Loader-only initialization through owned physical backing, before activation.
     pub fn initialize(&self, address: u64, bytes: &[u8]) -> Result<(), Error> {
         if UserAddr(address).checked_end(bytes.len()).is_none() {

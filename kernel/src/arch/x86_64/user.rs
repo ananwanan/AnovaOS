@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! BSP saved GPR/segment/x87/SSE2 contexts, native SYSCALL and IRETQ transitions.
+//! BSP saved GPR/segment/x87/SSE2 and TLS contexts, SYSCALL and IRETQ transitions.
 //! Each user trap returns to the trusted scheduler root/stack; kernel code remains SIMD-free.
 use super::cpu;
 use core::arch::{asm, global_asm, x86_64::__cpuid};
@@ -85,6 +85,13 @@ impl Context {
             selectors: [0x2b, 0x2b, 0, 0],
             bases: [0; 2],
         }
+    }
+
+    pub fn fs_base(&self) -> u64 {
+        self.bases[0]
+    }
+    pub fn set_fs_base(&mut self, base: u64) {
+        self.bases[0] = base;
     }
 
     pub fn capture(&mut self, frame: &super::traps::TrapFrame) {
