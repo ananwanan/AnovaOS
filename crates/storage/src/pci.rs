@@ -30,10 +30,12 @@ pub fn find_block<C: Configuration>(access: &mut C) -> Option<Location> {
             let functions = if header & (1 << 23) != 0 { 8 } else { 1 };
             for function in 0..functions {
                 let id = access.read32(bus, device, function, 0);
-                if (id & 0xffff) as u16 == VIRTIO_VENDOR
-                    && (id >> 16) as u16 == MODERN_BLOCK
-                {
-                    return Some(Location { bus, device, function });
+                if (id & 0xffff) as u16 == VIRTIO_VENDOR && (id >> 16) as u16 == MODERN_BLOCK {
+                    return Some(Location {
+                        bus,
+                        device,
+                        function,
+                    });
                 }
             }
         }
@@ -59,13 +61,8 @@ pub struct Capabilities {
 
 /// Recognize only the standard modern PCI capability types; reject duplicate
 /// or malformed configuration structures rather than trusting the firmware.
-pub fn capabilities<C: Configuration>(
-    access: &mut C,
-    at: Location,
-) -> Result<Capabilities, Error> {
-    let rd = |access: &mut C, offset| {
-        access.read32(at.bus, at.device, at.function, offset)
-    };
+pub fn capabilities<C: Configuration>(access: &mut C, at: Location) -> Result<Capabilities, Error> {
+    let rd = |access: &mut C, offset| access.read32(at.bus, at.device, at.function, offset);
     let status = rd(access, 0x04);
     if status & (1 << 20) == 0 {
         return Err(Error::Unsupported);
@@ -100,7 +97,11 @@ pub fn capabilities<C: Configuration>(
                 if bar >= 6 || length == 0 || offset.checked_add(length).is_none() {
                     return Err(Error::Corrupt);
                 }
-                let region = Region { bar, offset, length };
+                let region = Region {
+                    bar,
+                    offset,
+                    length,
+                };
                 let slot = &mut regions[(kind - 1) as usize];
                 if slot.replace(region).is_some() {
                     return Err(Error::Corrupt);
@@ -124,7 +125,9 @@ pub fn capabilities<C: Configuration>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    struct Config { regs: [u32; 64] }
+    struct Config {
+        regs: [u32; 64],
+    }
     impl Configuration for Config {
         fn read32(&mut self, bus: u8, dev: u8, fun: u8, offset: u8) -> u32 {
             if bus != 0 || dev != 3 || fun != 0 {
@@ -153,7 +156,14 @@ mod tests {
     fn probe_and_parse_vendor_capabilities() {
         let mut config = mock();
         let loc = find_block(&mut config).unwrap();
-        assert_eq!(loc, Location { bus: 0, device: 3, function: 0 });
+        assert_eq!(
+            loc,
+            Location {
+                bus: 0,
+                device: 3,
+                function: 0
+            }
+        );
         let caps = capabilities(&mut config, loc).unwrap();
         assert_eq!(caps.notify.offset, 256);
         assert_eq!(caps.notify_multiplier, 4);

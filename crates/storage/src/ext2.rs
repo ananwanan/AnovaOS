@@ -70,8 +70,11 @@ impl<D: BlockDevice> Ext2<D> {
         }
         let inode_size = if revision == 0 { 128 } else { le16(&sb, 88) };
         let first_ino = if revision == 0 { 11 } else { le32(&sb, 84) };
-        if inode_size < 128 || !inode_size.is_power_of_two()
-            || u32::from(inode_size) > block_size || first_ino < 11 {
+        if inode_size < 128
+            || !inode_size.is_power_of_two()
+            || u32::from(inode_size) > block_size
+            || first_ino < 11
+        {
             return Err(Error::Unsupported);
         }
         let compat = if revision == 0 { 0 } else { le32(&sb, 92) };
@@ -92,15 +95,25 @@ impl<D: BlockDevice> Ext2<D> {
         let table_block = le32(&gd, 8);
         let table_bytes = u64::from(inodes) * u64::from(inode_size);
         let table_blocks = table_bytes.div_ceil(block_size as u64);
-        if bitmap <= first_data || bitmap >= blocks || inode_bitmap <= first_data
-            || inode_bitmap >= blocks || table_block <= first_data
+        if bitmap <= first_data
+            || bitmap >= blocks
+            || inode_bitmap <= first_data
+            || inode_bitmap >= blocks
+            || table_block <= first_data
             || u64::from(table_block) + table_blocks > u64::from(blocks)
         {
             return Err(Error::Corrupt);
         }
         let fs = Self {
-            device, block_size, blocks, inodes, inode_size, table_block,
-            first_data, first_ino, filetype: incompat & FILETYPE != 0,
+            device,
+            block_size,
+            blocks,
+            inodes,
+            inode_size,
+            table_block,
+            first_data,
+            first_ino,
+            filetype: incompat & FILETYPE != 0,
         };
         let mut fs = fs;
         let root = fs.read_inode(ROOT_INODE)?;
@@ -110,9 +123,15 @@ impl<D: BlockDevice> Ext2<D> {
         Ok(fs)
     }
 
-    pub fn into_device(self) -> D { self.device }
-    pub fn block_size(&self) -> u32 { self.block_size }
-    pub fn total_blocks(&self) -> u32 { self.blocks }
+    pub fn into_device(self) -> D {
+        self.device
+    }
+    pub fn block_size(&self) -> u32 {
+        self.block_size
+    }
+    pub fn total_blocks(&self) -> u32 {
+        self.blocks
+    }
 
     fn block_offset(&self, number: u32) -> Result<u64, Error> {
         if number <= self.first_data || number >= self.blocks {
@@ -139,7 +158,10 @@ impl<D: BlockDevice> Ext2<D> {
             return Err(Error::Unsupported);
         }
         Ok(Inode {
-            offset, size: le32(&data, 4), mode: le16(&data, 0), blocks,
+            offset,
+            size: le32(&data, 4),
+            mode: le16(&data, 0),
+            blocks,
         })
     }
 
@@ -195,7 +217,11 @@ impl<D: BlockDevice> Ext2<D> {
                 return Err(Error::Corrupt);
             }
             if count == name.len() && &data[offset + 8..offset + 8 + count] == name.as_bytes() {
-                return if ino == 0 { Err(Error::NotFound) } else { Ok(ino) };
+                return if ino == 0 {
+                    Err(Error::NotFound)
+                } else {
+                    Ok(ino)
+                };
             }
             offset += rec;
         }
@@ -256,7 +282,9 @@ mod tests {
 
     struct Image(std::vec::Vec<u8>);
     impl BlockDevice for Image {
-        fn sectors(&self) -> u64 { (self.0.len() / 512) as u64 }
+        fn sectors(&self) -> u64 {
+            (self.0.len() / 512) as u64
+        }
         fn read_sector(&mut self, lba: u64, bytes: &mut [u8; 512]) -> Result<(), Error> {
             block::check(self.sectors(), lba, 1)?;
             let n = lba as usize * 512;
@@ -269,7 +297,9 @@ mod tests {
             self.0[n..n + 512].copy_from_slice(bytes);
             Ok(())
         }
-        fn flush(&mut self) -> Result<(), Error> { Ok(()) }
+        fn flush(&mut self) -> Result<(), Error> {
+            Ok(())
+        }
     }
     fn set16(out: &mut [u8], at: usize, value: u16) {
         out[at..at + 2].copy_from_slice(&value.to_le_bytes());

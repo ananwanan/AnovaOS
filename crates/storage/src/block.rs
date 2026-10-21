@@ -26,7 +26,12 @@ pub fn read_at<D: BlockDevice>(
 ) -> Result<(), Error> {
     let length = u64::try_from(output.len()).map_err(|_| Error::Overflow)?;
     let end = offset.checked_add(length).ok_or(Error::Overflow)?;
-    if end > device.sectors().checked_mul(SECTOR as u64).ok_or(Error::Overflow)? {
+    if end
+        > device
+            .sectors()
+            .checked_mul(SECTOR as u64)
+            .ok_or(Error::Overflow)?
+    {
         return Err(Error::OutOfRange);
     }
     let mut filled = 0;
@@ -42,14 +47,15 @@ pub fn read_at<D: BlockDevice>(
     Ok(())
 }
 
-pub fn write_at<D: BlockDevice>(
-    device: &mut D,
-    offset: u64,
-    input: &[u8],
-) -> Result<(), Error> {
+pub fn write_at<D: BlockDevice>(device: &mut D, offset: u64, input: &[u8]) -> Result<(), Error> {
     let length = u64::try_from(input.len()).map_err(|_| Error::Overflow)?;
     let end = offset.checked_add(length).ok_or(Error::Overflow)?;
-    if end > device.sectors().checked_mul(SECTOR as u64).ok_or(Error::Overflow)? {
+    if end
+        > device
+            .sectors()
+            .checked_mul(SECTOR as u64)
+            .ok_or(Error::Overflow)?
+    {
         return Err(Error::OutOfRange);
     }
     let mut written = 0;
@@ -73,7 +79,9 @@ mod tests {
     use super::*;
     struct Memory([u8; 1024]);
     impl BlockDevice for Memory {
-        fn sectors(&self) -> u64 { 2 }
+        fn sectors(&self) -> u64 {
+            2
+        }
         fn read_sector(&mut self, lba: u64, bytes: &mut [u8; SECTOR]) -> Result<(), Error> {
             check(2, lba, 1)?;
             let i = lba as usize * SECTOR;
@@ -86,7 +94,9 @@ mod tests {
             self.0[i..i + SECTOR].copy_from_slice(bytes);
             Ok(())
         }
-        fn flush(&mut self) -> Result<(), Error> { Ok(()) }
+        fn flush(&mut self) -> Result<(), Error> {
+            Ok(())
+        }
     }
 
     #[test]
@@ -100,7 +110,10 @@ mod tests {
         assert_eq!(device.0[516], 0x55);
         assert_eq!(write_at(&mut device, 1023, b"bad"), Err(Error::OutOfRange));
         assert_eq!(device.0[1023], 0x55);
-        assert_eq!(read_at(&mut device, u64::MAX, &mut bytes), Err(Error::Overflow));
+        assert_eq!(
+            read_at(&mut device, u64::MAX, &mut bytes),
+            Err(Error::Overflow)
+        );
         assert!(check(u64::MAX, u64::MAX - 1, 2).is_err());
     }
 }

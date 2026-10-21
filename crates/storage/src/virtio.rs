@@ -33,7 +33,10 @@ pub fn negotiate(offered: u64) -> Result<Negotiated, Error> {
     }
     // No EVENT_IDX, packed queue, indirect descriptors or discard/write-zeroes
     // until their distinct semantics are implemented and tested.
-    Ok(Negotiated { features: VERSION_1 | FLUSH, flush: true })
+    Ok(Negotiated {
+        features: VERSION_1 | FLUSH,
+        flush: true,
+    })
 }
 
 #[derive(Clone, Copy, Default)]
@@ -97,8 +100,17 @@ mod tests {
         assert_eq!(core::mem::size_of::<Descriptor>(), 16);
         assert_eq!(core::mem::size_of::<Header>(), 16);
         assert_eq!(validate_completion(0, 0, 513, 512, STATUS_OK), Ok(()));
-        assert_eq!(validate_completion(0, 1, 0, 512, STATUS_OK), Err(Error::Corrupt));
-        assert_eq!(validate_completion(0, 0, 514, 512, STATUS_OK), Err(Error::Corrupt));
-        assert_eq!(validate_completion(0, 0, 2, 512, STATUS_IO_ERROR), Err(Error::Io));
+        assert_eq!(
+            validate_completion(0, 1, 0, 512, STATUS_OK),
+            Err(Error::Corrupt)
+        );
+        assert_eq!(
+            validate_completion(0, 0, 514, 512, STATUS_OK),
+            Err(Error::Corrupt)
+        );
+        assert_eq!(
+            validate_completion(0, 0, 2, 512, STATUS_IO_ERROR),
+            Err(Error::Io)
+        );
     }
 }

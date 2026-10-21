@@ -149,8 +149,18 @@ fn initramfs(apps: &Path) -> Result<()> {
             fs::read(apps.join(format!("{name}.elf")))?,
         ));
     }
-    for name in ["ls", "cat", "echo", "pwd", "mkdir", "rm", "true", "false", "ed"] {
-        entries.push((3, format!("/bin/{name}"), if name == "ed" { b"editor".to_vec() } else { b"shell".to_vec() }));
+    for name in [
+        "ls", "cat", "echo", "pwd", "mkdir", "rm", "true", "false", "ed",
+    ] {
+        entries.push((
+            3,
+            format!("/bin/{name}"),
+            if name == "ed" {
+                b"editor".to_vec()
+            } else {
+                b"shell".to_vec()
+            },
+        ));
     }
     entries.push((
         1,
