@@ -1,3 +1,4 @@
+# Normalize first-party text to LF while preserving binary images and archives.
 * text=auto
 *.md text eol=lf
 *.rs text eol=lf

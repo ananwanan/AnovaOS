@@ -44,6 +44,16 @@ pub fn assess(log: &str, code: Option<i32>, timed_out: bool) -> Result<(), Failu
         "[MM:READY]",
         "[CPU:TIMER]",
         "[TRAP:BREAKPOINT]",
+        "[USER:CPU]",
+        "[APP:RUST]",
+        "[USER:EXIT] pid=1 status=0",
+        "[APP:C]",
+        "[USER:EXIT] pid=2 status=7",
+        "[USER:COPYFAULT] write=false",
+        "[USER:COPYFAULT] write=true",
+        "[USER:LOADER]",
+        "[USER:TEST]",
+        "[USER:READY]",
         "[BOOT:OK]",
         "[TEST:PASS]",
     ] {
@@ -94,6 +104,47 @@ pub fn assess(log: &str, code: Option<i32>, timed_out: bool) -> Result<(), Failu
         || field(heap, "used") != Some("0")
     {
         return Err(Failure::Markers);
+    }
+    let user = log
+        .lines()
+        .find(|line| line.starts_with("[USER:TEST]"))
+        .ok_or(Failure::Markers)?;
+    if field(user, "cases") != Some("11")
+        || field(user, "repeated") != Some("8")
+        || field(user, "pointers") != Some("rejected")
+        || field(user, "syscalls") != Some("checked")
+        || field(user, "faults") != Some("contained")
+        || field(user, "frames_restored") != Some("true")
+        || field(user, "user_irqs")
+            .and_then(|v| v.parse::<u64>().ok())
+            .is_none_or(|n| n == 0)
+        || !log.contains("args: hello-rust AnovaOS ring3; BSS=zero x87/SSE2=ok")
+        || !log.contains("args: hello-c native-v1; BSS=zero SSE2=ok")
+        || !log.contains("partial_oom=rolled_back")
+        || log.contains("[APP:FAIL]")
+    {
+        return Err(Failure::Markers);
+    }
+    for case in [
+        "syscalls",
+        "timer",
+        "page-fault",
+        "kernel-read",
+        "kernel-write",
+        "stack-guard",
+        "invalid-opcode",
+        "privileged",
+        "bad-rsp",
+        "read-only",
+        "no-execute",
+    ] {
+        if log
+            .matches(&format!("[USER:CASE] name={case} passed=true"))
+            .count()
+            != 1
+        {
+            return Err(Failure::Markers);
+        }
     }
     Ok(())
 }
@@ -184,7 +235,10 @@ pub fn reached_oom(log: &str, code: Option<i32>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    const GOOD: &str = "[BOOT:ENTRY]\n[BOOT:PROTOCOL]\n[BOOT:MEMORY]\n[CPU:PAGING]\n[CPU:TABLES]\n[TRAP:BREAKPOINT] saved_if=0 return=iretq\n[CPU:ACPI]\n[CPU:IOAPIC]\n[CPU:APIC]\n[MM:FRAMES]\n[MM:TABLES] boot_table_refs=0 NX=on WP=on direct_map=NX\n[MM:HEAP]\n[MM:STACK]\n[MM:TEST] mappings=256 invalid_free=rejected frame_oom=recovered map_oom=rolled_back\n[MM:ALLOC] coalesced=true fallible_oom=recovered used=0\n[MM:READY]\n[CPU:TIMER] ticks=8 monotonic_ns=80000000\n[TRAP:BREAKPOINT] saved_if=1 return=iretq\n[BOOT:OK]\n[TEST:PASS]\n";
+    const GOOD: &str = concat!(
+        "[BOOT:ENTRY]\n[BOOT:PROTOCOL]\n[BOOT:MEMORY]\n[CPU:PAGING]\n[CPU:TABLES]\n[TRAP:BREAKPOINT] saved_if=0 return=iretq\n[CPU:ACPI]\n[CPU:IOAPIC]\n[CPU:APIC]\n[MM:FRAMES]\n[MM:TABLES] boot_table_refs=0 NX=on WP=on direct_map=NX\n[MM:HEAP]\n[MM:STACK]\n[MM:TEST] mappings=256 invalid_free=rejected frame_oom=recovered map_oom=rolled_back\n[MM:ALLOC] coalesced=true fallible_oom=recovered used=0\n[MM:READY]\n[CPU:TIMER] ticks=8 monotonic_ns=80000000\n[TRAP:BREAKPOINT] saved_if=1 return=iretq\n",
+        "[USER:CPU] syscall=true return=iretq\n[APP:RUST] args: hello-rust AnovaOS ring3; BSS=zero x87/SSE2=ok\n[USER:EXIT] pid=1 status=0\n[APP:C] args: hello-c native-v1; BSS=zero SSE2=ok\n[USER:EXIT] pid=2 status=7\n[USER:COPYFAULT] write=false recovered=true\n[USER:COPYFAULT] write=true recovered=true\n[USER:LOADER] partial_oom=rolled_back\n[USER:CASE] name=syscalls passed=true\n[USER:CASE] name=timer passed=true\n[USER:CASE] name=page-fault passed=true\n[USER:CASE] name=kernel-read passed=true\n[USER:CASE] name=kernel-write passed=true\n[USER:CASE] name=stack-guard passed=true\n[USER:CASE] name=invalid-opcode passed=true\n[USER:CASE] name=privileged passed=true\n[USER:CASE] name=bad-rsp passed=true\n[USER:CASE] name=read-only passed=true\n[USER:CASE] name=no-execute passed=true\n[USER:TEST] cases=11 repeated=8 pointers=rejected syscalls=checked faults=contained frames_restored=true user_irqs=1\n[USER:READY]\n[BOOT:OK]\n[TEST:PASS]\n",
+    );
 
     #[test]
     fn requires_both_ordered_stages_and_debug_exit() {
@@ -265,5 +319,26 @@ mod tests {
             &log.replace("memory allocation of", "unrelated panic"),
             Some(35)
         ));
+    }
+
+    #[test]
+    fn m4_gate_rejects_missing_isolation_or_reclamation_evidence() {
+        for (old, new) in [
+            ("[USER:READY]", "[USER:NOTREADY]"),
+            ("partial_oom=rolled_back", "partial_oom=leaked"),
+            ("user_irqs=1", "user_irqs=0"),
+            ("frames_restored=true", "frames_restored=false"),
+            (
+                "name=kernel-write passed=true",
+                "name=kernel-write passed=false",
+            ),
+            ("[USER:COPYFAULT] write=false", "[USER:NOTCOPY] write=false"),
+            ("BSS=zero x87/SSE2=ok", "BSS=bad"),
+        ] {
+            assert_eq!(
+                assess(&GOOD.replace(old, new), Some(33), false),
+                Err(Failure::Markers)
+            );
+        }
     }
 }

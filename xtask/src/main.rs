@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
+//! Host CLI for reproducible kernel/app builds, ISO assembly and QEMU validation.
+mod apps;
 mod assets;
+mod purposes;
 mod smoke;
 
 use std::{
@@ -141,6 +144,9 @@ fn execute() -> Result<()> {
             build(&root, Mode::Normal)?;
             Ok(())
         }
+        "apps" => apps::build(&root, false),
+        "check-apps" => apps::build(&root, true),
+        "check-files" => purposes::check(&root),
         "image" => {
             image(&root, Mode::Normal)?;
             Ok(())
@@ -192,10 +198,14 @@ fn execute() -> Result<()> {
             "anova-platform",
             "-p",
             "anova-memory",
+            "-p",
+            "anova-abi",
+            "-p",
+            "anova-elf",
         ])),
         "help" | "--help" | "-h" => {
             println!(
-                "AnovaOS host tools\n\n  cargo xtask doctor\n  cargo xtask fetch\n  cargo xtask build\n  cargo xtask image\n  cargo xtask run\n  cargo xtask smoke [--case CASE] [--timeout-secs 1..300]\n  cargo xtask verify\n  cargo xtask test-host\n\nCASE: boot, panic, timeout, invalid-opcode, general-protection, page-fault, double-fault, stack-guard, read-only, no-execute, direct-no-execute, unmapped, oom.\nOutputs stay in build/; run uses a disposable OVMF variable copy. TCG is mandatory."
+                "AnovaOS host tools\n\n  cargo xtask doctor\n  cargo xtask fetch\n  cargo xtask build\n  cargo xtask image\n  cargo xtask run\n  cargo xtask smoke [--case CASE] [--timeout-secs 1..300]\n  cargo xtask verify\n  cargo xtask test-host\n  cargo xtask apps\n  cargo xtask check-apps\n  cargo xtask check-files\n\nCASE: boot, panic, timeout, invalid-opcode, general-protection, page-fault, double-fault, stack-guard, read-only, no-execute, direct-no-execute, unmapped, oom.\nOutputs stay in build/; run uses a disposable OVMF variable copy. TCG is mandatory."
             );
             Ok(())
         }
@@ -283,6 +293,7 @@ fn doctor(root: &Path) -> Result<()> {
         ("xorriso", vec!["-version"], None),
         ("curl", vec!["--version"], None),
         ("dpkg-deb", vec!["--version"], None),
+        ("gcc", vec!["--version"], None),
     ] {
         match version(name, &args) {
             Ok(value) if expected.as_ref().is_none_or(|p| value.starts_with(p)) => {
@@ -442,15 +453,29 @@ impl Drop for Temporary {
 
 fn image(root: &Path, mode: Mode) -> Result<PathBuf> {
     assets::check(root)?;
+    apps::build(root, false)?;
     let kernel = build(root, mode)?;
     let stage = Temporary::new(root, "iso")?;
     fs::create_dir_all(stage.0.join("boot/limine"))?;
     fs::create_dir_all(stage.0.join("EFI/BOOT"))?;
     fs::copy(kernel, stage.0.join("boot/kernel.elf"))?;
+    fs::create_dir_all(stage.0.join("boot/apps"))?;
+    let mut config = fs::read_to_string(root.join("boot/limine.conf"))?;
+    for name in apps::NAMES {
+        fs::copy(
+            root.join("build/apps").join(format!("{name}.elf")),
+            stage.0.join(format!("boot/apps/{name}.elf")),
+        )?;
+        config.push_str(&format!(
+            "    module_path: boot():/boot/apps/{name}.elf\n    module_string: {}:{name}\n",
+            anova_abi::PERSONALITY
+        ));
+    }
     fs::copy(
-        root.join("boot/limine.conf"),
-        stage.0.join("boot/limine/limine.conf"),
+        root.join("build/apps/manifest.toml"),
+        stage.0.join("boot/apps/manifest.toml"),
     )?;
+    fs::write(stage.0.join("boot/limine/limine.conf"), config)?;
     for (input, output) in [
         ("BOOTX64.EFI", "EFI/BOOT/BOOTX64.EFI"),
         ("limine-uefi-cd.bin", "boot/limine/limine-uefi-cd.bin"),

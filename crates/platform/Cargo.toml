@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# Packages hardware-independent ACPI parsing and typed physical/virtual addresses.
 [package]
 name = "anova-platform"
 version.workspace = true

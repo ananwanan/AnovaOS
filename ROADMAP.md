@@ -1,6 +1,6 @@
 # 开发路线与阶段验收
 
-日期：2026-10-21。**M0–M3 已通过本地 q35/TCG 验收；M4–M15 尚未实现，外设 IRQ 路由启用待对应驱动。** 证据见 [M3 验证记录](docs/validation/M3.md) 与 [STATUS](docs/STATUS.md)。[FIRST_TASK](docs/FIRST_TASK.md) 记录 M0/M1 原始实现顺序；当前 M2 边界见 [CPU 基线](docs/M2_CPU.md)。
+日期：2026-10-21。**M0–M4 已通过本地 q35/TCG 验收；M5–M15 尚未实现，外设 IRQ 路由启用待对应驱动。** 证据见 [M4 验证记录](docs/validation/M4.md) 与 [STATUS](docs/STATUS.md)。[FIRST_TASK](docs/FIRST_TASK.md) 记录 M0/M1 原始实现顺序；当前 M2 边界见 [CPU 基线](docs/M2_CPU.md)。
 
 ## 阶段总览
 
@@ -10,7 +10,7 @@
 | M1 | UEFI 启动并可靠输出 | M0 | 本地验收通过 |
 | M2 | 异常、中断与时钟可诊断 | M1 | BSP 基线验收；外设 IRQ 待驱动 |
 | M3 | 受控页管理和堆 | M2 | 本地验收通过；引导保留区未回收 |
-| M4 | 第一个隔离的用户 app | M3 | 未开始 |
+| M4 | 第一个隔离的用户 app | M3 | 本地验收通过；顺序运行 Rust/C ELF |
 | M5 | 多进程与阻塞/抢占调度 | M4、M2 | 未开始 |
 | M6 | VFS、init、基础 shell | M5 | 未开始 |
 | M7 | 源码和应用可持久保存 | M6 | 未开始 |
@@ -80,15 +80,17 @@
 
 目标：宿主编译的自有 app 作为真正用户进程运行。
 
-- [ ] Ring 3、独立用户地址空间、内核栈、可验证 syscall/return 路径。
-- [ ] 受限 ELF64 ET_EXEC 装载、段校验、BSS、用户栈与命令行。
-- [ ] 最小 native ABI：控制台 write、exit、基础查询，带版本/布局定义。
-- [ ] 用户指针复制及访问故障恢复；用户非法访问终止用户进程。
-- [ ] 最小 `no_std` Rust/C 用户 runtime、链接脚本和 hello-app 示例。
-- [ ] 初始化用户程序需要的 FPU/SSE 状态；内核仍避免使用 SIMD。
-- [ ] 显式记录镜像的 ABI personality；不靠 ELF OSABI 猜测。
+- [x] Ring 3、独立用户地址空间、内核栈、可验证 syscall/return 路径。
+- [x] 受限 ELF64 ET_EXEC 装载、段校验、BSS、用户栈与命令行。
+- [x] 最小 native ABI：控制台 write、exit、基础查询，带版本/布局定义。
+- [x] 用户指针复制及访问故障恢复；用户非法访问终止用户进程。
+- [x] 最小 `no_std` Rust/C 用户 runtime、链接脚本和 hello-app 示例。
+- [x] 初始化用户程序需要的 FPU/SSE 状态；内核仍避免使用 SIMD。
+- [x] 显式记录镜像的 ABI personality；不靠 ELF OSABI 猜测。
 
 退出条件：一个独立 ELF 在 Ring 3 输出参数并正常退出；坏 ELF、坏地址、非法 syscall 和用户 page fault 不破坏内核。app 的 syscall 是真实边界，不是直接链接内核函数。
+
+实现边界与证据见 [M4_USERSPACE](docs/M4_USERSPACE.md) 和 [M4 验证](docs/validation/M4.md)：显式 native v1 模块、SYSCALL/IRETQ、11 个用户用例与 8 次重复执行，尚无并发调度或 Linux ABI。后续开发必须遵守 [DEV-001 文件用途说明](docs/REQUIREMENTS.md)。
 
 ## M5：进程与调度
 

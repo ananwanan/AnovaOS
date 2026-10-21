@@ -5,7 +5,9 @@ The M2 BSP baseline adds CPU tables, guarded exception stacks, ACPI discovery
 and a calibrated periodic LAPIC IRQ. M3 adds checked frames, a fully owned table
 hierarchy, a guarded normal stack and a reclaiming `alloc` heap. Start from dev
 or its task branch; read [STATUS.md](STATUS.md), [M3_MEMORY.md](M3_MEMORY.md)
-and [AGENTS.md](../AGENTS.md). User space and external device IRQ delivery remain pending.
+and [AGENTS.md](../AGENTS.md). M4 adds isolated native Rust/C applications; read
+[M4_USERSPACE.md](M4_USERSPACE.md) for the ABI/SDK and lifetime boundaries.
+External device IRQ delivery and scheduling remain pending.
 
 ## Host setup
 
@@ -15,7 +17,7 @@ from its official distribution, then install host utilities:
 
 ```sh
 sudo apt-get update
-sudo apt-get install --no-install-recommends qemu-system-x86 xorriso curl dpkg-dev
+sudo apt-get install --no-install-recommends qemu-system-x86 xorriso curl dpkg-dev gcc
 rustup show active-toolchain
 cargo xtask fetch
 cargo xtask doctor
@@ -45,9 +47,12 @@ Run from the repository root:
 | `cargo xtask fetch` | Verified build/cache/ and build/firmware/ | Network, extraction or checksum error returns 1 |
 | `cargo xtask doctor` | Checks tools, versions, target and boot inputs | Reports all discovered problems; returns 1 |
 | `cargo xtask build` | target/x86_64-unknown-none/debug/anova-kernel and ELF checks | Build/link/ELF failure returns 1 |
+| `cargo xtask apps` | build/apps/: Rust/C ELF files and explicit ABI/SHA-256 manifest | Compiler/linker/ELF failure returns 1 |
+| `cargo xtask check-apps` | Rust user workspace Clippy with actual user target/linker flags | Warnings are errors |
+| `cargo xtask check-files` | Header and per-file inventory coverage required by DEV-001 | Missing explanation/inventory entry returns 1 |
 | `cargo xtask image` | build/images/anova-normal.iso | Missing/corrupt inputs stop image generation |
-| `cargo xtask run` | UEFI boot, serial on stdio, then idle | Process errors propagate; stop QEMU with Ctrl+C |
-| `cargo xtask smoke` | Test ISO and build/logs/boot.*; memory stress, 8+ IRQs and returning traps | Missing memory/CPU stages, fatal fault, wrong exit or deadline returns 1 |
+| `cargo xtask run` | UEFI boot, native Rust/C apps on serial, then idle | Process errors propagate; stop QEMU with Ctrl+C |
+| `cargo xtask smoke` | Memory/CPU gate plus Rust/C apps, 11 user cases and 8 repeat runs | Missing isolation/reclamation evidence, fatal kernel fault, wrong exit or deadline returns 1 |
 | `cargo xtask smoke --case panic` | Controlled panic and QEMU 35 | Intentionally returns 1 |
 | `cargo xtask smoke --case timeout --timeout-secs 8` | Controlled hang, killed by watchdog | Intentionally returns 1 |
 | `cargo xtask smoke --case page-fault` | Real guard write faults on IST2, QEMU 37 | Intentionally returns 1 |
@@ -73,8 +78,9 @@ The alias runs host xtask. No global build.target is configured; default-members
 excludes the kernel from accidental host builds. Kernel build.rs rejects the
 wrong target and selects its own linker script. The bare-metal target defaults
 to soft-float/no SIMD, kernel code model and no red zone; no host libc, system
-allocator or std is linked. M3 supplies its own global buddy allocator. Future
-user targets need their own configuration.
+allocator or std is linked. M3 supplies its own global buddy allocator. M4's
+separate user workspace uses freestanding x86_64-unknown-linux-gnu core/SSE2,
+its own startup/linker and no libc/Linux syscalls; kernel flags do not apply.
 
 The linker retains writable Limine requests between delimiters and separates
 RX/R/RW segments at 0xffffffff80000000. build checks ELF class/endian/machine,
@@ -92,7 +98,11 @@ persistence.
 
 ```sh
 cargo fmt --all -- --check
-cargo clippy --locked -p xtask -p anova-platform -p anova-memory --all-targets -- -D warnings
+cargo fmt --manifest-path user/Cargo.toml --all -- --check
+cargo xtask check-files
+cargo clippy --locked -p xtask -p anova-platform -p anova-memory -p anova-abi -p anova-elf --all-targets -- -D warnings
+cargo xtask check-apps
+cargo xtask apps
 cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features qemu-test -- -D warnings
 cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features test-double-fault -- -D warnings
 cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features test-no-execute -- -D warnings
@@ -125,7 +135,8 @@ A banner alone never passes.
 [boot.yml](../.github/workflows/boot.yml) runs the above checks on Ubuntu 24.04,
 including all 13 QEMU cases, and uploads logs even on failure. Actions are
 pinned to commits. Configured CI and remote CI execution are separate facts.
-Current local evidence is in [validation/M3.md](validation/M3.md);
+Current local evidence is in [validation/M4.md](validation/M4.md);
+[validation/M3.md](validation/M3.md),
 [validation/M2.md](validation/M2.md) and
 [validation/M0-M1.md](validation/M0-M1.md) record the historical gates.
 

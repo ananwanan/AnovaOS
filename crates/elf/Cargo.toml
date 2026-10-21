@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# Hosts bounded ELF validation and native startup-stack construction without hardware.
+[package]
+name = "anova-elf"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anova-abi = { path = "../abi" }

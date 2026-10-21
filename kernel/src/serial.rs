@@ -64,6 +64,18 @@ pub fn write(args: fmt::Arguments<'_>) {
     crate::arch::x86_64::cpu::without_interrupts(|| emergency(args));
 }
 
+/// Emit console bytes verbatim except the UART's usual LF-to-CRLF translation.
+pub fn bytes(bytes: &[u8]) {
+    crate::arch::x86_64::cpu::without_interrupts(|| {
+        for byte in bytes {
+            if *byte == b'\n' {
+                write_byte(b'\r');
+            }
+            write_byte(*byte);
+        }
+    });
+}
+
 /// Fatal exception/panic output is bounded and bypasses normal serialization.
 /// IRQ handlers never log. An NMI/fatal exception can interrupt this writer;
 /// interleaved output is preferable to waiting for a lock held by the victim.

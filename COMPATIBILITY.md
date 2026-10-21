@@ -1,6 +1,6 @@
 # 现有软件兼容策略
 
-当前兼容能力：**没有实现、没有验证任何现有软件。** 下列内容是目标与验收计划。
+本文记录现有软件兼容策略与验证矩阵。当前 **M4 仅验证自有 native Rust/C 应用，没有实现或验证现有 Linux 软件兼容。** 其余内容仍为目标与验收计划；native ABI 边界见 [M4_USERSPACE](docs/M4_USERSPACE.md)。
 
 ## 1. 兼容层次
 
@@ -68,11 +68,12 @@ musl 和 glibc 是不同的用户态组合。不能混用不匹配的解释器�
 
 ## 4. 首批软件矩阵
 
-所有状态均为“计划”，版本和哈希待真正构建时填写。
+自有 native 样例已按 [M4 验证记录](docs/validation/M4.md) 验收，实际 ELF 哈希见该记录和镜像中的应用清单；其他软件仍为计划。
 
 | 软件/构建 | 计划阶段 | 首个受测功能 | 当前状态 |
 | --- | --- | --- | --- |
-| 自有 native Rust `no_std` | M4 | write/exit、参数、坏指针隔离 | 计划 |
+| 自有 native Rust `no_std` | M4 | write/exit/info、参数、BSS、x87/SSE2、坏指针隔离 | q35/TCG 本地通过 |
+| 自有 native C freestanding | M4 | write/exit/info、参数、BSS、SSE2、退出码 7 | q35/TCG 本地通过 |
 | 自有 Linux syscall ELF | M8 | 无 libc 的调用与 errno | 计划 |
 | 静态 musl hello/file | M8 | 启动、分配、文件读写 | 计划 |
 | BusyBox 精选静态构建 | M8 | echo/ls/cat、sh 管道重定向 | 计划 |

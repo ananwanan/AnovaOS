@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: Apache-2.0
+# Builds the native negative-case ELF used by the QEMU isolation acceptance gate.
+[package]
+name = "probe"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+build = "../build.rs"
+
+[[bin]]
+name = "probe"
+path = "src/main.rs"
+test = false
+bench = false
+
+[dependencies]
+anova-rt = { path = "../rt" }

@@ -3,9 +3,22 @@
 version = 4
 
 [[package]]
+name = "anova-abi"
+version = "0.1.0"
+
+[[package]]
+name = "anova-elf"
+version = "0.1.0"
+dependencies = [
+ "anova-abi",
+]
+
+[[package]]
 name = "anova-kernel"
 version = "0.1.0"
 dependencies = [
+ "anova-abi",
+ "anova-elf",
  "anova-memory",
  "anova-platform",
  "limine",
@@ -276,6 +289,8 @@ dependencies = [
 name = "xtask"
 version = "0.1.0"
 dependencies = [
+ "anova-abi",
+ "anova-elf",
  "serde",
  "sha2",
  "toml",
