@@ -4,7 +4,7 @@
 use super::*;
 use sha2::{Digest, Sha256};
 
-pub const NAMES: [&str; 7] = [
+pub const NAMES: [&str; 8] = [
     "hello-rust",
     "hello-c",
     "probe",
@@ -12,6 +12,7 @@ pub const NAMES: [&str; 7] = [
     "init",
     "shell",
     "fs-test",
+    "editor",
 ];
 const USER_TARGET: &str = "x86_64-unknown-linux-gnu";
 
@@ -79,6 +80,7 @@ pub fn build(root: &Path, clippy: bool) -> Result<()> {
         "init",
         "shell",
         "fs-test",
+        "editor",
     ] {
         let path = apps.join(format!("{name}.elf"));
         output_path(&path)?;
@@ -147,8 +149,8 @@ fn initramfs(apps: &Path) -> Result<()> {
             fs::read(apps.join(format!("{name}.elf")))?,
         ));
     }
-    for name in ["ls", "cat", "echo", "pwd", "mkdir", "rm", "true", "false"] {
-        entries.push((3, format!("/bin/{name}"), b"shell".to_vec()));
+    for name in ["ls", "cat", "echo", "pwd", "mkdir", "rm", "true", "false", "ed"] {
+        entries.push((3, format!("/bin/{name}"), if name == "ed" { b"editor".to_vec() } else { b"shell".to_vec() }));
     }
     entries.push((
         1,
