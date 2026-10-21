@@ -213,7 +213,7 @@ impl<D: BlockDevice> Ext2<D> {
             } else {
                 le16(&data, offset + 6) as usize
             };
-            if rec < 8 || rec % 4 != 0 || rec > len - offset || count > rec - 8 {
+            if rec < 8 || !rec.is_multiple_of(4) || rec > len - offset || count > rec - 8 {
                 return Err(Error::Corrupt);
             }
             if count == name.len() && &data[offset + 8..offset + 8 + count] == name.as_bytes() {
