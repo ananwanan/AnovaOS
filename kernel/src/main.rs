@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 #![no_std]
 #![no_main]
+//! Boot the BSP, initialize owned memory/CPU state, then run isolated native apps.
 
 extern crate alloc;
 
+mod abi;
 mod arch;
 mod boot;
 mod mm;
 mod serial;
+mod task;
 use arch::x86_64::{acpi, apic, cpu, paging::EarlyMapper, traps};
 
 use core::{
@@ -99,8 +102,9 @@ extern "C" fn kernel_main(timer_port: u64, timer_mask: u64) -> ! {
     assert!(cpu::flags() & (1 << 9) != 0, "IRET failed to restore IF");
     PHASE.store(6, Ordering::Relaxed);
     mm::inject_fault();
+    task::start();
     serial::write(format_args!(
-        "[BOOT:OK] M3 owned memory and heap ready; BSP idle, interrupts enabled\n"
+        "[BOOT:OK] M4 native apps completed; BSP idle, interrupts enabled\n"
     ));
     #[cfg(feature = "qemu-test")]
     {

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+//! Fetch, checksum and locally extract locked bootloader/firmware inputs.
 use crate::{Result, checked_file, command, directory, output_path};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};

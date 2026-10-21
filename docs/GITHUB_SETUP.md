@@ -19,7 +19,7 @@ git clone --branch dev git@github.com:ananwanan/AnovaOS.git
 
 ## 开始开发
 
-先读取根目录 [AGENTS.md](../AGENTS.md) 与 [当前状态](STATUS.md)。M0/M1 已有实际实现和本地验收，过程见 [FIRST_TASK.md](FIRST_TASK.md)，下一批推进 M2。
+先读取根目录 [AGENTS.md](../AGENTS.md) 与 [当前状态](STATUS.md)。M0–M4 已有本地验收，当前边界见 [M4_USERSPACE.md](M4_USERSPACE.md)，下一批推进 M5。后续每个新增/修改文件必须遵守 [DEV-001](REQUIREMENTS.md) 的用途说明要求。
 
 文档使用 `AnovaOS` 作为项目名称。将来的自定义 target 名称只是候选本地标识，不能据此宣称已有上游编译器支持。
 

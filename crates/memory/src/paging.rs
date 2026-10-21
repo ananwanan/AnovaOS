@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Four-level supervisor tables. The backend owns table frames and performs
-//! hardware invalidation. Leaf physical storage has a separate lifetime/owner.
+//! Four-level kernel/private-user tables, permission checks and table reclamation.
+//! User roots borrow supervisor upper entries; only their lower tables are owned.
 use crate::{Error, PAGE_SIZE, PHYSICAL_LIMIT, canonical};
 use anova_platform::{PhysAddr, VirtAddr};
 
@@ -23,6 +23,7 @@ pub struct Permissions {
     pub writable: bool,
     pub executable: bool,
     pub cache: CacheType,
+    pub user: bool,
 }
 
 impl Permissions {
@@ -30,6 +31,7 @@ impl Permissions {
         writable: true,
         executable: false,
         cache: CacheType::WriteBack,
+        user: false,
     };
     pub const READ_ONLY: Self = Self {
         writable: false,
@@ -39,6 +41,7 @@ impl Permissions {
         writable: false,
         executable: true,
         cache: CacheType::WriteBack,
+        user: false,
     };
     pub const MMIO: Self = Self {
         cache: CacheType::Uncacheable,
@@ -50,6 +53,7 @@ impl Permissions {
             return Err(Error::Permissions);
         }
         Ok(PRESENT
+            | if self.user { USER } else { 0 }
             | if self.writable { WRITABLE } else { 0 }
             | if self.executable { 0 } else { NX }
             | if self.cache == CacheType::Uncacheable {
@@ -85,6 +89,7 @@ pub struct Mapping {
 pub struct PageTables {
     root: PhysAddr,
     count: usize,
+    user_root: bool,
 }
 
 impl PageTables {
@@ -94,7 +99,43 @@ impl PageTables {
         check_frame(root)?;
         let mut count = 0;
         let root = clone_table(root, 4, store, &mut count)?;
-        Ok(Self { root, count })
+        Ok(Self {
+            root,
+            count,
+            user_root: false,
+        })
+    }
+
+    /// Allocate a private lower half, borrowing only supervisor upper paths.
+    /// The owner must keep those paths stable until this inactive root is destroyed.
+    pub fn new_user(&self, store: &mut impl TableStore) -> Result<Self, Error> {
+        if self.user_root {
+            return Err(Error::Permissions);
+        }
+        let root = store.allocate()?;
+        for slot in 256..512 {
+            store.write(root, slot, store.read(self.root, slot) & !USER);
+        }
+        Ok(Self {
+            root,
+            count: 1,
+            user_root: true,
+        })
+    }
+
+    /// Destroy an inactive user root's private tables, never borrowed kernel paths.
+    /// The caller separately owns and releases leaf backing after invalidation.
+    pub fn destroy_user(self, store: &mut impl TableStore) {
+        assert!(self.user_root, "Cannot destroy permanent kernel tables");
+        let mut count = self.count;
+        for slot in 0..256 {
+            let entry = store.read(self.root, slot);
+            if entry & PRESENT != 0 {
+                destroy(PhysAddr(entry & ADDRESS), 3, store, &mut count);
+            }
+        }
+        store.release(self.root);
+        assert_eq!(count, 1, "Private table accounting mismatch");
     }
 
     pub fn root(&self) -> PhysAddr {
@@ -113,6 +154,9 @@ impl PageTables {
     ) -> Result<(), Error> {
         if !canonical(address.0) {
             return Err(Error::InvalidAddress);
+        }
+        if self.user_root {
+            return Err(Error::Permissions);
         }
         let slot = index(address, 4);
         let entry = store.read(self.root, slot);
@@ -171,7 +215,7 @@ impl PageTables {
         permissions: Permissions,
         store: &mut impl TableStore,
     ) -> Result<(), Error> {
-        check_virtual(address)?;
+        self.check_virtual(address, Some(permissions.user))?;
         check_frame(physical)?;
         let bits = permissions.bits()?;
         insert(
@@ -192,7 +236,7 @@ impl PageTables {
         permissions: Permissions,
         store: &mut impl TableStore,
     ) -> Result<(), Error> {
-        check_virtual(address)?;
+        self.check_virtual(address, Some(permissions.user))?;
         let bits = permissions.bits()?;
         let table = self.leaf_table(address, bits, store)?;
         let entry = store.read(table, index(address, 1));
@@ -230,8 +274,25 @@ impl PageTables {
         address: VirtAddr,
         store: &mut impl TableStore,
     ) -> Result<PhysAddr, Error> {
-        check_virtual(address)?;
+        self.check_virtual(address, None)?;
         remove(self.root, 4, address, store, &mut self.count)
+    }
+
+    fn check_virtual(&self, address: VirtAddr, user: Option<bool>) -> Result<(), Error> {
+        if address.0 & (PAGE_SIZE - 1) != 0 {
+            return Err(Error::Alignment);
+        }
+        if !canonical(address.0) {
+            return Err(Error::InvalidAddress);
+        }
+        if self.user_root {
+            if !(0x1_0000..(1 << 47)).contains(&address.0) || user == Some(false) {
+                return Err(Error::Permissions);
+            }
+        } else if address.0 < 0xffff_8000_0000_0000 || user == Some(true) {
+            return Err(Error::InvalidAddress);
+        }
+        Ok(())
     }
 
     pub fn visit_tables(&self, store: &impl TableStore, mut visit: impl FnMut(PhysAddr)) {
@@ -261,16 +322,6 @@ fn check_frame(frame: PhysAddr) -> Result<(), Error> {
         return Err(Error::Alignment);
     }
     if frame.0 >= PHYSICAL_LIMIT {
-        return Err(Error::InvalidAddress);
-    }
-    Ok(())
-}
-
-fn check_virtual(address: VirtAddr) -> Result<(), Error> {
-    if address.0 & (PAGE_SIZE - 1) != 0 {
-        return Err(Error::Alignment);
-    }
-    if !canonical(address.0) || address.0 < 0xffff_8000_0000_0000 {
         return Err(Error::InvalidAddress);
     }
     Ok(())
@@ -363,12 +414,15 @@ fn insert(
         return Err(error);
     }
     // Publish the complete chain only after every allocation succeeds.
-    store.write(table, slot, child.0 | PRESENT | WRITABLE);
+    store.write(table, slot, child.0 | PRESENT | WRITABLE | (leaf & USER));
     Ok(())
 }
 
 fn check_ancestors(entry: u64, leaf: u64) -> Result<(), Error> {
-    if (leaf & WRITABLE != 0 && entry & WRITABLE == 0) || (leaf & NX == 0 && entry & NX != 0) {
+    if (leaf & WRITABLE != 0 && entry & WRITABLE == 0)
+        || (leaf & NX == 0 && entry & NX != 0)
+        || (leaf & USER != 0 && entry & USER == 0)
+    {
         return Err(Error::Permissions);
     }
     Ok(())
@@ -454,9 +508,76 @@ mod tests {
 
     const VA: VirtAddr = VirtAddr(0xffff_d000_0000_0000);
 
+    #[test]
+    fn private_user_roots_enforce_all_ancestors_and_preserve_kernel_ownership() {
+        let mut store = Store::new();
+        let mut kernel = empty(&mut store);
+        kernel
+            .map(VA, PhysAddr(0x80000), Permissions::DATA, &mut store)
+            .unwrap();
+        let before = store.pages.len();
+        let mut user = kernel.new_user(&mut store).unwrap();
+        let address = VirtAddr(0x400000);
+        let permissions = Permissions {
+            user: true,
+            ..Permissions::TEXT
+        };
+        user.map(address, PhysAddr(0x90000), permissions, &mut store)
+            .unwrap();
+        let mapping = user.query(address, &store).unwrap();
+        assert!(mapping.user && mapping.executable && !mapping.writable);
+        assert!(!user.query(VA, &store).unwrap().user);
+        assert_eq!(kernel.query(address, &store), Err(Error::NotMapped));
+        assert_eq!(user.unmap(VA, &mut store), Err(Error::Permissions));
+        assert_eq!(
+            user.map(VA, PhysAddr(0), permissions, &mut store),
+            Err(Error::Permissions)
+        );
+        let slot = index(address, 4);
+        let entry = store.read(user.root, slot);
+        store.write(user.root, slot, entry & !USER);
+        assert!(!user.query(address, &store).unwrap().user);
+        assert_eq!(
+            user.protect(address, permissions, &mut store),
+            Err(Error::Permissions)
+        );
+        user.destroy_user(&mut store);
+        assert_eq!(store.pages.len(), before);
+        assert!(kernel.query(VA, &store).is_ok());
+    }
+
+    #[test]
+    fn private_user_map_rolls_back_every_oom_depth() {
+        for budget in 0..3 {
+            let mut store = Store::new();
+            let kernel = empty(&mut store);
+            let mut user = kernel.new_user(&mut store).unwrap();
+            store.budget = budget;
+            assert_eq!(
+                user.map(
+                    VirtAddr(0x400000),
+                    PhysAddr(0x80000),
+                    Permissions {
+                        user: true,
+                        ..Permissions::DATA
+                    },
+                    &mut store
+                ),
+                Err(Error::OutOfMemory)
+            );
+            assert_eq!(user.table_count(), 1);
+            user.destroy_user(&mut store);
+            assert_eq!(store.pages.len(), 1);
+        }
+    }
+
     fn empty(store: &mut Store) -> PageTables {
         let root = store.allocate().unwrap();
-        PageTables { root, count: 1 }
+        PageTables {
+            root,
+            count: 1,
+            user_root: false,
+        }
     }
 
     #[test]

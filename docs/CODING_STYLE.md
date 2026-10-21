@@ -27,6 +27,17 @@ change. Existing Chinese planning documents may be maintained in their current
 language until translated; this does not relax the English rule for code,
 comments, Rustdoc, or developer-facing messages.
 
+## File purpose (mandatory)
+
+Every new or modified first-party file starts with a short English explanation
+of what it does and the boundary it owns. Rust files use `//!` module Rustdoc;
+C/assembly/linker/configuration/workflow files use their supported comment syntax.
+Markdown documents explain their scope after the title. Update the explanation
+when the file's responsibility changes. See [FILE_PURPOSES.md](FILE_PURPOSES.md)
+for the repository inventory and generated/non-commentable file exceptions.
+Preserve upstream notices and generated lockfiles without inserting manual headers.
+Run `cargo xtask check-files`; [DEV-001](REQUIREMENTS.md) makes this a delivery requirement.
+
 ## Rust formatting
 
 The root [rustfmt.toml](../rustfmt.toml) is the formatting authority. It plays the

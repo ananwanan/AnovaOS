@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+# Keeps native user ELF builds separate from the bare-metal kernel's target flags.
+[workspace]
+members = ["rt", "hello", "probe"]
+resolver = "3"
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+debug = true
+codegen-units = 1

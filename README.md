@@ -6,10 +6,10 @@ An x86_64 operating system built from scratch in Rust. The goal is to edit,
 compile, debug, and run applications inside AnovaOS itself, while gradually
 supporting selected existing Linux software.
 
-**Current status: M0–M3 are locally verified on QEMU q35/TCG. The kernel has
-BSP exceptions/timer, checked physical frames, fully owned page tables, a guarded
-normal stack and a reclaiming heap with Rust `alloc`. User space and Linux
-compatibility are pending; external device IRQs remain masked.**
+**Current status: M0–M4 are locally verified on QEMU q35/TCG. The kernel has
+owned memory and runs independent Rust/C ELF applications in Ring 3 with native
+syscalls, checked user copying, fault containment and complete page reclamation.
+Scheduling and Linux compatibility are pending; external device IRQs remain masked.**
 
 Repository: [ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS).
 
@@ -76,6 +76,10 @@ development language and formatting guide is in English.
 | [docs/validation/M2.md](docs/validation/M2.md) | Actual M2 timer and exception validation evidence |
 | [docs/M3_MEMORY.md](docs/M3_MEMORY.md) | Frame/table ownership, stack, heap, permissions and OOM |
 | [docs/validation/M3.md](docs/validation/M3.md) | Actual M3 memory and protection validation evidence |
+| [docs/M4_USERSPACE.md](docs/M4_USERSPACE.md) | Ring 3, ELF, native v1 ABI, user copying and Rust/C SDK |
+| [docs/validation/M4.md](docs/validation/M4.md) | Actual M4 isolation and application validation evidence |
+| [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) | Mandatory owner requirements, including file-purpose explanations |
+| [docs/FILE_PURPOSES.md](docs/FILE_PURPOSES.md) | Purpose of every repository file |
 | [docs/STATUS.md](docs/STATUS.md) | Current implementation status and next steps |
 | [docs/GITHUB_SETUP.md](docs/GITHUB_SETUP.md) | Cloning, documentation maintenance, and contribution conventions |
 | [docs/LICENSING.md](docs/LICENSING.md) | Apache-2.0 usage and third-party licensing boundaries |
@@ -89,6 +93,10 @@ localization resources may use their target language. Preserve third-party text
 and existing Chinese planning documents as described in the
 [coding style guide](docs/CODING_STYLE.md).
 
+Every new or modified first-party file must explain its purpose near the top
+and remain listed in [FILE_PURPOSES.md](docs/FILE_PURPOSES.md). Run
+`cargo xtask check-files`; see [DEV-001](docs/REQUIREMENTS.md).
+
 Rust formatting is defined in [rustfmt.toml](rustfmt.toml): four spaces, a
 preferred width of 100 columns, LF line endings, Rust 2024 parser/style editions,
 and stable rustfmt options. Format and check the workspace from the repository root:
@@ -96,6 +104,7 @@ and stable rustfmt options. Format and check the workspace from the repository r
 ```sh
 cargo fmt --all
 cargo fmt --all -- --check
+cargo fmt --manifest-path user/Cargo.toml --all -- --check
 ```
 
 Keep this English README and [README.zh-CN.md](README.zh-CN.md) synchronized when
@@ -122,7 +131,7 @@ native Rust `std` port have separate milestones.
 
 ## Build and boot
 
-Use x86_64 Ubuntu 24.04 or WSL2, rustup, QEMU 8.2.2, xorriso, curl, and dpkg-deb.
+Use x86_64 Ubuntu 24.04 or WSL2, rustup, QEMU 8.2.2, xorriso, curl, dpkg-deb and GCC.
 The repository selects Rust 1.90.0, rustfmt, Clippy, and the bare-metal target.
 See [development setup](docs/DEVELOPMENT.md) for dependencies and firmware paths.
 
@@ -130,22 +139,24 @@ See [development setup](docs/DEVELOPMENT.md) for dependencies and firmware paths
 cargo xtask fetch       # Download and verify pinned Limine/OVMF inputs
 cargo xtask doctor      # Report all missing or mismatched prerequisites
 cargo xtask build       # Build and inspect the bare-metal kernel ELF
-cargo xtask image       # Build build/images/anova-normal.iso
-cargo xtask run         # Serial console; the normal kernel stays idle
-cargo xtask smoke       # Memory checks, returning breakpoints, 8+ IRQs AND exit 33
+cargo xtask apps        # Build standalone native Rust/C ELFs and ABI/hash inventory
+cargo xtask check-files # Check per-file purpose explanations and inventory
+cargo xtask image       # Build build/images/anova-normal.iso, including native apps
+cargo xtask run         # Run Rust/C apps, then keep the BSP interruptible and idle
+cargo xtask smoke       # Memory/CPU checks, 11 user cases, 8 repeated apps AND exit 33
 cargo xtask verify      # 13 cases: boot passes; fault, panic, timeout and OOM fail
 ```
 
 These commands now exist in the host `xtask` package. Images, caches, logs, and
 disposable firmware variable copies stay in `build/`. Normal runs attach no data
 disk or network. GitHub Actions is configured to run the same checks; its status
-is reported separately from [local validation](docs/validation/M3.md).
+is reported separately from [local validation](docs/validation/M4.md).
 
 ## Next steps
 
-M4 adds the first isolated Ring 3 ELF application, a native syscall ABI and a
-minimal SDK on the M3 memory baseline. External IRQ routing will be enabled and tested with its
-first device driver. See the [memory design](docs/M3_MEMORY.md),
+M5 adds multiple processes, saved CPU/FPU contexts and blocking/preemptive
+scheduling on the isolated M4 execution baseline. External IRQ routing follows
+its first device driver. See the [user-space design](docs/M4_USERSPACE.md),
 [current status](docs/STATUS.md) and [roadmap](ROADMAP.md).
 
 ## License

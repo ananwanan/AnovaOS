@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+//! Reject host-target kernel builds and select the kernel-only linker script.
 use std::{env, path::PathBuf};
 
 fn main() {

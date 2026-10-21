@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //! BSP memory ownership: checked USABLE frames, fully owned table hierarchy,
-//! permanent guarded stack and a fixed, reclaiming buddy heap.
+//! guarded stacks, reclaiming buddy heap and private process memory integration.
 mod lock;
+pub mod uaccess;
+pub mod user;
 mod validation;
 
 pub use validation::{inject_fault, verify};

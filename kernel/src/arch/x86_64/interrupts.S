@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-// Intel SDM Vol. 3A, interrupt handling in IA-32e mode. SS:RSP are always saved.
+// Build uniform saved-GPR frames for CPU traps, IRQs and the native syscall
+// entry; restore the checked frame with IRETQ. Long mode always saves SS:RSP.
 .section .text
 .macro ISR number
 anova_isr_\number:
@@ -16,6 +17,7 @@ anova_isr_\number:
     .set vector, vector + 1
 .endr
 
+.global anova_isr_common
 anova_isr_common:
     push rax
     push rbx

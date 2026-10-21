@@ -1,6 +1,6 @@
 # 架构设计
 
-本文描述目标架构；以下启动、M2 BSP 异常/时钟和 M3 内存子集已实现，其余部分仍为规划。当前能力见 [STATUS](docs/STATUS.md)。
+本文描述目标架构；以下启动、M2 BSP 异常/时钟、M3 内存与 M4 隔离用户应用子集已实现，其余部分仍为规划。当前能力见 [STATUS](docs/STATUS.md)。
 
 ## 1. 总体结构
 
@@ -80,7 +80,25 @@ See [M2 CPU details](docs/M2_CPU.md) for exact bounds, contexts and limitations,
   images, including real read-only/NX/guard/unmap faults and infallible heap OOM.
 
 See [M3 memory design](docs/M3_MEMORY.md) and [M3 evidence](docs/validation/M3.md).
-User address spaces, SMP shootdown, DMA drivers and boot-memory reclamation remain pending.
+M4 adds private user roots as described below; SMP shootdown, DMA drivers and boot-memory reclamation remain pending.
+
+### Current M4 native user implementation
+
+- `crates/elf` validates bounded static ET_EXEC input before allocation; `crates/abi`
+  defines native v1 numbers, errors, checked user ranges and a 32-byte query layout.
+- Each sequential invocation owns private lower tables, zeroed user pages and a
+  guarded 64 KiB kernel stack, borrowing only supervisor kernel upper paths.
+- SYSCALL switches immediately to the trusted stack, then returns through a
+  validated IRETQ frame. User copying checks every page and recovers only the
+  guarded assembly copy instruction. Synchronous user faults end one app.
+- x87/SSE2 are initialized per invocation. The kernel remains SIMD-free; M5 must
+  add saved extended-state contexts before task switching.
+- Separate Rust/C user builds produce actual ELF modules with explicit ABI/hash
+  inventory. Both hello apps, 11 isolation cases, two real copy fixups, partial
+  OOM rollback and repeated teardown are accepted on q35/TCG.
+
+See [M4 design](docs/M4_USERSPACE.md), [M4 evidence](docs/validation/M4.md),
+[per-file inventory](docs/FILE_PURPOSES.md) and [DEV-001](docs/REQUIREMENTS.md).
 
 ## 3. 目录规划
 

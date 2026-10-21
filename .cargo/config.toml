@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# Routes host commands through xtask and confines kernel code-generation flags to its target.
 [alias]
 xtask = "run --locked --package xtask --"
 

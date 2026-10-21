@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Borrow retained Limine data. M3 allocates only USABLE RAM; bootloader data,
 //! original stacks/tables, modules, firmware and the early pool remain reserved.
+//! Validated native ELF modules provide the M4 applications without a filesystem.
 use limine::{
     BaseRevision,
     firmware_type::FirmwareType,
@@ -341,4 +342,43 @@ fn kind(value: EntryType) -> &'static str {
         EntryType::FRAMEBUFFER => "framebuffer",
         _ => "unknown-reserved",
     }
+}
+
+/// Select an explicit image personality from the locked ISO manifest, never OSABI.
+pub fn native_module(name: &str) -> &'static [u8] {
+    let info = validate();
+    let response = MODULES
+        .get_response()
+        .expect("Missing native application modules");
+    let mut selected = None;
+    for module in response.modules() {
+        let command = module.string().to_bytes();
+        let Some(label) = command.strip_prefix(b"anova.native.v1:") else {
+            continue;
+        };
+        if label != name.as_bytes() {
+            continue;
+        }
+        assert!(selected.is_none(), "Duplicate native module identity");
+        let physical = (module.addr() as u64)
+            .checked_sub(info.hhdm.0)
+            .expect("Module outside HHDM");
+        let end = physical
+            .checked_add(module.size())
+            .expect("Module overflow");
+        let length = usize::try_from(module.size()).expect("Module size overflow");
+        assert!(
+            length > 0
+                && length <= 8 * 1024 * 1024
+                && info.entries.iter().any(|entry| entry.entry_type
+                    == EntryType::EXECUTABLE_AND_MODULES
+                    && physical >= entry.base
+                    && end <= entry.base + entry.length),
+            "Module has no complete retained reservation"
+        );
+        // SAFETY: Bootloader module bytes are bounded by a retained, read-only
+        // borrow of kernel/module RAM in HHDM. Their backing is never reclaimed.
+        selected = Some(unsafe { core::slice::from_raw_parts(module.addr(), length) });
+    }
+    selected.expect("Required native module not found in image manifest")
 }

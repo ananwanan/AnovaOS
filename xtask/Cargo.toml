@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# Builds host-side dependency, native-app, image, QEMU and evidence commands.
 [package]
 name = "xtask"
 version.workspace = true
@@ -10,4 +11,6 @@ repository.workspace = true
 serde = { version = "=1.0.228", features = ["derive"] }
 sha2 = "=0.10.9"
 toml = "=0.8.23"
+anova-abi = { path = "../crates/abi" }
+anova-elf = { path = "../crates/elf" }
 

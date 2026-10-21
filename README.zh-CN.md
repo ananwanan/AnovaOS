@@ -4,7 +4,7 @@
 
 用 Rust 从零开发的 x86_64 操作系统，目标是在自己的系统中编辑、编译、调试和运行应用，并逐步兼容部分现有 Linux 软件。
 
-**当前状态：M0–M3 已通过本地 QEMU q35/TCG 验证。内核已有 BSP 异常/时钟、带所有权检查的物理页分配器、完整接管的页表、带保护页的普通内核栈，以及支持 Rust `alloc` 的可回收堆；用户态和 Linux 兼容尚待实现，外设 IRQ 保持屏蔽。**
+**当前状态：M0–M4 已通过本地 QEMU q35/TCG 验证。内核已具备内存所有权管理，并能在 Ring 3 运行独立 Rust/C ELF 应用，支持原生系统调用、安全用户内存复制、故障隔离和完整页回收；调度和 Linux 兼容尚待实现，外设 IRQ 保持屏蔽。**
 
 项目仓库：[ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS)。
 
@@ -57,6 +57,10 @@
 | [docs/validation/M2.md](docs/validation/M2.md) | 实际 M2 定时器与异常验证记录 |
 | [docs/M3_MEMORY.md](docs/M3_MEMORY.md) | 物理页/页表所有权、栈、堆、权限与 OOM |
 | [docs/validation/M3.md](docs/validation/M3.md) | 实际 M3 内存与保护验证记录 |
+| [docs/M4_USERSPACE.md](docs/M4_USERSPACE.md) | Ring 3、ELF、原生 v1 ABI、用户复制和 Rust/C SDK |
+| [docs/validation/M4.md](docs/validation/M4.md) | 实际 M4 隔离与应用验收记录 |
+| [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) | 强制开发需求，包括文件用途说明 |
+| [docs/FILE_PURPOSES.md](docs/FILE_PURPOSES.md) | 仓库中每个文件的用途 |
 | [docs/STATUS.md](docs/STATUS.md) | 当前已实现能力和下一步 |
 | [docs/GITHUB_SETUP.md](docs/GITHUB_SETUP.md) | 仓库克隆、文档维护与提交约定 |
 | [docs/LICENSING.md](docs/LICENSING.md) | Apache-2.0 选择、使用与第三方许可边界 |
@@ -65,11 +69,14 @@
 
 自有代码的标识符、注释、Rustdoc、安全说明、日志、错误消息、CLI 帮助、测试、提交消息、PR 标题/描述和新开发文档统一使用英文。明确的翻译与本地化资源可以使用目标语言；第三方文本及现有中文规划文档按 [代码规范](docs/CODING_STYLE.md) 保留相应语言。
 
+后续每个新增或修改的自有文件，都必须在文件开头写清用途，并维护 [文件用途清单](docs/FILE_PURPOSES.md)。提交前执行 `cargo xtask check-files`，具体要求见 [DEV-001](docs/REQUIREMENTS.md)。
+
 Rust 格式由根目录 [rustfmt.toml](rustfmt.toml) 定义：4 空格缩进、100 列建议宽度、LF 换行、Rust 2024 parser/style edition，仅使用稳定版 rustfmt 选项。在仓库根目录执行：
 
 ```sh
 cargo fmt --all
 cargo fmt --all -- --check
+cargo fmt --manifest-path user/Cargo.toml --all -- --check
 ```
 
 共享项目信息变更时，同步维护默认英文 [README.md](README.md) 与本中文版。
@@ -88,23 +95,25 @@ cargo fmt --all -- --check
 
 ## 构建与启动
 
-宿主使用 x86_64 Ubuntu 24.04 或 WSL2，安装 rustup、QEMU 8.2.2、xorriso、curl 和 dpkg-deb。仓库固定 Rust 1.90.0、rustfmt、Clippy 与裸机目标；依赖安装和固件路径见 [开发说明](docs/DEVELOPMENT.md)。
+宿主使用 x86_64 Ubuntu 24.04 或 WSL2，安装 rustup、QEMU 8.2.2、xorriso、curl、dpkg-deb 和 GCC。仓库固定 Rust 1.90.0、rustfmt、Clippy 与裸机目标；依赖安装和固件路径见 [开发说明](docs/DEVELOPMENT.md)。
 
 ```sh
 cargo xtask fetch       # 下载并校验固定的 Limine/OVMF 输入
 cargo xtask doctor      # 汇总缺失依赖与版本不符
 cargo xtask build       # 构建并检查裸机内核 ELF
-cargo xtask image       # 生成 build/images/anova-normal.iso
-cargo xtask run         # 串口控制台；普通内核保持 idle
-cargo xtask smoke       # 要求内存检查、断点返回、至少 8 次 IRQ 和退出码 33
+cargo xtask apps        # 构建独立 Rust/C 用户 ELF 和 ABI/校验清单
+cargo xtask check-files # 检查每个文件的用途说明与清单覆盖
+cargo xtask image       # 生成包含原生应用的 build/images/anova-normal.iso
+cargo xtask run         # 运行 Rust/C 应用，然后 BSP 保持可中断 idle
+cargo xtask smoke       # 内存/CPU 检查、11 个用户用例、8 次重复应用和退出码 33
 cargo xtask verify      # 13 场景：启动通过，故障、panic、超时和 OOM 被拒绝
 ```
 
-以上命令已在宿主 `xtask` 包中实现。镜像、缓存、日志和临时固件变量副本均位于 `build/`；普通启动不连接数据盘和网络。GitHub Actions 已配置相同检查，其运行结果与 [本地验收](docs/validation/M3.md) 分开记录。
+以上命令已在宿主 `xtask` 包中实现。镜像、缓存、日志和临时固件变量副本均位于 `build/`；普通启动不连接数据盘和网络。GitHub Actions 已配置相同检查，其运行结果与 [本地验收](docs/validation/M4.md) 分开记录。
 
 ## 下一步
 
-M4 将在 M3 内存基线上实现首个隔离的 Ring 3 ELF 应用、原生 syscall ABI 和最小 SDK。外设 IRQ 路由随首个设备驱动启用并验证。详情见 [内存设计](docs/M3_MEMORY.md)、[当前状态](docs/STATUS.md) 和 [路线图](ROADMAP.md)。
+M5 将在 M4 隔离执行基线上实现多进程、CPU/FPU 上下文保存和阻塞/抢占调度。外设 IRQ 路由随首个设备驱动启用并验证。详情见 [用户态设计](docs/M4_USERSPACE.md)、[当前状态](docs/STATUS.md) 和 [路线图](ROADMAP.md)。
 
 ## 许可证
 

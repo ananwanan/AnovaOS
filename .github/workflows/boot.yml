@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# Gates development changes on source purpose, native apps and complete QEMU boot regressions.
 name: Bare-metal boot
 
 on:
@@ -20,13 +21,21 @@ jobs:
       - name: Install host utilities
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends qemu-system-x86 xorriso curl dpkg-dev
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 xorriso curl dpkg-dev gcc
       - name: Load the pinned Rust toolchain
         run: rustup show active-toolchain
       - name: Check formatting
-        run: cargo fmt --all -- --check
+        run: |
+          cargo fmt --all -- --check
+          cargo fmt --manifest-path user/Cargo.toml --all -- --check
+      - name: Check file-purpose explanations
+        run: cargo xtask check-files
       - name: Check host tools
-        run: cargo clippy --locked -p xtask -p anova-platform -p anova-memory --all-targets -- -D warnings
+        run: cargo clippy --locked -p xtask -p anova-platform -p anova-memory -p anova-abi -p anova-elf --all-targets -- -D warnings
+      - name: Check and build native Rust/C applications
+        run: |
+          cargo xtask check-apps
+          cargo xtask apps
       - name: Check the bare-metal kernel
         run: |
           cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features qemu-test -- -D warnings
@@ -40,7 +49,7 @@ jobs:
         run: cargo xtask fetch
       - name: Check prerequisites
         run: cargo xtask doctor
-      - name: Verify memory, permissions, OOM, timer and traps
+      - name: Verify user isolation, memory, OOM, timer and traps
         run: cargo xtask verify
       - name: Upload boot evidence
         if: always()

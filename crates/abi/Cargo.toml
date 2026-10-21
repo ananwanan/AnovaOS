@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: Apache-2.0
+# Defines the allocation-free native ABI shared by the kernel and application SDK.
+[package]
+name = "anova-abi"
+version.workspace = true
+edition.workspace = true
+license.workspace = true

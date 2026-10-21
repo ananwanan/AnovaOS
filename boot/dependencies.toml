@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# Locks verified compiler/QEMU versions and bootloader/firmware sources and hashes.
 # Change only with refreshed integrity checks and the complete M1 validation.
 rust = "1.90.0"
 qemu = "8.2.2"

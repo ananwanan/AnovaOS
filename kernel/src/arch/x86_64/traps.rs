@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Stable Rust uses explicit assembly entries, not the unstable x86-interrupt ABI.
-//! All gates clear IF. Only the breakpoint and timer/spurious paths return.
+//! All gates clear IF. Kernel traps diagnose, user faults terminate one app;
+//! native syscalls and narrowly guarded usercopy faults return through IRETQ.
 use super::{apic, cpu, paging::EarlyMapper};
 use crate::serial;
 use anova_platform::VirtAddr;
@@ -76,7 +77,7 @@ impl Gate {
 }
 
 struct Tables {
-    gdt: [u64; 5],
+    gdt: [u64; 7],
     tss: Tss,
     idt: [Gate; 256],
 }
@@ -85,7 +86,7 @@ struct Storage(UnsafeCell<Tables>);
 // then reads them for the kernel lifetime. Test-only edits also require IF=0.
 unsafe impl Sync for Storage {}
 static TABLES: Storage = Storage(UnsafeCell::new(Tables {
-    gdt: [0; 5],
+    gdt: [0; 7],
     tss: Tss {
         reserved0: 0,
         rsp: [0; 3],
@@ -149,6 +150,8 @@ pub fn init(mapper: &mut EarlyMapper<'_>) {
         0x00cf_9200_0000_ffff,
         103 | ((tss & 0xff_ffff) << 16) | (0x89 << 40) | (((tss >> 24) & 0xff) << 56),
         tss >> 32,
+        0x00cf_f200_0000_ffff, // User data, selector 0x2b.
+        0x00af_fa00_0000_ffff, // User 64-bit code, selector 0x33.
     ];
     for (vector, gate) in tables.idt.iter_mut().enumerate() {
         // SAFETY: Assembly exports a fixed 256-element address table; every
@@ -197,20 +200,20 @@ pub struct TrapFrame {
     r10: u64,
     r9: u64,
     r8: u64,
-    rdi: u64,
-    rsi: u64,
+    pub rdi: u64,
+    pub rsi: u64,
     rbp: u64,
-    rdx: u64,
+    pub rdx: u64,
     rcx: u64,
     rbx: u64,
-    rax: u64,
-    vector: u64,
-    error: u64,
-    rip: u64,
-    cs: u64,
-    rflags: u64,
-    rsp: u64,
-    ss: u64,
+    pub rax: u64,
+    pub vector: u64,
+    pub error: u64,
+    pub rip: u64,
+    pub cs: u64,
+    pub rflags: u64,
+    pub rsp: u64,
+    pub ss: u64,
 }
 
 fn on_stack(frame: &TrapFrame, index: usize) -> bool {
@@ -222,9 +225,21 @@ fn on_stack(frame: &TrapFrame, index: usize) -> bool {
 }
 
 #[unsafe(no_mangle)]
-extern "C" fn anova_trap_dispatch(frame: &TrapFrame) {
+extern "C" fn anova_trap_dispatch(frame: &mut TrapFrame) {
+    if frame.vector == 14 && crate::mm::uaccess::recover(frame) {
+        return;
+    }
+    if frame.cs & 3 == 3
+        && (frame.vector == 0x80 || (frame.vector < 32 && !matches!(frame.vector, 2 | 8 | 18)))
+    {
+        crate::task::dispatch(frame);
+        return;
+    }
     match frame.vector {
         0x40 => {
+            if frame.cs & 3 == 3 {
+                crate::task::note_timer();
+            }
             apic::timer_irq();
             return;
         }
@@ -332,7 +347,7 @@ pub fn set_kernel_stack(top: u64) {
     assert_eq!(cpu::flags() & (1 << 9), 0, "TSS stack update requires IF=0");
     assert_eq!(top & 15, 0, "Kernel stack top must be aligned");
     // SAFETY: Only the BSP owns the initialized TSS; IRQs are disabled, there
-    // is no Ring 3 entry yet, and no Rust reference to the packed field escapes.
+    // is no concurrent Ring 3 entry, and no packed-field reference escapes.
     unsafe { ptr::addr_of_mut!((*TABLES.0.get()).tss.rsp[0]).write_unaligned(top) };
 }
 
