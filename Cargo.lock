@@ -48,12 +48,16 @@ dependencies = [
 [[package]]
 name = "anova-storage"
 version = "0.1.0"
+dependencies = [
+ "anova-abi",
+]
 
 [[package]]
 name = "anova-vfs"
 version = "0.1.0"
 dependencies = [
  "anova-abi",
+ "anova-storage",
 ]
 
 [[package]]
@@ -312,6 +316,7 @@ version = "0.1.0"
 dependencies = [
  "anova-abi",
  "anova-elf",
+ "anova-storage",
  "anova-vfs",
  "serde",
  "sha2",

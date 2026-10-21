@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 #![no_std]
-//! Bounded VFS mounts, component-wise paths, shared open descriptions and byte-stream pipes.
+//! Bounded memory/ext2 VFS mounts, paths, shared open descriptions and byte-stream pipes.
 //! One non-preemptible owner serializes all mutations; no hardware, locks or user pointers.
 extern crate alloc;
 pub mod archive;
 pub mod fd;
 #[cfg(test)]
 mod tests;
+use alloc::borrow::Cow;
 use alloc::vec::Vec;
 use anova_abi::*;
+use anova_storage::ext2::Ext2;
 pub use fd::Descriptors;
 
 pub const ROOT: usize = 0;
@@ -22,6 +24,7 @@ pub enum Mount {
     Initramfs,
     Tmpfs,
     Devfs,
+    Ext2,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Device {
@@ -34,6 +37,7 @@ enum Data<'a> {
     Mutable(Vec<u8>),
     Link(&'a str),
     Device(Device),
+    Persistent { size: usize, executable: bool },
 }
 struct Node<'a> {
     parent: usize,
@@ -42,6 +46,7 @@ struct Node<'a> {
     mount: Mount,
     linked: bool,
     data: Data<'a>,
+    inode: Option<u32>,
 }
 #[derive(Clone, Copy)]
 enum Target {
@@ -67,6 +72,7 @@ pub struct Vfs<'a> {
     nodes: Vec<Node<'a>>,
     opens: Vec<Option<Open>>,
     pipes: Vec<Option<Pipe>>,
+    disk: Option<Ext2>,
 }
 fn slots<T>(n: usize, mut f: impl FnMut() -> T) -> Result<Vec<T>, i64> {
     let mut v = Vec::new();
@@ -85,11 +91,13 @@ impl<'a> Vfs<'a> {
             mount: Mount::Initramfs,
             linked: true,
             data: Data::Directory,
+            inode: None,
         });
         let mut fs = Self {
             nodes,
             opens: slots(OPEN_LIMIT, || None)?,
             pipes: slots(PIPE_LIMIT, || None)?,
+            disk: None,
         };
         let mut input = archive::Archive::new(archive)?;
         while let Some(entry) = input.entry()? {
@@ -116,6 +124,154 @@ impl<'a> Vfs<'a> {
         fs.insert(dev, "console", Data::Device(Device::Console), Mount::Devfs)?;
         fs.insert(dev, "null", Data::Device(Device::Null), Mount::Devfs)?;
         Ok(fs)
+    }
+    /// Attach a disk only after its feature/allocation checks. Roll back namespace publication on error.
+    pub fn mount_disk(&mut self, mut disk: Ext2) -> Result<(), i64> {
+        if self.disk.is_some() {
+            return Err(INVALID_ARGUMENT);
+        }
+        let root = self.resolve(ROOT, "/persist")?;
+        let before = self.nodes.len();
+        self.mount("/persist", Mount::Ext2)?;
+        self.nodes[root].inode = Some(2);
+        let result = (|| {
+            self.import_disk(&mut disk, root, 2, 0)?;
+            // This explicit image-wide manifest selects native v1, never ELF OSABI heuristics.
+            let manifest = self.child(root, ".anova-abi").ok_or(INVALID_FILESYSTEM)?;
+            let number = self.nodes[manifest].inode.ok_or(INVALID_FILESYSTEM)?;
+            let mut bytes = [0; 32];
+            let n = disk.read(number, 0, &mut bytes)?;
+            if &bytes[..n] != b"anova.native.v1\n" {
+                return Err(INVALID_FILESYSTEM);
+            }
+            Ok(())
+        })();
+        if let Err(e) = result {
+            self.nodes.truncate(before);
+            self.nodes[root].mount = Mount::Initramfs;
+            self.nodes[root].inode = None;
+            return Err(e);
+        }
+        self.disk = Some(disk);
+        Ok(())
+    }
+    fn import_disk(
+        &mut self,
+        disk: &mut Ext2,
+        parent: usize,
+        inode: u32,
+        depth: usize,
+    ) -> Result<(), i64> {
+        if depth > 8 {
+            return Err(TOO_LONG);
+        }
+        for entry in disk.entries(inode)? {
+            if self.nodes.iter().any(|n| n.inode == Some(entry.inode)) {
+                return Err(INVALID_FILESYSTEM);
+            }
+            let info = disk.inode(entry.inode)?;
+            let name = core::str::from_utf8(&entry.name[..entry.length])
+                .map_err(|_| INVALID_FILESYSTEM)?;
+            let data = if info.directory {
+                Data::Directory
+            } else {
+                Data::Persistent {
+                    size: info.size,
+                    executable: info.executable,
+                }
+            };
+            let node = self.insert(parent, name, data, Mount::Ext2)?;
+            self.nodes[node].inode = Some(entry.inode);
+            if info.directory {
+                self.import_disk(disk, node, entry.inode, depth + 1)?;
+            }
+        }
+        Ok(())
+    }
+    fn ensure_node_slot(&self) -> Result<(), i64> {
+        if self.nodes.len() < NODE_LIMIT
+            || self.nodes.iter().enumerate().any(|(i, n)| {
+                !n.linked
+                    && !self
+                        .opens
+                        .iter()
+                        .flatten()
+                        .any(|o| matches!(o.target,Target::Node(id) if id==i))
+            })
+        {
+            Ok(())
+        } else {
+            Err(NO_SPACE)
+        }
+    }
+    pub fn sync(&mut self) -> Result<(), i64> {
+        match &mut self.disk {
+            Some(disk) => disk.sync(),
+            None => Ok(()),
+        }
+    }
+    pub fn fsync(&mut self, files: &Descriptors, fd: u64) -> Result<(), i64> {
+        let open = self.opens[files.handle(fd)?].unwrap();
+        match open.target {
+            Target::Node(n) if !matches!(self.nodes[n].data, Data::Device(_)) => self.sync(),
+            _ => Err(INVALID_ARGUMENT),
+        }
+    }
+    pub fn shutdown(&mut self) -> Result<(), i64> {
+        if self.nodes.iter().any(|n| n.inode.is_some() && !n.linked) {
+            return Err(IO_ERROR);
+        }
+        match &mut self.disk {
+            Some(disk) => disk.shutdown(),
+            None => Ok(()),
+        }
+    }
+    /// Call only after successful shutdown; device Drop resets the queue and releases DMA.
+    pub fn detach_disk(&mut self) -> Result<(), i64> {
+        if let Some(disk) = &mut self.disk {
+            disk.stop_device()?;
+        }
+        self.disk = None;
+        Ok(())
+    }
+    pub fn set_executable(&mut self, cwd: usize, path: &str) -> Result<(), i64> {
+        let node = self.resolve(cwd, path)?;
+        let number = self.nodes[node].inode.ok_or(READ_ONLY)?;
+        if !matches!(self.nodes[node].data, Data::Persistent { .. }) {
+            return Err(IS_DIRECTORY);
+        }
+        self.disk.as_mut().ok_or(IO_ERROR)?.set_executable(number)?;
+        if let Data::Persistent {
+            ref mut executable, ..
+        } = self.nodes[node].data
+        {
+            *executable = true;
+        }
+        Ok(())
+    }
+    pub fn load_executable(&mut self, cwd: usize, path: &str) -> Result<Cow<'a, [u8]>, i64> {
+        let node = self.resolve(cwd, path)?;
+        match self.nodes[node].data {
+            Data::Borrowed(bytes, true) => Ok(Cow::Borrowed(bytes)),
+            Data::Persistent {
+                size,
+                executable: true,
+            } => {
+                let mut bytes = Vec::new();
+                bytes.try_reserve_exact(size).map_err(|_| NO_MEMORY)?;
+                bytes.resize(size, 0);
+                let n = self.disk.as_mut().ok_or(IO_ERROR)?.read(
+                    self.nodes[node].inode.unwrap(),
+                    0,
+                    &mut bytes,
+                )?;
+                if n != size {
+                    return Err(IO_ERROR);
+                }
+                Ok(Cow::Owned(bytes))
+            }
+            _ => Err(PERMISSION_DENIED),
+        }
     }
     fn mount(&mut self, path: &str, mount: Mount) -> Result<(), i64> {
         let node = self.resolve(ROOT, path)?;
@@ -159,6 +315,7 @@ impl<'a> Vfs<'a> {
             mount,
             linked: true,
             data,
+            inode: None,
         };
         // Unlinked nodes remain alive until their final open description is closed.
         let reusable = self.nodes.iter().enumerate().position(|(i, n)| {
@@ -277,6 +434,17 @@ impl<'a> Vfs<'a> {
     }
     pub fn mkdir(&mut self, cwd: usize, path: &str) -> Result<(), i64> {
         let (parent, name) = self.parent(cwd, path)?;
+        if self.nodes[parent].mount == Mount::Ext2 {
+            self.ensure_node_slot()?;
+            let inode = self.disk.as_mut().ok_or(IO_ERROR)?.create(
+                self.nodes[parent].inode.unwrap(),
+                name,
+                true,
+            )?;
+            let node = self.insert(parent, name, Data::Directory, Mount::Ext2)?;
+            self.nodes[node].inode = Some(inode);
+            return Ok(());
+        }
         if self.nodes[parent].mount != Mount::Tmpfs {
             return Err(READ_ONLY);
         }
@@ -286,11 +454,17 @@ impl<'a> Vfs<'a> {
     pub fn unlink(&mut self, cwd: usize, path: &str) -> Result<(), i64> {
         let (parent, name) = self.parent(cwd, path)?;
         let node = self.child(parent, name).ok_or(NOT_FOUND)?;
-        if self.nodes[node].mount != Mount::Tmpfs {
+        if !matches!(self.nodes[node].mount, Mount::Tmpfs | Mount::Ext2) {
             return Err(READ_ONLY);
         }
         if matches!(self.nodes[node].data, Data::Directory) {
             return Err(IS_DIRECTORY);
+        }
+        if self.nodes[node].mount == Mount::Ext2 {
+            self.disk
+                .as_mut()
+                .ok_or(IO_ERROR)?
+                .unlink(self.nodes[parent].inode.unwrap(), name)?;
         }
         self.nodes[node].linked = false;
         if !self
@@ -299,6 +473,12 @@ impl<'a> Vfs<'a> {
             .flatten()
             .any(|o| matches!(o.target, Target::Node(n) if n == node))
         {
+            if let Some(number) = self.nodes[node].inode.take() {
+                self.disk
+                    .as_mut()
+                    .ok_or(IO_ERROR)?
+                    .release_unlinked(number)?;
+            }
             self.nodes[node].data = Data::Mutable(Vec::new());
         }
         Ok(())
@@ -339,6 +519,7 @@ impl<'a> Vfs<'a> {
         if flags & !OPEN_FLAGS != 0
             || flags & (OPEN_READ | OPEN_WRITE) == 0
             || flags & (OPEN_TRUNCATE | OPEN_APPEND) != 0 && flags & OPEN_WRITE == 0
+            || flags & OPEN_EXCLUSIVE != 0 && flags & OPEN_CREATE == 0
         {
             return Err(INVALID_ARGUMENT);
         }
@@ -347,16 +528,37 @@ impl<'a> Vfs<'a> {
             return Err(FILE_LIMIT);
         }
         let node = match self.resolve(cwd, path) {
+            Ok(_) if flags & OPEN_EXCLUSIVE != 0 => return Err(ALREADY_EXISTS),
             Ok(id) => id,
             Err(NOT_FOUND) if flags & OPEN_CREATE != 0 => {
                 let (parent, name) = self.parent(cwd, path)?;
                 if flags & OPEN_DIRECTORY != 0 {
                     return Err(NOT_DIRECTORY);
                 }
-                if self.nodes[parent].mount != Mount::Tmpfs {
+                if !matches!(self.nodes[parent].mount, Mount::Tmpfs | Mount::Ext2) {
                     return Err(READ_ONLY);
                 }
-                self.insert(parent, name, Data::Mutable(Vec::new()), Mount::Tmpfs)?
+                self.ensure_node_slot()?;
+                if self.nodes[parent].mount == Mount::Ext2 {
+                    let inode = self.disk.as_mut().ok_or(IO_ERROR)?.create(
+                        self.nodes[parent].inode.unwrap(),
+                        name,
+                        false,
+                    )?;
+                    let node = self.insert(
+                        parent,
+                        name,
+                        Data::Persistent {
+                            size: 0,
+                            executable: false,
+                        },
+                        Mount::Ext2,
+                    )?;
+                    self.nodes[node].inode = Some(inode);
+                    node
+                } else {
+                    self.insert(parent, name, Data::Mutable(Vec::new()), Mount::Tmpfs)?
+                }
             }
             Err(e) => return Err(e),
         };
@@ -371,8 +573,15 @@ impl<'a> Vfs<'a> {
             }
         }
         if flags & OPEN_TRUNCATE != 0 {
+            let inode = self.nodes[node].inode;
             if let Data::Mutable(ref mut bytes) = self.nodes[node].data {
                 bytes.clear();
+            } else if let Data::Persistent { ref mut size, .. } = self.nodes[node].data {
+                self.disk
+                    .as_mut()
+                    .ok_or(IO_ERROR)?
+                    .truncate(inode.unwrap())?;
+                *size = 0;
             } else {
                 return Err(INVALID_ARGUMENT);
             }
@@ -395,6 +604,7 @@ impl<'a> Vfs<'a> {
         }
     }
     pub fn close(&mut self, fds: &mut Descriptors, fd: u64) -> Result<(), i64> {
+        let mut cleanup = Ok(());
         let id = fds.handle(fd)?;
         fds.slots[fd as usize] = None;
         let open = self.opens[id].as_mut().unwrap();
@@ -419,6 +629,9 @@ impl<'a> Vfs<'a> {
                                 |o| matches!(o.target, Target::Node(node) if node == n),
                             )
                     }) {
+                        if let Some(number) = self.nodes[n].inode.take() {
+                            cleanup = self.disk.as_mut().ok_or(IO_ERROR)?.release_unlinked(number);
+                        }
                         self.nodes[n].data = Data::Mutable(Vec::new());
                     }
                 }
@@ -426,12 +639,13 @@ impl<'a> Vfs<'a> {
             }
             self.opens[id] = None;
         }
-        Ok(())
+        cleanup
     }
     pub fn clear(&mut self, fds: &mut Descriptors) {
         for i in 0..fd::FD_LIMIT {
             if fds.slots[i].is_some() {
-                self.close(fds, i as u64).unwrap();
+                // Descriptor ownership is released even if a poisoned disk reports a cleanup error.
+                let _ = self.close(fds, i as u64);
             }
         }
     }
@@ -541,6 +755,15 @@ impl<'a> Vfs<'a> {
                 n
             }
             Target::Node(n) => {
+                if let Data::Persistent { .. } = self.nodes[n].data {
+                    let count = self.disk.as_mut().ok_or(IO_ERROR)?.read(
+                        self.nodes[n].inode.unwrap(),
+                        open.offset,
+                        output,
+                    )?;
+                    self.opens[id].as_mut().unwrap().offset += count;
+                    return Ok(count);
+                }
                 let bytes = match &self.nodes[n].data {
                     Data::Borrowed(bytes, _) => *bytes,
                     Data::Mutable(bytes) => bytes,
@@ -583,30 +806,48 @@ impl<'a> Vfs<'a> {
                 }
                 n
             }
-            Target::Node(n) => match &mut self.nodes[n].data {
-                Data::Mutable(bytes) => {
-                    let offset = if open.flags & OPEN_APPEND != 0 {
-                        bytes.len()
-                    } else {
-                        open.offset
-                    };
-                    let end = offset
-                        .checked_add(input.len())
-                        .filter(|e| *e <= FILE_BYTES)
-                        .ok_or(NO_SPACE)?;
-                    if end > bytes.len() {
-                        bytes
-                            .try_reserve(end - bytes.len())
-                            .map_err(|_| NO_MEMORY)?;
-                        bytes.resize(end, 0);
+            Target::Node(n) => {
+                let inode = self.nodes[n].inode;
+                match &mut self.nodes[n].data {
+                    Data::Persistent { size, .. } => {
+                        let offset = if open.flags & OPEN_APPEND != 0 {
+                            *size
+                        } else {
+                            open.offset
+                        };
+                        let count = self.disk.as_mut().ok_or(IO_ERROR)?.write(
+                            inode.unwrap(),
+                            offset,
+                            input,
+                        )?;
+                        self.opens[id].as_mut().unwrap().offset = offset + count;
+                        *size = (*size).max(offset + count);
+                        return Ok(count);
                     }
-                    bytes[offset..end].copy_from_slice(input);
-                    self.opens[id].as_mut().unwrap().offset = end;
-                    return Ok(input.len());
+                    Data::Mutable(bytes) => {
+                        let offset = if open.flags & OPEN_APPEND != 0 {
+                            bytes.len()
+                        } else {
+                            open.offset
+                        };
+                        let end = offset
+                            .checked_add(input.len())
+                            .filter(|e| *e <= FILE_BYTES)
+                            .ok_or(NO_SPACE)?;
+                        if end > bytes.len() {
+                            bytes
+                                .try_reserve(end - bytes.len())
+                                .map_err(|_| NO_MEMORY)?;
+                            bytes.resize(end, 0);
+                        }
+                        bytes[offset..end].copy_from_slice(input);
+                        self.opens[id].as_mut().unwrap().offset = end;
+                        return Ok(input.len());
+                    }
+                    Data::Device(Device::Null) => return Ok(input.len()),
+                    _ => return Err(READ_ONLY),
                 }
-                Data::Device(Device::Null) => return Ok(input.len()),
-                _ => return Err(READ_ONLY),
-            },
+            }
             _ => return Err(BAD_DESCRIPTOR),
         };
         Ok(count)
@@ -626,6 +867,7 @@ impl<'a> Vfs<'a> {
         let length = match &self.nodes[n].data {
             Data::Borrowed(b, _) => b.len(),
             Data::Mutable(b) => b.len(),
+            Data::Persistent { size, .. } => *size,
             _ => return Err(NOT_SEEKABLE),
         };
         let base = match whence {
@@ -636,7 +878,15 @@ impl<'a> Vfs<'a> {
         };
         let offset = (base as i64)
             .checked_add(delta)
-            .filter(|n| *n >= 0 && *n <= length.max(FILE_BYTES) as i64)
+            .filter(|offset| {
+                *offset >= 0
+                    && *offset
+                        <= length.max(if self.nodes[n].mount == Mount::Ext2 {
+                            anova_storage::ext2::MAX_FILE
+                        } else {
+                            FILE_BYTES
+                        }) as i64
+            })
             .ok_or(INVALID_ARGUMENT)? as usize;
         self.opens[id].as_mut().unwrap().offset = offset;
         Ok(offset)

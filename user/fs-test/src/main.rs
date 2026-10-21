@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 #![no_std]
 #![no_main]
-//! Exercise real VFS syscalls, inherited open offsets, exec/cwd, user buffers and blocking pipes.
+//! Exercise real VFS/ext2 syscalls, inherited offsets, exec/cwd, user buffers, reboot data and pipes.
 //! Child modes validate resources after fork/exec; shell-check reads files produced by its script.
 use anova_rt::{self as rt, abi::*};
+mod disk;
 fn ok(pid: u64) {
     assert_eq!(
         rt::wait(pid).unwrap().status,
@@ -249,11 +250,15 @@ unsafe extern "C" fn anova_main(argc: usize, argv: *const *const u8) -> u32 {
             rt::chdir("/").unwrap();
         }
         b"shell-check" => shell_check(),
+        b"disk-suite" => disk::suite(),
+        b"disk-reboot" => disk::reboot(),
+        b"disk-error" => disk::io_error(),
         b"suite" => {
             files();
             pipes();
             limits();
             heap_pressure();
+            disk::suite();
             rt::write(b"[FS:TEST] passed=true\n");
         }
         _ => return 2,
@@ -261,7 +266,15 @@ unsafe extern "C" fn anova_main(argc: usize, argv: *const *const u8) -> u32 {
     0
 }
 #[panic_handler]
-fn panic(_: &core::panic::PanicInfo<'_>) -> ! {
+fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
+    struct Diagnostic;
+    impl core::fmt::Write for Diagnostic {
+        fn write_str(&mut self, text: &str) -> core::fmt::Result {
+            rt::write_all(2, text.as_bytes()).map_err(|_| core::fmt::Error)
+        }
+    }
+    use core::fmt::Write;
+    let _ = writeln!(Diagnostic, "{info}");
     let _ = rt::write_all(2, b"[FS:FAIL]\n");
     rt::exit(101)
 }

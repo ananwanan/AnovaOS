@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //! BSP memory ownership: checked USABLE frames, fully owned table hierarchy,
-//! guarded stacks, reclaiming buddy heap and private process memory integration.
+//! guarded stacks, buddy heap, private process memory and explicitly owned coherent DMA pages.
 mod lock;
 pub mod uaccess;
 pub mod user;
@@ -52,6 +52,47 @@ static HEAP: IrqLock<BuddyHeap> = IrqLock::new(BuddyHeap::new());
 
 pub fn heap_used() -> usize {
     HEAP.with(|heap| heap.used())
+}
+
+/// One physical, WB-coherent x86 DMA page, never borrowed from the heap or a process.
+pub struct DmaPage {
+    physical: PhysAddr,
+    pointer: *mut u8,
+}
+impl DmaPage {
+    pub fn new() -> Result<Self, i64> {
+        MEMORY.with(|slot| {
+            let manager = slot.as_mut().ok_or(anova_abi::NO_MEMORY)?;
+            let physical = manager
+                .frames
+                .allocate(Owner::Dma, Zone::Dma32)
+                .map_err(|_| anova_abi::NO_MEMORY)?;
+            let pointer = direct_pointer(manager.direct, physical);
+            // SAFETY: Exclusively owned, HHDM-mapped USABLE RAM; no device has seen this address yet.
+            unsafe {
+                pointer.write_bytes(0, PAGE_SIZE as usize);
+            }
+            Ok(Self { physical, pointer })
+        })
+    }
+    pub fn physical(&self) -> u64 {
+        self.physical.0
+    }
+    pub fn pointer(&self) -> *mut u8 {
+        self.pointer
+    }
+}
+impl Drop for DmaPage {
+    fn drop(&mut self) {
+        // The device owner must confirm reset/completion before releasing this wrapper.
+        MEMORY.with(|slot| {
+            slot.as_mut()
+                .expect("Missing memory manager")
+                .frames
+                .release(self.physical, Owner::Dma)
+                .expect("Invalid DMA frame release")
+        });
+    }
 }
 
 struct KernelAllocator;

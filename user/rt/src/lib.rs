@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #![no_std]
-//! Native Rust CRT, startup arguments and checked process/file syscall wrappers.
+//! Native Rust CRT, startup arguments and checked process/file/durability syscall wrappers.
 //! Built with the x86_64 user ABI and SSE2, without libc, allocation or Linux calls.
 pub use anova_abi as abi;
 mod memory;
@@ -71,6 +71,30 @@ fn result(value: i64) -> Result<u64, i64> {
     } else {
         Ok(value as u64)
     }
+}
+pub fn sync() -> Result<(), i64> {
+    // SAFETY: No pointer arguments; flush reports actual device completion or failure.
+    result(unsafe { raw(abi::SYS_SYNC, 0, 0, 0) }).map(|_| ())
+}
+pub fn fsync(fd: u64) -> Result<(), i64> {
+    // SAFETY: Descriptor is a scalar; the kernel checks ownership and target kind.
+    result(unsafe { raw(abi::SYS_FSYNC, fd, 0, 0) }).map(|_| ())
+}
+pub fn shutdown() -> Result<(), i64> {
+    // SAFETY: No pointers. Success stops writers, syncs storage and does not return.
+    result(unsafe { raw(abi::SYS_SHUTDOWN, 0, 0, 0) }).map(|_| ())
+}
+pub fn set_executable(path: &str) -> Result<(), i64> {
+    // SAFETY: The string stays readable throughout the bounded path copy.
+    result(unsafe {
+        raw(
+            abi::SYS_SET_EXECUTABLE,
+            path.as_ptr() as u64,
+            path.len() as u64,
+            0,
+        )
+    })
+    .map(|_| ())
 }
 pub fn yield_now() {
     // SAFETY: No pointers; the kernel preserves the caller's live context.

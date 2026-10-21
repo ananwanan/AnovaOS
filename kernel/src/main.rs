@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #![no_std]
 #![no_main]
-//! Boot owned memory/CPU state and run isolated, preemptively scheduled native processes.
+//! Boot CPU/memory/PCI ownership and run native processes with a persistent disk and shell.
 
 extern crate alloc;
 
@@ -74,6 +74,7 @@ pub extern "C" fn _start() -> ! {
 
     let platform = acpi::discover(&info, &mut mapper);
     apic::init(&platform, &mut mapper);
+    drivers::prepare(&mut mapper, platform.pm_timer);
     PHASE.store(4, Ordering::Relaxed);
     let stack_top = mm::init(&info, mapper);
     // SAFETY: init returned the new owned, aligned stack. IF is still clear;
@@ -90,7 +91,6 @@ pub extern "C" fn _start() -> ! {
 extern "C" fn kernel_main(timer_port: u64, timer_mask: u64) -> ! {
     PHASE.store(5, Ordering::Relaxed);
     mm::verify();
-    drivers::discover();
     apic::verify_ticks(anova_platform::acpi::PmTimer {
         port: timer_port as u16,
         mask: timer_mask as u32,
@@ -107,7 +107,7 @@ extern "C" fn kernel_main(timer_port: u64, timer_mask: u64) -> ! {
     mm::inject_fault();
     task::start();
     serial::write(format_args!(
-        "[BOOT:OK] M6 init/shell/files/pipes reclaimed; BSP idle, interrupts enabled\n"
+        "[BOOT:OK] M7 init/shell/storage/files/pipes reclaimed; BSP idle, interrupts enabled\n"
     ));
     #[cfg(feature = "qemu-test")]
     {

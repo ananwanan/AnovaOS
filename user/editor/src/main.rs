@@ -1,163 +1,175 @@
 // SPDX-License-Identifier: Apache-2.0
 #![no_std]
 #![no_main]
-//! Run the native serial line editor with bounded input, open/save and explicit dirty state.
-//! This is not a full-screen or POSIX terminal editor; /tmp remains volatile until M7 disk mount.
+//! Edit bounded ASCII source files through canonical serial lines and explicit fsync on save.
+//! Commands append, replace/delete one line, print, save or quit; no raw terminal or allocator.
 use anova_rt::{self as rt, abi::*};
-use editor::Text;
-
-fn message(bytes: &[u8]) {
-    let _ = rt::write_all(1, bytes);
-}
-
-fn read_line(buffer: &mut [u8; 256]) -> Result<Option<usize>, i64> {
+const LIMIT: usize = 16 * 1024;
+fn line(bytes: &mut [u8; 256]) -> Result<usize, i64> {
     let mut n = 0;
     loop {
         let mut byte = [0];
         if rt::read(0, &mut byte)? == 0 {
-            return Ok(None);
+            return Err(NOT_FOUND);
         }
         if byte[0] == b'\n' {
-            return Ok(Some(n));
+            return Ok(n);
         }
-        if n == buffer.len() {
-            // Drain the oversized command instead of accidentally running its prefix.
-            while rt::read(0, &mut byte)? != 0 {
-                if byte[0] == b'\n' {
-                    break;
-                }
-            }
+        if n == bytes.len() - 1 {
             return Err(TOO_LONG);
         }
-        buffer[n] = byte[0];
+        bytes[n] = byte[0];
         n += 1;
     }
 }
-
-fn load(path: &str, text: &mut Text<8192>) -> Result<(), i64> {
-    let fd = match rt::open(path, OPEN_READ) {
-        Ok(fd) => fd,
-        Err(NOT_FOUND) => return Ok(()),
-        Err(error) => return Err(error),
-    };
-    let result: Result<(), i64> = (|| {
-        let mut chunk = [0; 512];
-        loop {
-            let n = rt::read(fd, &mut chunk)?;
-            if n == 0 {
-                return Ok(());
-            }
-            text.append(&chunk[..n]).map_err(|_| NO_SPACE)?;
+fn bounds(text: &[u8], number: usize) -> Result<(usize, usize), i64> {
+    if number == 0 {
+        return Err(INVALID_ARGUMENT);
+    }
+    let mut start = 0;
+    let mut current = 1;
+    while start < text.len() {
+        let end = text[start..]
+            .iter()
+            .position(|b| *b == b'\n')
+            .map_or(text.len(), |n| start + n + 1);
+        if current == number {
+            return Ok((start, end));
         }
-    })();
-    let close = rt::close(fd);
-    result?;
-    close
+        current += 1;
+        start = end;
+    }
+    Err(INVALID_ARGUMENT)
 }
-
-fn save(path: &str, text: &Text<8192>) -> Result<(), i64> {
+fn save(path: &str, text: &[u8]) -> Result<(), i64> {
     let fd = rt::open(path, OPEN_WRITE | OPEN_CREATE | OPEN_TRUNCATE)?;
-    let result = rt::write_all(fd, text.bytes());
+    let result = rt::write_all(fd, text).and_then(|_| rt::fsync(fd));
     let close = rt::close(fd);
-    result?;
-    close
+    result.and(close)
 }
-
-fn edit(path: &str) -> u32 {
-    let mut text = Text::<8192>::new();
-    if load(path, &mut text).is_err() {
-        message(b"ed: failed to read file (or file exceeds 8192 bytes)\n");
-        return 1;
+fn edit(path: &str) -> Result<u32, i64> {
+    if path.is_empty() {
+        return Err(INVALID_ARGUMENT);
     }
-    message(b"AnovaOS ed: p=print, a TEXT=append, r N TEXT=replace, d N=delete, w=save, q=quit, Q=discard, h=help\n");
-    let mut dirty = false;
-    let mut buffer = [0; 256];
-    loop {
-        message(b"ed> ");
-        let n = match read_line(&mut buffer) {
-            Ok(Some(n)) => n,
-            Ok(None) => return if dirty { 1 } else { 0 },
-            Err(TOO_LONG) => {
-                message(b"ed: command exceeds 256 bytes\n");
-                continue;
-            }
-            Err(_) => return 1,
-        };
-        let Ok(command) = core::str::from_utf8(&buffer[..n]) else {
-            message(b"ed: invalid UTF-8\n");
-            continue;
-        };
-        let changed = if command == "p" {
-            message(text.bytes());
-            if !text.bytes().ends_with(b"\n") {
-                message(b"\n");
-            }
-            continue;
-        } else if command == "w" {
-            match save(path, &text) {
-                Ok(()) => {
-                    dirty = false;
-                    message(b"ed: saved\n");
+    let mut text = [0; LIMIT];
+    let mut length = 0;
+    match rt::open(path, OPEN_READ) {
+        Ok(fd) => {
+            let result = (|| -> Result<(), i64> {
+                loop {
+                    if length == LIMIT {
+                        let mut extra = [0];
+                        if rt::read(fd, &mut extra)? != 0 {
+                            return Err(TOO_LONG);
+                        }
+                        break;
+                    }
+                    let end = (length + 4096).min(LIMIT);
+                    let n = rt::read(fd, &mut text[length..end])?;
+                    if n == 0 {
+                        break;
+                    }
+                    length += n;
                 }
-                Err(_) => message(b"ed: save failed\n"),
-            }
-            continue;
-        } else if command == "q" {
-            if dirty {
-                message(b"ed: unsaved changes; w to save or Q to discard\n");
-                continue;
-            }
-            return 0;
-        } else if command == "Q" {
-            return 0;
-        } else if command == "h" {
-            message(b"ed PATH opens a file; append with a TEXT, replace with r LINE TEXT, delete with d LINE, w saves, q exits\n");
-            continue;
-        } else if let Some(line) = command.strip_prefix("a ") {
-            text.append_line(line.as_bytes())
-        } else if let Some(rest) = command.strip_prefix("d ") {
-            match rest.parse::<usize>() {
-                Ok(number) => text.delete(number),
-                Err(_) => Err(editor::EditError::NoLine),
-            }
-        } else if let Some(rest) = command.strip_prefix("r ") {
-            match rest.split_once(' ') {
-                Some((number, line)) => match number.parse::<usize>() {
-                    Ok(number) => text.replace(number, line.as_bytes()),
-                    Err(_) => Err(editor::EditError::NoLine),
+                if text[..length]
+                    .iter()
+                    .any(|b| !matches!(*b, b'\t' | b'\r' | b'\n' | 32..=126))
+                {
+                    return Err(INVALID_ARGUMENT);
+                }
+                Ok(())
+            })();
+            rt::close(fd)?;
+            result?;
+        }
+        Err(NOT_FOUND) => {}
+        Err(e) => return Err(e),
+    }
+    rt::write_all(
+        1,
+        b"AnovaOS line editor: p, a (. ends), d N, c N, w, q, q!\n",
+    )?;
+    let mut dirty = false;
+    loop {
+        rt::write_all(1, b"edit> ")?;
+        let mut command = [0; 256];
+        let n = line(&mut command)?;
+        let command = core::str::from_utf8(&command[..n]).map_err(|_| INVALID_ARGUMENT)?;
+        let result = (|| -> Result<bool, i64> {
+            match command {
+                "p" => rt::write_all(1, &text[..length])?,
+                "a" => loop {
+                    let mut bytes = [0; 256];
+                    let n = line(&mut bytes)?;
+                    if &bytes[..n] == b"." {
+                        break;
+                    }
+                    if length + n + 1 > LIMIT {
+                        return Err(NO_SPACE);
+                    }
+                    text[length..length + n].copy_from_slice(&bytes[..n]);
+                    text[length + n] = b'\n';
+                    length += n + 1;
+                    dirty = true;
                 },
-                None => Err(editor::EditError::NoLine),
+                "w" => {
+                    save(path, &text[..length])?;
+                    dirty = false;
+                    rt::write_all(1, b"[EDIT:SAVED] fsync=ok\n")?;
+                }
+                "q" if dirty => {
+                    rt::write_all(2, b"Unsaved changes; use w or q!\n")?;
+                }
+                "q" | "q!" => return Ok(true),
+                _ => {
+                    let (op, number) = command.split_once(' ').ok_or(INVALID_ARGUMENT)?;
+                    let number = number.parse::<usize>().map_err(|_| INVALID_ARGUMENT)?;
+                    let (start, end) = bounds(&text[..length], number)?;
+                    let mut replacement = [0; 256];
+                    let count = match op {
+                        "d" => 0,
+                        "c" => {
+                            let n = line(&mut replacement)?;
+                            replacement[n] = b'\n';
+                            n + 1
+                        }
+                        _ => return Err(INVALID_ARGUMENT),
+                    };
+                    let new_length = length - (end - start) + count;
+                    if new_length > LIMIT {
+                        return Err(NO_SPACE);
+                    }
+                    text.copy_within(end..length, start + count);
+                    text[start..start + count].copy_from_slice(&replacement[..count]);
+                    length = new_length;
+                    dirty = true;
+                }
             }
-        } else {
-            message(b"ed: unknown command\n");
-            continue;
-        };
-        match changed {
-            Ok(()) => dirty = true,
-            Err(_) => message(b"ed: invalid line or document full\n"),
+            Ok(false)
+        })();
+        match result {
+            Ok(true) => return Ok(0),
+            Ok(false) => {}
+            Err(_) => rt::write_all(2, b"edit: command/save failed; buffer retained\n")?,
         }
     }
 }
-
 #[unsafe(no_mangle)]
 unsafe extern "C" fn anova_main(argc: usize, argv: *const *const u8) -> u32 {
-    // SAFETY: The native ELF loader provides initialized, bounded argument strings.
+    // SAFETY: Loader supplies immutable, bounded argument strings for this process lifetime.
     let mut args = unsafe { rt::Args::from_raw(argc, argv) };
-    let _name = args.next();
-    let path = args
-        .next()
-        .and_then(|value| core::str::from_utf8(value).ok());
-    match path {
-        Some(path) if !path.is_empty() => edit(path),
-        _ => {
-            message(b"usage: ed PATH\n");
-            2
+    let _ = args.next();
+    let path = core::str::from_utf8(args.next().unwrap_or(b"")).unwrap_or("");
+    match edit(path) {
+        Ok(code) => code,
+        Err(_) => {
+            rt::write(b"edit: open/input failed\n");
+            1
         }
     }
 }
-
 #[panic_handler]
 fn panic(_: &core::panic::PanicInfo<'_>) -> ! {
-    let _ = rt::write_all(2, b"[EDITOR:FAIL]\n");
+    rt::write(b"[EDIT:FAIL]\n");
     rt::exit(101)
 }

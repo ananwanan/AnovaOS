@@ -5,6 +5,10 @@ contracts. It records bounds and ownership needed before M7 disk backends.
 Measured results are in [validation/M6.md](validation/M6.md); the native CPU,
 loader and scheduler contracts remain in [M5_PROCESSES.md](M5_PROCESSES.md).
 
+M7 adds the ext2 mount, executable disk files, durability calls and editor;
+[M7_STORAGE.md](M7_STORAGE.md) supersedes the no-disk/archived-only executable
+boundaries below. The M6 validation record remains historical evidence.
+
 ## Boot and filesystem model
 
 `xtask apps` builds seven independent ELF applications and packs an

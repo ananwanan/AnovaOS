@@ -38,12 +38,6 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `crates/platform/src/lib.rs` | Hardware-independent address types and bounded ACPI decoding. |
 | `crates/sched/Cargo.toml` | Shares bounded process state, parent/wait semantics and round-robin policy with host tests. |
 | `crates/sched/src/lib.rs` | Bounded BSP scheduling policy and parent/child lifecycle without hardware or allocation. The kernel owns contexts/resources; this policy never switches stacks or takes locks. |
-| `crates/storage/Cargo.toml` | Package checked no_std block-device, ext2 and virtio policy without a hardware driver. |
-| `crates/storage/src/lib.rs` | Export storage policies and typed I/O/format failures. |
-| `crates/storage/src/block.rs` | Bounds-check 512-byte sectors and read-modify-write unaligned metadata with an explicit flush contract. |
-| `crates/storage/src/ext2.rs` | Validate and access a strict one-group direct-block ext2 subset; overwrite only preallocated files. |
-| `crates/storage/src/pci.rs` | Discover modern virtio-blk PCI functions and validate vendor capability chains. |
-| `crates/storage/src/virtio.rs` | Model modern virtio-blk features and split-queue wire/completion boundaries. |
 | `crates/vfs/Cargo.toml` | Share bounded in-memory VFS, archive, open-file and pipe semantics with host tests. |
 | `crates/vfs/src/archive.rs` | Decode the project-owned ANOVAFS1 archive using checked byte ranges, never casts. Entries are parent-first absolute UTF-8 paths; payloads remain borrowed from boot RAM. |
 | `crates/vfs/src/fd.rs` | Store process-local descriptor indices; Vfs alone manages open-description references. Tables cannot be copied or cloned without incrementing the associated shared ownership. |
@@ -59,12 +53,10 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `docs/M3_MEMORY.md` | Frame/table/heap ownership, virtual layout, locks and original M3 limitations. |
 | `docs/M4_USERSPACE.md` | Historical M4 entry/loader/copy/SDK contracts, with M5 supersession and ownership notes. |
 | `docs/M5_PROCESSES.md` | Define BSP scheduling, CPU/FPU state, native process syscalls and ownership/locking boundaries. |
-| `docs/M7_STORAGE.md` | Specify partial M7 storage/editor policy, excluded driver functionality and acceptance steps. |
-| `docs/validation/M7.md` | Record honest unverified M7 progress and the outstanding two-boot persistence gate. |
 | `docs/M6_FILESYSTEM.md` | Define VFS/archive, fd/pipe ownership, native ABI, terminal, init and shell contracts. |
 | `docs/REFERENCES.md` | Primary architecture, protocol, ABI and toolchain reference links. |
 | `docs/REQUIREMENTS.md` | Owner-mandated development requirements, including DEV-001 file explanations. |
-| `docs/STATUS.md` | Record verified M0–M6 capabilities, remaining bounds and the next M7 storage task. |
+| `docs/STATUS.md` | Record verified M0–M7 capabilities, exact storage bounds and the next M8 Linux ABI task. |
 | `docs/TOOLCHAINS.md` | Planned path to guest-hosted GCC/G++/Rust/Cargo and optional self-hosting. |
 | `docs/validation/M0-M1.md` | Historical local engineering/boot acceptance evidence and input hashes. |
 | `docs/validation/M2.md` | Historical local CPU/timer/trap validation evidence and limitations. |
@@ -86,8 +78,6 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `kernel/src/arch/x86_64/user.S` | Resume saved user GPR/FPU state and use its own trusted SYSCALL stack. Every user trap returns to a single BSP scheduler continuation with IF=0. |
 | `kernel/src/arch/x86_64/user.rs` | BSP saved GPR/segment/x87/SSE2 contexts, native SYSCALL and IRETQ transitions. Each user trap returns to the trusted scheduler root/stack; kernel code remains SIMD-free. |
 | `kernel/src/boot.rs` | Borrow retained Limine data. M3 allocates only USABLE RAM; bootloader data, original stacks/tables, modules, firmware and the early pool remain reserved. Retained native ELF modules support isolation tests; a tagged archive supplies the M6 root. |
-| `kernel/src/drivers/mod.rs` | Isolate non-DMA hardware discovery entry points from task and VFS code. |
-| `kernel/src/drivers/pci.rs` | Read PCI config mechanism #1 on the BSP to detect modern virtio-blk without enabling DMA. |
 | `kernel/src/fs/mod.rs` | Bridge checked native user buffers to the shared VFS and polled canonical terminal. Calls run on the BSP at IF=0; blocking retains only a copied syscall frame, never a lock. |
 | `kernel/src/main.rs` | Boot owned memory/CPU state and run isolated, preemptively scheduled native processes. |
 | `kernel/src/mm/lock.rs` | Non-sleeping BSP locks. Order: memory manager before heap; the fixed heap never calls the frame allocator. IRQ/NMI/fatal paths must not take either. |
@@ -109,9 +99,6 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `user/c/anova.h` | Define native v1 console/process wire layouts and C syscall wrappers without libc/Linux. |
 | `user/c/crt.S` | Convert the native startup stack to C main arguments and exit through SYSCALL. |
 | `user/c/hello.c` | Demonstrate the C SDK, arguments, BSS/SSE2, scheduling and descriptor calls before exit 7. |
-| `user/editor/Cargo.toml` | Build the no_std native editor with the shared userspace linker script. |
-| `user/editor/src/lib.rs` | Provide host-testable fixed-capacity text operations and line-edit rollback. |
-| `user/editor/src/main.rs` | Drive serial line-edit, read, save and dirty-state commands through the native filesystem ABI. |
 | `user/fs-test/Cargo.toml` | Build the standalone native fs-test application with the shared no_std runtime. |
 | `user/fs-test/src/main.rs` | Exercise real VFS syscalls, inherited open offsets, exec/cwd, user buffers and blocking pipes. Child modes validate resources after fork/exec; shell-check reads files produced by its script. |
 | `user/hello/Cargo.toml` | Builds the Rust hello ELF that verifies startup arguments, zeroed BSS and SSE2. |
@@ -136,3 +123,22 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `xtask/src/purposes.rs` | Check file-purpose inventory coverage and top-of-file comments for first-party code. Human review still verifies that each explanation describes its actual responsibility. |
 | `xtask/src/smoke.rs` | Require real CPU/memory/user/process evidence together with the QEMU exit result. |
 | `xtask/src/terminal.rs` | Drive real COM1 input in two ordinary boots, checking line editing, shell EOF and volatile tmpfs. Watchdogs kill only these disposable QEMU guests; a prompt alone is never success evidence. |
+
+## M7 storage and editor files
+
+| File | Purpose |
+| --- | --- |
+| `crates/platform/src/power.rs` | Validate the restricted reference-QEMU PM1a and constant ACPI S5 handoff, with corruption tests. |
+| `crates/storage/Cargo.toml` | Declare the no_std checked sector/ext2 crate and its native error dependency. |
+| `crates/storage/src/lib.rs` | Define owned synchronous sector devices, read-only/flush/stop contracts and checked ranges. |
+| `crates/storage/src/ext2.rs` | Implement the declared ext2 profile, checked allocation, ordered writes and clean shutdown. |
+| `crates/storage/tests/ext2.rs` | Verify on-disk ext2 bytes, indirection, sparse data, exhaustion, reboot and injected I/O failures. |
+| `docs/M7_STORAGE.md` | Define PCI/DMA/queue ownership, ext2 bounds, native durability ABI, disk images and source editor. |
+| `docs/validation/M7.md` | Record actual M7 host/guest/editor/reboot/error checks, integrity evidence and remaining limits. |
+| `kernel/src/drivers/mod.rs` | Hand off validated boot PCI mappings to the one BSP-owned persistent VFS device. |
+| `kernel/src/drivers/pci.rs` | Enumerate PCI bridges/functions and admit bounded modern virtio MMIO capabilities/BARs. |
+| `kernel/src/drivers/virtio.rs` | Own a coherent split block queue, checked transfers/FLUSH, timeout, reset and DMA quarantine. |
+| `user/editor/Cargo.toml` | Build the standalone native serial source editor with the no_std SDK. |
+| `user/editor/src/main.rs` | Open/edit bounded ASCII text, retain failed-save buffers and fsync successful saves. |
+| `user/fs-test/src/disk.rs` | Exercise real ext2 fd/indirect/sparse/unlink syscalls and verify persisted source/ELF data. |
+| `xtask/src/disk.rs` | Create safe regular ext2 images and drive independent reboot/integrity/device-error scenarios. |

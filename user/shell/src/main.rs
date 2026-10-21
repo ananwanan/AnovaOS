@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #![no_std]
 #![no_main]
-//! Run the native shell and small multicall tools with fork/exec/wait, pipes and redirection.
+//! Run the native shell and file/install/durability tools with fork/exec/wait, pipes and redirection.
 //! Keep all parsing, command policy and line assembly in user space, without a libc or allocator.
 use anova_rt::{self as rt, abi::*};
 use core::fmt::{self, Write};
@@ -75,6 +75,46 @@ fn tool(name: &str, argument: &str) -> Result<u32, i64> {
         }
         "rm" => {
             rt::unlink(argument)?;
+            0
+        }
+        "sync" => {
+            rt::sync()?;
+            0
+        }
+        "shutdown" => {
+            rt::shutdown()?;
+            return Err(IO_ERROR);
+        }
+        "cp" | "install" => {
+            let mut parts = argument.split_whitespace();
+            let source = parts.next().ok_or(INVALID_ARGUMENT)?;
+            let destination = parts.next().ok_or(INVALID_ARGUMENT)?;
+            if parts.next().is_some() {
+                return Err(INVALID_ARGUMENT);
+            }
+            let input = rt::open(source, OPEN_READ)?;
+            let result = (|| -> Result<(), i64> {
+                // Exclusive creation prevents self-copy/alias truncation and accidental overwrites.
+                let output = rt::open(destination, OPEN_WRITE | OPEN_CREATE | OPEN_EXCLUSIVE)?;
+                let result = (|| -> Result<(), i64> {
+                    let mut bytes = [0; 4096];
+                    loop {
+                        let n = rt::read(input, &mut bytes)?;
+                        if n == 0 {
+                            break;
+                        }
+                        rt::write_all(output, &bytes[..n])?;
+                    }
+                    if name == "install" {
+                        rt::set_executable(destination)?;
+                    }
+                    rt::fsync(output)
+                })();
+                let close = rt::close(output);
+                result.and(close)
+            })();
+            rt::close(input)?;
+            result?;
             0
         }
         "true" => 0,
@@ -248,7 +288,7 @@ fn run(input: u64, interactive: bool) -> u32 {
                                 previous = 0;
                             }
                             _ => {
-                                rt::write(b"cd pwd ls cat echo mkdir rm true false status exit; | < > >>; /bin apps\n");
+                                rt::write(b"cd pwd ls cat echo mkdir rm cp install edit sync shutdown true false status exit; | < > >>; /bin apps\n");
                                 previous = 0;
                             }
                         }

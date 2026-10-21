@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Host CLI for reproducible kernel/app builds, ISO assembly and QEMU validation.
+//! Host CLI for reproducible builds, ISO/ext2 images, safe disk attachment and QEMU validation.
 mod apps;
 mod assets;
+mod disk;
 mod purposes;
 mod smoke;
 mod terminal;
 
 use std::{
+    boxed::Box,
     env,
     error::Error,
     fs::{self, File},
@@ -135,7 +137,7 @@ fn execute() -> Result<()> {
     env::set_current_dir(&root)?;
     let args: Vec<_> = env::args().skip(1).collect();
     let action = args.first().map_or("help", String::as_str);
-    if action != "smoke" && args.len() > 1 {
+    if !matches!(action, "smoke" | "root-image" | "run") && args.len() > 1 {
         return Err("Unexpected arguments; run cargo xtask help".into());
     }
     match action {
@@ -152,8 +154,26 @@ fn execute() -> Result<()> {
             image(&root, Mode::Normal)?;
             Ok(())
         }
-        "run" => run(&root),
+        "run" => {
+            let disk = if args.len() == 3 && args[1] == "--disk" {
+                Some(disk::user_path(&root, &args[2])?)
+            } else if args.len() == 1 {
+                None
+            } else {
+                return Err("Usage: cargo xtask run [--disk build/disks/NAME.ext2]".into());
+            };
+            run(&root, disk.as_deref())
+        }
+        "root-image" => {
+            if args.len() != 2 {
+                return Err("Usage: cargo xtask root-image build/disks/NAME.ext2".into());
+            }
+            apps::build(&root, false)?;
+            let path = disk::user_path(&root, &args[1])?;
+            disk::create(&root, &path)
+        }
         "terminal-test" => terminal::verify(&root),
+        "persistence-test" => disk::verify(&root),
         "smoke" => {
             let (mode, timeout) = smoke_args(&args[1..])?;
             let failure = smoke(&root, mode, timeout)?;
@@ -222,22 +242,11 @@ fn execute() -> Result<()> {
                 "--lib",
                 "--target-dir",
                 "build/user-host-target",
-            ]))?;
-            command(Command::new("cargo").args([
-                "test",
-                "--locked",
-                "--manifest-path",
-                "user/Cargo.toml",
-                "-p",
-                "editor",
-                "--lib",
-                "--target-dir",
-                "build/user-host-target",
             ]))
         }
         "help" | "--help" | "-h" => {
             println!(
-                "AnovaOS host tools\n\n  cargo xtask doctor\n  cargo xtask fetch\n  cargo xtask build\n  cargo xtask image\n  cargo xtask run\n  cargo xtask smoke [--case CASE] [--timeout-secs 1..300]\n  cargo xtask verify\n  cargo xtask test-host\n  cargo xtask apps\n  cargo xtask check-apps\n  cargo xtask check-files\n  cargo xtask terminal-test\n\nCASE: boot, panic, timeout, invalid-opcode, general-protection, page-fault, double-fault, stack-guard, read-only, no-execute, direct-no-execute, unmapped, oom.\nOutputs stay in build/; run uses a disposable OVMF variable copy. TCG is mandatory."
+                "AnovaOS host tools\n\n  cargo xtask doctor\n  cargo xtask fetch\n  cargo xtask build\n  cargo xtask image\n  cargo xtask run [--disk build/disks/NAME.ext2]\n  cargo xtask smoke [--case CASE] [--timeout-secs 1..300]\n  cargo xtask verify\n  cargo xtask test-host\n  cargo xtask apps\n  cargo xtask check-apps\n  cargo xtask check-files\n  cargo xtask terminal-test\n  cargo xtask root-image build/disks/NAME.ext2\n  cargo xtask persistence-test\n\nCASE: boot, panic, timeout, invalid-opcode, general-protection, page-fault, double-fault, stack-guard, read-only, no-execute, direct-no-execute, unmapped, oom.\nOutputs stay in build/; run uses disposable OVMF variables and a temporary data disk unless --disk is explicit. Use guest shutdown for persistent images. TCG is mandatory."
             );
             Ok(())
         }
@@ -326,6 +335,8 @@ fn doctor(root: &Path) -> Result<()> {
         ("curl", vec!["--version"], None),
         ("dpkg-deb", vec!["--version"], None),
         ("gcc", vec!["--version"], None),
+        ("mke2fs", vec!["-V"], None),
+        ("e2fsck", vec!["-V"], None),
     ] {
         match version(name, &args) {
             Ok(value) if expected.as_ref().is_none_or(|p| value.starts_with(p)) => {
@@ -550,6 +561,16 @@ fn image(root: &Path, mode: Mode) -> Result<PathBuf> {
 }
 
 fn qemu(root: &Path, iso: &Path, vars_dir: &Path, test: bool) -> Result<Command> {
+    qemu_disk(root, iso, vars_dir, test, None, false)
+}
+fn qemu_disk(
+    root: &Path,
+    iso: &Path,
+    vars_dir: &Path,
+    test: bool,
+    disk: Option<&Path>,
+    read_only: bool,
+) -> Result<Command> {
     let lock = assets::lock(root)?;
     let version = version("qemu-system-x86_64", &["--version"])?;
     if !version.starts_with(&format!("QEMU emulator version {} ", lock.qemu)) {
@@ -575,7 +596,6 @@ fn qemu(root: &Path, iso: &Path, vars_dir: &Path, test: bool) -> Result<Command>
         "-nic",
         "none",
         "-no-reboot",
-        "-no-shutdown",
         "-boot",
         "d",
     ]);
@@ -588,16 +608,18 @@ fn qemu(root: &Path, iso: &Path, vars_dir: &Path, test: bool) -> Result<Command>
         vars.display()
     ));
     cmd.arg("-cdrom").arg(iso);
+    disk::attach(root, vars_dir, &mut cmd, disk, read_only)?;
     if test {
         cmd.args(["-device", "isa-debug-exit,iobase=0xf4,iosize=0x04"]);
     }
     Ok(cmd)
 }
 
-fn run(root: &Path) -> Result<()> {
+fn run(root: &Path, disk: Option<&Path>) -> Result<()> {
     let iso = image(root, Mode::Normal)?;
     let vars = Temporary::new(root, "run")?;
-    let result = command(qemu(root, &iso, &vars.0, false)?.args(["-serial", "stdio"]));
+    let result =
+        command(qemu_disk(root, &iso, &vars.0, false, disk, false)?.args(["-serial", "stdio"]));
     vars.cleanup()?;
     result
 }

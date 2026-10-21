@@ -1,387 +1,809 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Strict single-group ext2 direct-block reader and bounded replacement writer.
-//! M7 will add allocation, path traversal and the live mount. Existing data writes
-//! precede inode-size publication and a required device flush; ext2 has no journal.
-use crate::{
-    Error,
-    block::{self, BlockDevice},
-};
+//! Read and update one-group, 4 KiB/128-byte-inode ext2 with direct/single-indirect regular files.
+//! Reject unsupported features and dirty images. Ordered writes fail closed; this is not a journal.
+use crate::{BlockDevice, SECTOR, check_range};
+use alloc::{boxed::Box, vec::Vec};
+use anova_abi::*;
 
-const MAX_DIRECT: usize = 12;
-const MAX_BLOCK: usize = 4096;
-const ROOT_INODE: u32 = 2;
-const FILETYPE: u32 = 2;
-const SPARSE_SUPER: u32 = 1;
-const LARGE_FILE: u32 = 2;
-
-fn le16(bytes: &[u8], offset: usize) -> u16 {
-    u16::from_le_bytes([bytes[offset], bytes[offset + 1]])
+pub const BLOCK: usize = 4096;
+pub const MAX_FILE: usize = 1024 * 1024;
+const REGULAR: u16 = 0x8000;
+const DIRECTORY: u16 = 0x4000;
+fn u16_at(b: &[u8], n: usize) -> u16 {
+    u16::from_le_bytes(b[n..n + 2].try_into().unwrap())
 }
-fn le32(bytes: &[u8], offset: usize) -> u32 {
-    u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap())
+fn u32_at(b: &[u8], n: usize) -> u32 {
+    u32::from_le_bytes(b[n..n + 4].try_into().unwrap())
 }
-
-#[derive(Clone, Copy)]
-struct Inode {
-    offset: u64,
-    size: u32,
-    mode: u16,
-    blocks: [u32; MAX_DIRECT],
+fn put16(b: &mut [u8], n: usize, v: u16) {
+    b[n..n + 2].copy_from_slice(&v.to_le_bytes());
+}
+fn put32(b: &mut [u8], n: usize, v: u32) {
+    b[n..n + 4].copy_from_slice(&v.to_le_bytes());
 }
 
-pub struct Ext2<D> {
-    device: D,
-    block_size: u32,
+#[derive(Clone, Copy, Debug)]
+pub struct Inode {
+    pub number: u32,
+    pub directory: bool,
+    pub size: usize,
+    pub executable: bool,
+    raw: [u8; 128],
+}
+pub struct Entry {
+    pub inode: u32,
+    pub name: [u8; 64],
+    pub length: usize,
+}
+pub struct Ext2 {
+    device: Box<dyn BlockDevice>,
+    superblock: [u8; 1024],
+    group: [u8; 32],
     blocks: u32,
     inodes: u32,
-    inode_size: u16,
-    table_block: u32,
-    first_data: u32,
-    first_ino: u32,
-    filetype: bool,
+    block_bitmap: u32,
+    inode_bitmap: u32,
+    inode_table: u32,
+    data_start: u32,
+    dirty: bool,
+    failed: bool,
+    writes: u64,
 }
+impl Ext2 {
+    pub fn stop_device(&mut self) -> Result<(), i64> {
+        self.device.stop()
+    }
+    fn mutate<T>(&mut self, operation: impl FnOnce(&mut Self) -> Result<T, i64>) -> Result<T, i64> {
+        let before = self.writes;
+        let result = operation(self);
+        // Allocation/read failures after any published write require recovery, never a clean unmount.
+        if result.is_err() && self.writes != before {
+            self.failed = true;
+        }
+        result
+    }
+    pub fn shutdown(&mut self) -> Result<(), i64> {
+        self.mutate(|s| s.shutdown_inner())
+    }
+    pub fn write(&mut self, number: u32, offset: usize, input: &[u8]) -> Result<usize, i64> {
+        self.mutate(|s| s.write_inner(number, offset, input))
+    }
+    pub fn truncate(&mut self, number: u32) -> Result<(), i64> {
+        self.mutate(|s| s.truncate_inner(number))
+    }
+    pub fn set_executable(&mut self, number: u32) -> Result<(), i64> {
+        self.mutate(|s| s.set_executable_inner(number))
+    }
+    pub fn create(&mut self, parent: u32, name: &str, directory: bool) -> Result<u32, i64> {
+        self.mutate(|s| s.create_inner(parent, name, directory))
+    }
+    pub fn unlink(&mut self, parent: u32, name: &str) -> Result<u32, i64> {
+        self.mutate(|s| s.unlink_inner(parent, name))
+    }
+    pub fn release_unlinked(&mut self, number: u32) -> Result<(), i64> {
+        self.mutate(|s| s.release_unlinked_inner(number))
+    }
 
-impl<D: BlockDevice> Ext2<D> {
-    pub fn mount(mut device: D) -> Result<Self, Error> {
-        let mut sb = [0; 1024];
-        block::read_at(&mut device, 1024, &mut sb)?;
-        if le16(&sb, 56) != 0xef53 || le16(&sb, 58) != 1 {
-            return Err(Error::Corrupt);
-        }
-        let inodes = le32(&sb, 0);
-        let blocks = le32(&sb, 4);
-        let first_data = le32(&sb, 20);
-        let log = le32(&sb, 24);
-        if log > 2 || blocks == 0 || inodes < 11 {
-            return Err(Error::Unsupported);
-        }
-        let block_size = 1024u32 << log;
-        if first_data != u32::from(block_size == 1024)
-            || le32(&sb, 32) < blocks - first_data
-            || le32(&sb, 40) < inodes
-            || blocks - first_data > block_size * 8
-            || inodes > block_size * 8
+    pub fn mount(mut device: Box<dyn BlockDevice>) -> Result<Self, i64> {
+        let mut first = buffer()?;
+        read_block(&mut *device, 0, &mut first)?;
+        let s = &first[1024..2048];
+        // Only the exact image profile is writable; even unknown COMPAT bits are rejected.
+        if u16_at(s, 56) != 0xef53
+            || u32_at(s, 24) != 2
+            || u32_at(s, 28) != 2
+            || u32_at(s, 20) != 0
+            || u32_at(s, 76) != 1
+            || u16_at(s, 88) != 128
+            || u32_at(s, 84) != 11
+            || u32_at(s, 72) != 0
+            || u32_at(s, 92) != 0
+            || u32_at(s, 96) != 2
+            || u32_at(s, 100) != 0
+            || u16_at(s, 58) != 1
+            || u32_at(s, 232) != 0
         {
-            return Err(Error::Unsupported);
+            return Err(INVALID_FILESYSTEM);
         }
-        let revision = le32(&sb, 76);
-        if revision > 1 {
-            return Err(Error::Unsupported);
-        }
-        let inode_size = if revision == 0 { 128 } else { le16(&sb, 88) };
-        let first_ino = if revision == 0 { 11 } else { le32(&sb, 84) };
-        if inode_size < 128
-            || !inode_size.is_power_of_two()
-            || u32::from(inode_size) > block_size
-            || first_ino < 11
+        let blocks = u32_at(s, 4);
+        let inodes = u32_at(s, 0);
+        if !(64..=32768).contains(&blocks)
+            || !(16..=4096).contains(&inodes)
+            || u32_at(s, 32) < blocks
+            || u32_at(s, 32) > 32768
+            || u32_at(s, 36) != u32_at(s, 32)
+            || u32_at(s, 40) != inodes
+            || u32_at(s, 12) > blocks
+            || u32_at(s, 16) > inodes
+            || u64::from(blocks) * 8 > device.sectors()
         {
-            return Err(Error::Unsupported);
+            return Err(INVALID_FILESYSTEM);
         }
-        let compat = if revision == 0 { 0 } else { le32(&sb, 92) };
-        let incompat = if revision == 0 { 0 } else { le32(&sb, 96) };
-        let ro = if revision == 0 { 0 } else { le32(&sb, 100) };
-        if compat != 0 || incompat & !FILETYPE != 0 || ro & !(SPARSE_SUPER | LARGE_FILE) != 0 {
-            return Err(Error::Unsupported);
-        }
-        let bytes = u64::from(blocks) * u64::from(block_size);
-        if bytes > device.sectors().checked_mul(512).ok_or(Error::Overflow)? {
-            return Err(Error::OutOfRange);
-        }
-        let descriptor = if block_size == 1024 { 2_u64 } else { 1_u64 } * u64::from(block_size);
-        let mut gd = [0; 32];
-        block::read_at(&mut device, descriptor, &mut gd)?;
-        let bitmap = le32(&gd, 0);
-        let inode_bitmap = le32(&gd, 4);
-        let table_block = le32(&gd, 8);
-        let table_bytes = u64::from(inodes) * u64::from(inode_size);
-        let table_blocks = table_bytes.div_ceil(block_size as u64);
-        if bitmap <= first_data
-            || bitmap >= blocks
-            || inode_bitmap <= first_data
-            || inode_bitmap >= blocks
-            || table_block <= first_data
-            || u64::from(table_block) + table_blocks > u64::from(blocks)
+        let mut superblock = [0; 1024];
+        superblock.copy_from_slice(s);
+        let mut descriptor = buffer()?;
+        read_block(&mut *device, 1, &mut descriptor)?;
+        let mut group = [0; 32];
+        group.copy_from_slice(&descriptor[..32]);
+        let block_bitmap = u32_at(&group, 0);
+        let inode_bitmap = u32_at(&group, 4);
+        let inode_table = u32_at(&group, 8);
+        let data_start = inode_table
+            .checked_add((inodes as usize * 128).div_ceil(BLOCK) as u32)
+            .ok_or(INVALID_FILESYSTEM)?;
+        // Contiguous metadata makes allocation/reservation checks auditable and bounded.
+        if block_bitmap != 2
+            || inode_bitmap != 3
+            || inode_table != 4
+            || data_start >= blocks
+            || u16_at(&group, 12) as u32 != u32_at(&superblock, 12)
+            || u16_at(&group, 14) as u32 != u32_at(&superblock, 16)
         {
-            return Err(Error::Corrupt);
+            return Err(INVALID_FILESYSTEM);
         }
-        let fs = Self {
+        let mut fs = Self {
             device,
-            block_size,
+            superblock,
+            group,
             blocks,
             inodes,
-            inode_size,
-            table_block,
-            first_data,
-            first_ino,
-            filetype: incompat & FILETYPE != 0,
+            block_bitmap,
+            inode_bitmap,
+            inode_table,
+            data_start,
+            dirty: false,
+            failed: false,
+            writes: 0,
         };
-        let mut fs = fs;
-        let root = fs.read_inode(ROOT_INODE)?;
-        if root.mode & 0xf000 != 0x4000 || root.size == 0 {
-            return Err(Error::Corrupt);
-        }
+        fs.validate_allocation()?;
         Ok(fs)
     }
-
-    pub fn into_device(self) -> D {
-        self.device
-    }
-    pub fn block_size(&self) -> u32 {
-        self.block_size
-    }
-    pub fn total_blocks(&self) -> u32 {
-        self.blocks
-    }
-
-    fn block_offset(&self, number: u32) -> Result<u64, Error> {
-        if number <= self.first_data || number >= self.blocks {
-            return Err(Error::Corrupt);
+    fn read_block(&mut self, block: u32, bytes: &mut [u8; BLOCK]) -> Result<(), i64> {
+        if self.failed {
+            return Err(IO_ERROR);
         }
-        Ok(u64::from(number) * u64::from(self.block_size))
+        if block >= self.blocks {
+            return Err(INVALID_FILESYSTEM);
+        }
+        read_block(&mut *self.device, block, bytes)
     }
-
-    fn read_inode(&mut self, number: u32) -> Result<Inode, Error> {
-        if number == 0 || number > self.inodes {
-            return Err(Error::Corrupt);
+    fn write_block(&mut self, block: u32, bytes: &[u8; BLOCK]) -> Result<(), i64> {
+        if self.failed {
+            return Err(IO_ERROR);
         }
-        let offset = u64::from(self.table_block) * u64::from(self.block_size)
-            + u64::from(number - 1) * u64::from(self.inode_size);
-        let mut data = [0; 128];
-        block::read_at(&mut self.device, offset, &mut data)?;
-        let mut blocks = [0; MAX_DIRECT];
-        for (i, value) in blocks.iter_mut().enumerate() {
-            *value = le32(&data, 40 + i * 4);
+        if block >= self.blocks {
+            return Err(INVALID_FILESYSTEM);
         }
-        let extra = [le32(&data, 88), le32(&data, 92), le32(&data, 96)];
-        // No indirect pointers are supported, even when the file fits in direct blocks.
-        if extra.iter().any(|value| *value != 0) || le32(&data, 108) != 0 {
-            return Err(Error::Unsupported);
+        self.writes = self.writes.wrapping_add(1);
+        let result = write_block(&mut *self.device, block, bytes);
+        if result.is_err() {
+            self.failed = true;
+        }
+        result
+    }
+    pub fn sync(&mut self) -> Result<(), i64> {
+        if self.failed {
+            return Err(IO_ERROR);
+        }
+        let result = self.device.flush();
+        if result.is_err() {
+            self.failed = true;
+        }
+        result
+    }
+    fn store_super(&mut self) -> Result<(), i64> {
+        let mut block = buffer()?;
+        self.read_block(0, &mut block)?;
+        block[1024..2048].copy_from_slice(&self.superblock);
+        self.write_block(0, &block)
+    }
+    fn begin(&mut self) -> Result<(), i64> {
+        if self.failed {
+            return Err(IO_ERROR);
+        }
+        if self.device.read_only() {
+            return Err(READ_ONLY);
+        }
+        if !self.dirty {
+            put16(&mut self.superblock, 58, 0);
+            self.store_super()?;
+            self.sync()?;
+            self.dirty = true;
+        }
+        Ok(())
+    }
+    /// Only call after all open orphaned inodes have been released and writers stopped.
+    fn shutdown_inner(&mut self) -> Result<(), i64> {
+        self.sync()?;
+        if self.dirty {
+            put16(&mut self.superblock, 58, 1);
+            self.store_super()?;
+            self.sync()?;
+            self.dirty = false;
+        }
+        Ok(())
+    }
+    fn counters(&mut self, blocks: i32, inodes: i32, directories: i32) -> Result<(), i64> {
+        let b = i64::from(u32_at(&self.superblock, 12)) + i64::from(blocks);
+        let i = i64::from(u32_at(&self.superblock, 16)) + i64::from(inodes);
+        let d = i64::from(u16_at(&self.group, 16)) + i64::from(directories);
+        if !(0..=i64::from(self.blocks)).contains(&b)
+            || !(0..=i64::from(self.inodes)).contains(&i)
+            || !(0..=65535).contains(&d)
+        {
+            return Err(INVALID_FILESYSTEM);
+        }
+        put32(&mut self.superblock, 12, b as u32);
+        put32(&mut self.superblock, 16, i as u32);
+        put16(&mut self.group, 12, b as u16);
+        put16(&mut self.group, 14, i as u16);
+        put16(&mut self.group, 16, d as u16);
+        let mut block = buffer()?;
+        self.read_block(1, &mut block)?;
+        block[..32].copy_from_slice(&self.group);
+        self.write_block(1, &block)?;
+        self.store_super()
+    }
+    fn allocated(&mut self, inode: u32) -> Result<bool, i64> {
+        if inode == 0 || inode > self.inodes {
+            return Err(INVALID_FILESYSTEM);
+        }
+        let mut bits = buffer()?;
+        self.read_block(self.inode_bitmap, &mut bits)?;
+        Ok(bit(&*bits, inode - 1))
+    }
+    pub fn inode(&mut self, number: u32) -> Result<Inode, i64> {
+        if !self.allocated(number)? {
+            return Err(INVALID_FILESYSTEM);
+        }
+        let offset = (number as usize - 1) * 128;
+        let mut block = buffer()?;
+        self.read_block(self.inode_table + (offset / BLOCK) as u32, &mut block)?;
+        let mut raw = [0; 128];
+        raw.copy_from_slice(&block[offset % BLOCK..offset % BLOCK + 128]);
+        let mode = u16_at(&raw, 0);
+        let directory = mode & 0xf000 == DIRECTORY;
+        let size = u32_at(&raw, 4) as usize;
+        if (!directory && mode & 0xf000 != REGULAR)
+            || u32_at(&raw, 32) != 0
+            || u32_at(&raw, 104) != 0
+            || u32_at(&raw, 108) != 0
+            || u32_at(&raw, 112) != 0
+            || size > if directory { 12 * BLOCK } else { MAX_FILE }
+            || directory && (size == 0 || !size.is_multiple_of(BLOCK))
+            || u32_at(&raw, 92) != 0
+            || u32_at(&raw, 96) != 0
+        {
+            return Err(INVALID_FILESYSTEM);
         }
         Ok(Inode {
-            offset,
-            size: le32(&data, 4),
-            mode: le16(&data, 0),
-            blocks,
+            number,
+            directory,
+            size,
+            executable: mode & 0o111 != 0,
+            raw,
         })
     }
-
-    fn read_inode_file(&mut self, inode: &Inode, output: &mut [u8]) -> Result<usize, Error> {
-        let length = inode.size as usize;
-        if length > MAX_DIRECT * self.block_size as usize {
-            return Err(Error::Unsupported);
+    fn store_inode(&mut self, inode: &Inode) -> Result<(), i64> {
+        let offset = (inode.number as usize - 1) * 128;
+        let address = self.inode_table + (offset / BLOCK) as u32;
+        let mut block = buffer()?;
+        self.read_block(address, &mut block)?;
+        block[offset % BLOCK..offset % BLOCK + 128].copy_from_slice(&inode.raw);
+        self.write_block(address, &block)
+    }
+    fn data_pointer(&mut self, inode: &Inode, index: usize) -> Result<u32, i64> {
+        let pointer = if index < 12 {
+            u32_at(&inode.raw, 40 + index * 4)
+        } else {
+            if index >= 12 + BLOCK / 4 {
+                return Err(NO_SPACE);
+            }
+            let indirect = u32_at(&inode.raw, 88);
+            if indirect == 0 {
+                return Ok(0);
+            }
+            self.check_data(indirect)?;
+            let mut table = buffer()?;
+            self.read_block(indirect, &mut table)?;
+            u32_at(&*table, (index - 12) * 4)
+        };
+        if pointer != 0 {
+            self.check_data(pointer)?;
         }
-        if output.len() < length {
-            return Err(Error::TooLarge);
+        Ok(pointer)
+    }
+    fn check_data(&self, block: u32) -> Result<(), i64> {
+        if block < self.data_start || block >= self.blocks {
+            Err(INVALID_FILESYSTEM)
+        } else {
+            Ok(())
         }
-        let mut written = 0;
-        for number in inode.blocks.iter().copied() {
-            if written >= length {
+    }
+    pub fn read(&mut self, number: u32, offset: usize, output: &mut [u8]) -> Result<usize, i64> {
+        let inode = self.inode(number)?;
+        if inode.directory {
+            return Err(IS_DIRECTORY);
+        }
+        let n = output.len().min(inode.size.saturating_sub(offset));
+        let mut done = 0;
+        while done < n {
+            let position = offset + done;
+            let take = (BLOCK - position % BLOCK).min(n - done);
+            let block = self.data_pointer(&inode, position / BLOCK)?;
+            if block == 0 {
+                output[done..done + take].fill(0);
+            } else {
+                let mut bytes = buffer()?;
+                self.read_block(block, &mut bytes)?;
+                output[done..done + take]
+                    .copy_from_slice(&bytes[position % BLOCK..position % BLOCK + take]);
+            }
+            done += take;
+        }
+        Ok(n)
+    }
+    pub fn entries(&mut self, number: u32) -> Result<Vec<Entry>, i64> {
+        let inode = self.inode(number)?;
+        if !inode.directory {
+            return Err(NOT_DIRECTORY);
+        }
+        let mut entries = Vec::new();
+        for index in 0..inode.size / BLOCK {
+            let block = self.data_pointer(&inode, index)?;
+            if block == 0 {
+                return Err(INVALID_FILESYSTEM);
+            }
+            let mut bytes = buffer()?;
+            self.read_block(block, &mut bytes)?;
+            let mut offset = 0;
+            while offset < BLOCK {
+                let (child, length, name_len) = directory_record(&bytes, offset)?;
+                if child != 0 {
+                    let name = &bytes[offset + 8..offset + 8 + name_len];
+                    if child > self.inodes
+                        || name.contains(&0)
+                        || name.contains(&b'/')
+                        || name_len == 0
+                        || core::str::from_utf8(name).is_err()
+                    {
+                        return Err(INVALID_FILESYSTEM);
+                    }
+                    if name != b"." && name != b".." {
+                        if name_len > 63 {
+                            return Err(TOO_LONG);
+                        }
+                        if entries.iter().any(|e: &Entry| &e.name[..e.length] == name) {
+                            return Err(INVALID_FILESYSTEM);
+                        }
+                        entries.try_reserve(1).map_err(|_| NO_MEMORY)?;
+                        let mut label = [0; 64];
+                        label[..name_len].copy_from_slice(name);
+                        entries.push(Entry {
+                            inode: child,
+                            name: label,
+                            length: name_len,
+                        });
+                    }
+                }
+                offset += length;
+            }
+        }
+        Ok(entries)
+    }
+    fn allocate_block(&mut self) -> Result<u32, i64> {
+        let mut bits = buffer()?;
+        self.read_block(self.block_bitmap, &mut bits)?;
+        let number = (self.data_start..self.blocks)
+            .find(|n| !bit(&*bits, *n))
+            .ok_or(NO_SPACE)?;
+        self.begin()?;
+        // Zero before publishing a pointer, including the final block of sparse writes.
+        self.write_block(number, &*buffer()?)?;
+        set_bit(&mut *bits, number, true);
+        self.write_block(self.block_bitmap, &bits)?;
+        self.counters(-1, 0, 0)?;
+        Ok(number)
+    }
+    fn free_block(&mut self, number: u32) -> Result<(), i64> {
+        self.check_data(number)?;
+        let mut bits = buffer()?;
+        self.read_block(self.block_bitmap, &mut bits)?;
+        if !bit(&*bits, number) {
+            return Err(INVALID_FILESYSTEM);
+        }
+        set_bit(&mut *bits, number, false);
+        self.write_block(self.block_bitmap, &bits)?;
+        self.counters(1, 0, 0)
+    }
+    fn write_inner(&mut self, number: u32, offset: usize, input: &[u8]) -> Result<usize, i64> {
+        let mut inode = self.inode(number)?;
+        if inode.directory {
+            return Err(IS_DIRECTORY);
+        }
+        let end = offset
+            .checked_add(input.len())
+            .filter(|n| *n <= MAX_FILE)
+            .ok_or(NO_SPACE)?;
+        if input.is_empty() {
+            return Ok(0);
+        }
+        let mut missing = 0;
+        for index in 0..end.div_ceil(BLOCK) {
+            if self.data_pointer(&inode, index)? == 0 {
+                missing += 1;
+            }
+        }
+        if end > 12 * BLOCK && u32_at(&inode.raw, 88) == 0 {
+            missing += 1;
+        }
+        if missing > u32_at(&self.superblock, 12) {
+            return Err(NO_SPACE);
+        }
+        self.begin()?;
+        // Allocate/zero all holes before publishing length. A failed transfer poisons further I/O.
+        for index in 0..end.div_ceil(BLOCK) {
+            if self.data_pointer(&inode, index)? != 0 {
+                continue;
+            }
+            if index >= 12 && u32_at(&inode.raw, 88) == 0 {
+                let pointer = self.allocate_block()?;
+                put32(&mut inode.raw, 88, pointer);
+                let sectors = u32_at(&inode.raw, 28) + 8;
+                put32(&mut inode.raw, 28, sectors);
+            }
+            let pointer = self.allocate_block()?;
+            if index < 12 {
+                put32(&mut inode.raw, 40 + index * 4, pointer);
+            } else {
+                let mut table = buffer()?;
+                let address = u32_at(&inode.raw, 88);
+                self.read_block(address, &mut table)?;
+                put32(&mut *table, (index - 12) * 4, pointer);
+                self.write_block(address, &table)?;
+            }
+            let sectors = u32_at(&inode.raw, 28) + 8;
+            put32(&mut inode.raw, 28, sectors);
+        }
+        let mut done = 0;
+        while done < input.len() {
+            let pos = offset + done;
+            let n = (BLOCK - pos % BLOCK).min(input.len() - done);
+            let address = self.data_pointer(&inode, pos / BLOCK)?;
+            let mut block = buffer()?;
+            self.read_block(address, &mut block)?;
+            block[pos % BLOCK..pos % BLOCK + n].copy_from_slice(&input[done..done + n]);
+            self.write_block(address, &block)?;
+            done += n;
+        }
+        self.sync()?;
+        inode.size = inode.size.max(end);
+        put32(&mut inode.raw, 4, inode.size as u32);
+        self.store_inode(&inode)?;
+        Ok(done)
+    }
+    fn truncate_inner(&mut self, number: u32) -> Result<(), i64> {
+        let mut inode = self.inode(number)?;
+        if inode.directory {
+            return Err(IS_DIRECTORY);
+        }
+        self.begin()?;
+        let old = inode;
+        inode.size = 0;
+        put32(&mut inode.raw, 4, 0);
+        put32(&mut inode.raw, 28, 0);
+        inode.raw[40..100].fill(0);
+        self.store_inode(&inode)?;
+        self.sync()?;
+        for index in 0..old.size.div_ceil(BLOCK) {
+            let block = self.data_pointer(&old, index)?;
+            if block != 0 {
+                self.free_block(block)?;
+            }
+        }
+        let table = u32_at(&old.raw, 88);
+        if table != 0 {
+            self.free_block(table)?;
+        }
+        Ok(())
+    }
+    fn set_executable_inner(&mut self, number: u32) -> Result<(), i64> {
+        let mut inode = self.inode(number)?;
+        if inode.directory {
+            return Err(IS_DIRECTORY);
+        }
+        self.begin()?;
+        let mode = u16_at(&inode.raw, 0) | 0o111;
+        put16(&mut inode.raw, 0, mode);
+        self.store_inode(&inode)
+    }
+    fn create_inner(&mut self, parent: u32, name: &str, directory: bool) -> Result<u32, i64> {
+        if name.is_empty()
+            || name.len() > 63
+            || name == "."
+            || name == ".."
+            || name.contains(['/', '\0'])
+        {
+            return Err(INVALID_ARGUMENT);
+        }
+        if self
+            .entries(parent)?
+            .iter()
+            .any(|e| &e.name[..e.length] == name.as_bytes())
+        {
+            return Err(ALREADY_EXISTS);
+        }
+        // Find space before allocating an inode; bounded directories do not grow in M7.
+        let parent_inode = self.inode(parent)?;
+        let needed = (8 + name.len()).next_multiple_of(4);
+        let mut slot = None;
+        for index in 0..parent_inode.size / BLOCK {
+            let address = self.data_pointer(&parent_inode, index)?;
+            let mut block = buffer()?;
+            self.read_block(address, &mut block)?;
+            let mut at = 0;
+            while at < BLOCK {
+                let (child, len, n) = directory_record(&block, at)?;
+                let used = if child == 0 {
+                    0
+                } else {
+                    (8 + n).next_multiple_of(4)
+                };
+                if len - used >= needed {
+                    slot = Some((address, at, used, len));
+                    break;
+                }
+                at += len;
+            }
+            if slot.is_some() {
                 break;
             }
-            let n = (length - written).min(self.block_size as usize);
-            if number == 0 {
-                output[written..written + n].fill(0);
+        }
+        let (address, at, used, len) = slot.ok_or(NO_SPACE)?;
+        if directory && u32_at(&self.superblock, 12) == 0 {
+            return Err(NO_SPACE);
+        }
+        let mut bitmap = buffer()?;
+        self.read_block(self.inode_bitmap, &mut bitmap)?;
+        let number = (11..=self.inodes)
+            .find(|n| !bit(&*bitmap, *n - 1))
+            .ok_or(NO_SPACE)?;
+        self.begin()?;
+        let mut inode = Inode {
+            number,
+            directory,
+            size: 0,
+            executable: false,
+            raw: [0; 128],
+        };
+        put16(
+            &mut inode.raw,
+            0,
+            if directory {
+                DIRECTORY | 0o755
             } else {
-                let offset = self.block_offset(number)?;
-                block::read_at(&mut self.device, offset, &mut output[written..written + n])?;
-            }
-            written += n;
+                REGULAR | 0o644
+            },
+        );
+        put16(&mut inode.raw, 26, if directory { 2 } else { 1 });
+        if directory {
+            let data = self.allocate_block()?;
+            let mut block = buffer()?;
+            record(&mut block, 0, 12, number, ".", 2);
+            record(&mut block, 12, BLOCK - 12, parent, "..", 2);
+            self.write_block(data, &block)?;
+            inode.size = BLOCK;
+            put32(&mut inode.raw, 4, BLOCK as u32);
+            put32(&mut inode.raw, 28, 8);
+            put32(&mut inode.raw, 40, data);
         }
-        if written != length {
-            return Err(Error::Corrupt);
+        self.store_inode(&inode)?;
+        set_bit(&mut *bitmap, number - 1, true);
+        self.write_block(self.inode_bitmap, &bitmap)?;
+        self.counters(0, -1, i32::from(directory))?;
+        if directory {
+            let mut p = parent_inode;
+            let links = u16_at(&p.raw, 26).checked_add(1).ok_or(NO_SPACE)?;
+            put16(&mut p.raw, 26, links);
+            self.store_inode(&p)?;
         }
-        Ok(written)
+        self.sync()?;
+        let mut block = buffer()?;
+        self.read_block(address, &mut block)?;
+        if used != 0 {
+            put16(&mut *block, at + 4, used as u16);
+        }
+        record(
+            &mut block,
+            at + used,
+            len - used,
+            number,
+            name,
+            if directory { 2 } else { 1 },
+        );
+        self.write_block(address, &block)?;
+        Ok(number)
     }
-
-    /// Resolve only immediate root entries, excluding symlinks and directory traversal.
-    pub fn lookup_root(&mut self, name: &str) -> Result<u32, Error> {
-        if name.is_empty() || name.len() > 63 || name.contains(['/', '\0']) {
-            return Err(Error::Unsupported);
+    fn unlink_inner(&mut self, parent: u32, name: &str) -> Result<u32, i64> {
+        let p = self.inode(parent)?;
+        for index in 0..p.size / BLOCK {
+            let address = self.data_pointer(&p, index)?;
+            let mut block = buffer()?;
+            self.read_block(address, &mut block)?;
+            let mut at = 0;
+            while at < BLOCK {
+                let (child, length, n) = directory_record(&block, at)?;
+                if child != 0 && &block[at + 8..at + 8 + n] == name.as_bytes() {
+                    let mut inode = self.inode(child)?;
+                    if inode.directory {
+                        return Err(IS_DIRECTORY);
+                    }
+                    self.begin()?;
+                    put32(&mut *block, at, 0);
+                    self.write_block(address, &block)?;
+                    self.sync()?;
+                    put16(&mut inode.raw, 26, 0);
+                    self.store_inode(&inode)?;
+                    return Ok(child);
+                }
+                at += length;
+            }
         }
-        let root = self.read_inode(ROOT_INODE)?;
-        let mut data = [0; MAX_DIRECT * MAX_BLOCK];
-        let len = self.read_inode_file(&root, &mut data)?;
-        let mut offset = 0;
-        while offset < len {
-            if len - offset < 8 {
-                return Err(Error::Corrupt);
-            }
-            let ino = le32(&data, offset);
-            let rec = le16(&data, offset + 4) as usize;
-            let count = if self.filetype {
-                data[offset + 6] as usize
-            } else {
-                le16(&data, offset + 6) as usize
-            };
-            if rec < 8 || !rec.is_multiple_of(4) || rec > len - offset || count > rec - 8 {
-                return Err(Error::Corrupt);
-            }
-            if count == name.len() && &data[offset + 8..offset + 8 + count] == name.as_bytes() {
-                return if ino == 0 {
-                    Err(Error::NotFound)
-                } else {
-                    Ok(ino)
-                };
-            }
-            offset += rec;
-        }
-        Err(Error::NotFound)
+        Err(NOT_FOUND)
     }
-
-    pub fn read_file(&mut self, name: &str, output: &mut [u8]) -> Result<usize, Error> {
-        let number = self.lookup_root(name)?;
-        let inode = self.read_inode(number)?;
-        if inode.mode & 0xf000 != 0x8000 {
-            return Err(Error::NotFile);
+    fn release_unlinked_inner(&mut self, number: u32) -> Result<(), i64> {
+        let mut inode = self.inode(number)?;
+        if u16_at(&inode.raw, 26) != 0 {
+            return Err(INVALID_ARGUMENT);
         }
-        self.read_inode_file(&inode, output)
+        self.truncate(number)?;
+        self.sync()?;
+        inode.raw.fill(0);
+        self.store_inode(&inode)?;
+        let mut bitmap = buffer()?;
+        self.read_block(self.inode_bitmap, &mut bitmap)?;
+        set_bit(&mut *bitmap, number - 1, false);
+        self.write_block(self.inode_bitmap, &bitmap)?;
+        self.counters(0, 1, 0)
     }
-
-    /// Replace an existing regular file inside already allocated direct blocks.
-    /// Refuse growth needing new blocks; keep ext2 bitmap and inode allocation unchanged.
-    pub fn overwrite(&mut self, name: &str, input: &[u8]) -> Result<(), Error> {
-        let number = self.lookup_root(name)?;
-        if number < self.first_ino {
-            return Err(Error::Unsupported);
+    fn validate_allocation(&mut self) -> Result<(), i64> {
+        let mut blocks = buffer()?;
+        let mut inodes = buffer()?;
+        self.read_block(self.block_bitmap, &mut blocks)?;
+        self.read_block(self.inode_bitmap, &mut inodes)?;
+        if (0..self.data_start).any(|i| !bit(&*blocks, i))
+            || (0..10).any(|i| !bit(&*inodes, i))
+            || (0..self.blocks).filter(|i| !bit(&*blocks, *i)).count()
+                != u32_at(&self.superblock, 12) as usize
+            || (0..self.inodes).filter(|i| !bit(&*inodes, *i)).count()
+                != u32_at(&self.superblock, 16) as usize
+        {
+            return Err(INVALID_FILESYSTEM);
         }
-        let inode = self.read_inode(number)?;
-        if inode.mode & 0xf000 != 0x8000 {
-            return Err(Error::NotFile);
-        }
-        if input.len() > MAX_DIRECT * self.block_size as usize {
-            return Err(Error::TooLarge);
-        }
-        let needed = input.len().div_ceil(self.block_size as usize);
-        for number in &inode.blocks[..needed] {
-            if *number == 0 {
-                return Err(Error::NoSpace);
+        let mut seen = buffer()?;
+        let mut directories = 0;
+        for number in 2..=self.inodes {
+            if number != 2 && number < 11 || !bit(&*inodes, number - 1) {
+                continue;
             }
-            self.block_offset(*number)?;
+            let inode = self.inode(number)?;
+            if u16_at(&inode.raw, 26) == 0 || !inode.directory && u16_at(&inode.raw, 26) != 1 {
+                return Err(INVALID_FILESYSTEM);
+            }
+            directories += u32::from(inode.directory);
+            let mut used = 0;
+            let mut pointers = Vec::new();
+            pointers
+                .try_reserve_exact(12 + BLOCK / 4)
+                .map_err(|_| NO_MEMORY)?;
+            pointers.resize(12 + BLOCK / 4, 0);
+            for (index, pointer) in pointers[..12].iter_mut().enumerate() {
+                *pointer = u32_at(&inode.raw, 40 + index * 4);
+            }
+            let table = u32_at(&inode.raw, 88);
+            if table != 0 {
+                self.check_data(table)?;
+                if !bit(&*blocks, table) || bit(&*seen, table) {
+                    return Err(INVALID_FILESYSTEM);
+                }
+                set_bit(&mut *seen, table, true);
+                used += 8;
+                let mut bytes = buffer()?;
+                self.read_block(table, &mut bytes)?;
+                for (index, pointer) in pointers[12..].iter_mut().enumerate() {
+                    *pointer = u32_at(&*bytes, index * 4);
+                }
+            }
+            for (index, block) in pointers.into_iter().enumerate() {
+                if block == 0 {
+                    continue;
+                }
+                self.check_data(block)?;
+                // Reject aliases, unallocated blocks and allocations hidden beyond EOF.
+                if index >= inode.size.div_ceil(BLOCK)
+                    || !bit(&*blocks, block)
+                    || bit(&*seen, block)
+                {
+                    return Err(INVALID_FILESYSTEM);
+                }
+                set_bit(&mut *seen, block, true);
+                used += 8;
+            }
+            if used != u32_at(&inode.raw, 28) {
+                return Err(INVALID_FILESYSTEM);
+            }
         }
-        let mut copied = 0;
-        for number in inode.blocks.iter().copied().take(needed) {
-            let take = (input.len() - copied).min(self.block_size as usize);
-            block::write_at(
-                &mut self.device,
-                u64::from(number) * u64::from(self.block_size),
-                &input[copied..copied + take],
-            )?;
-            copied += take;
+        if directories != u16_at(&self.group, 16) as u32 {
+            return Err(INVALID_FILESYSTEM);
         }
-        let size = u32::try_from(input.len()).map_err(|_| Error::TooLarge)?;
-        block::write_at(&mut self.device, inode.offset + 4, &size.to_le_bytes())?;
-        self.device.flush()
+        for block in self.data_start..self.blocks {
+            if bit(&*blocks, block) != bit(&*seen, block) {
+                return Err(INVALID_FILESYSTEM);
+            }
+        }
+        Ok(())
     }
 }
+fn bit(bytes: &[u8], index: u32) -> bool {
+    bytes[index as usize / 8] & (1 << (index % 8)) != 0
+}
+fn set_bit(bytes: &mut [u8], index: u32, on: bool) {
+    let b = &mut bytes[index as usize / 8];
+    let mask = 1 << (index % 8);
+    if on {
+        *b |= mask;
+    } else {
+        *b &= !mask;
+    }
+}
+fn directory_record(block: &[u8; BLOCK], at: usize) -> Result<(u32, usize, usize), i64> {
+    if at > BLOCK - 8 {
+        return Err(INVALID_FILESYSTEM);
+    }
+    let length = u16_at(block, at + 4) as usize;
+    let name = block[at + 6] as usize;
+    if length < 8
+        || !length.is_multiple_of(4)
+        || at + length > BLOCK
+        || name > length - 8
+        || block[at + 7] > 2
+    {
+        return Err(INVALID_FILESYSTEM);
+    }
+    Ok((u32_at(block, at), length, name))
+}
+fn record(block: &mut [u8; BLOCK], at: usize, length: usize, inode: u32, name: &str, kind: u8) {
+    block[at..at + length].fill(0);
+    put32(block, at, inode);
+    put16(block, at + 4, length as u16);
+    block[at + 6] = name.len() as u8;
+    block[at + 7] = kind;
+    block[at + 8..at + 8 + name.len()].copy_from_slice(name.as_bytes());
+}
+fn read_block(
+    device: &mut dyn BlockDevice,
+    block: u32,
+    bytes: &mut [u8; BLOCK],
+) -> Result<(), i64> {
+    let sector = u64::from(block) * 8;
+    check_range(device.sectors(), sector, BLOCK)?;
+    for (n, part) in bytes.chunks_exact_mut(SECTOR).enumerate() {
+        device.read_sector(sector + n as u64, part.try_into().unwrap())?;
+    }
+    Ok(())
+}
+fn write_block(device: &mut dyn BlockDevice, block: u32, bytes: &[u8; BLOCK]) -> Result<(), i64> {
+    let sector = u64::from(block) * 8;
+    check_range(device.sectors(), sector, BLOCK)?;
+    for (n, part) in bytes.chunks_exact(SECTOR).enumerate() {
+        device.write_sector(sector + n as u64, part.try_into().unwrap())?;
+    }
+    Ok(())
+}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    extern crate std;
-    use std::vec;
-
-    struct Image(std::vec::Vec<u8>);
-    impl BlockDevice for Image {
-        fn sectors(&self) -> u64 {
-            (self.0.len() / 512) as u64
-        }
-        fn read_sector(&mut self, lba: u64, bytes: &mut [u8; 512]) -> Result<(), Error> {
-            block::check(self.sectors(), lba, 1)?;
-            let n = lba as usize * 512;
-            bytes.copy_from_slice(&self.0[n..n + 512]);
-            Ok(())
-        }
-        fn write_sector(&mut self, lba: u64, bytes: &[u8; 512]) -> Result<(), Error> {
-            block::check(self.sectors(), lba, 1)?;
-            let n = lba as usize * 512;
-            self.0[n..n + 512].copy_from_slice(bytes);
-            Ok(())
-        }
-        fn flush(&mut self) -> Result<(), Error> {
-            Ok(())
-        }
-    }
-    fn set16(out: &mut [u8], at: usize, value: u16) {
-        out[at..at + 2].copy_from_slice(&value.to_le_bytes());
-    }
-    fn set32(out: &mut [u8], at: usize, value: u32) {
-        out[at..at + 4].copy_from_slice(&value.to_le_bytes());
-    }
-    fn fixture() -> Image {
-        let mut bytes = vec![0u8; 32 * 4096];
-        let sb = 1024;
-        set32(&mut bytes, sb, 16); // inodes
-        set32(&mut bytes, sb + 4, 32); // filesystem blocks
-        set32(&mut bytes, sb + 20, 0);
-        set32(&mut bytes, sb + 24, 2);
-        set32(&mut bytes, sb + 32, 32);
-        set32(&mut bytes, sb + 40, 16);
-        set16(&mut bytes, sb + 56, 0xef53);
-        set16(&mut bytes, sb + 58, 1);
-        set32(&mut bytes, sb + 76, 1);
-        set32(&mut bytes, sb + 84, 11);
-        set16(&mut bytes, sb + 88, 128);
-        set32(&mut bytes, sb + 96, FILETYPE);
-        set32(&mut bytes, 4096, 3);
-        set32(&mut bytes, 4100, 4);
-        set32(&mut bytes, 4104, 5);
-        let root = 5 * 4096 + 128;
-        set16(&mut bytes, root, 0x41ed);
-        set32(&mut bytes, root + 4, 4096);
-        set32(&mut bytes, root + 40, 9);
-        let file = 5 * 4096 + 11 * 128;
-        set16(&mut bytes, file, 0x81a4);
-        set32(&mut bytes, file + 4, 5);
-        set32(&mut bytes, file + 40, 10);
-        let dir = 9 * 4096;
-        set32(&mut bytes, dir, 2);
-        set16(&mut bytes, dir + 4, 12);
-        bytes[dir + 6] = 1;
-        bytes[dir + 8] = b'.';
-        set32(&mut bytes, dir + 12, 2);
-        set16(&mut bytes, dir + 16, 12);
-        bytes[dir + 18] = 2;
-        bytes[dir + 20..dir + 22].copy_from_slice(b"..");
-        set32(&mut bytes, dir + 24, 12);
-        set16(&mut bytes, dir + 28, 4096 - 24);
-        bytes[dir + 30] = 4;
-        bytes[dir + 32..dir + 36].copy_from_slice(b"note");
-        bytes[10 * 4096..10 * 4096 + 5].copy_from_slice(b"hello");
-        Image(bytes)
-    }
-
-    #[test]
-    fn reads_and_overwrites_an_existing_file_with_flush() {
-        let mut fs = Ext2::mount(fixture()).unwrap();
-        assert_eq!(fs.block_size(), 4096);
-        let mut out = [0; 24];
-        assert_eq!(fs.read_file("note", &mut out).unwrap(), 5);
-        assert_eq!(&out[..5], b"hello");
-        fs.overwrite("note", b"persisted").unwrap();
-        let device = fs.into_device();
-        let mut after = Ext2::mount(device).unwrap();
-        assert_eq!(after.read_file("note", &mut out).unwrap(), 9);
-        assert_eq!(&out[..9], b"persisted");
-        assert_eq!(after.overwrite("missing", b"x"), Err(Error::NotFound));
-    }
-
-    #[test]
-    fn reject_unknown_features_and_corrupt_directory_records() {
-        let mut image = fixture();
-        set32(&mut image.0, 1024 + 96, 0x80);
-        assert!(matches!(Ext2::mount(image), Err(Error::Unsupported)));
-        let mut image = fixture();
-        set16(&mut image.0, 9 * 4096 + 4, 0);
-        let mut fs = Ext2::mount(image).unwrap();
-        assert_eq!(fs.lookup_root("note"), Err(Error::Corrupt));
-    }
-
-    #[test]
-    fn reject_out_of_bounds_device_and_unsupported_growth() {
-        let mut image = fixture();
-        image.0.truncate(4096);
-        assert!(matches!(Ext2::mount(image), Err(Error::OutOfRange)));
-        let mut fs = Ext2::mount(fixture()).unwrap();
-        assert_eq!(fs.overwrite("note", &[b'X'; 4097]), Err(Error::NoSpace));
-    }
+fn buffer() -> Result<Box<[u8; BLOCK]>, i64> {
+    let mut bytes = Vec::new();
+    bytes.try_reserve_exact(BLOCK).map_err(|_| NO_MEMORY)?;
+    bytes.resize(BLOCK, 0);
+    bytes.into_boxed_slice().try_into().map_err(|_| NO_MEMORY)
 }

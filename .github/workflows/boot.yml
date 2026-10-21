@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Gate file-purpose coverage, native processes/VFS/shell and complete QEMU/terminal regressions.
+# Gate file-purpose coverage, native processes/storage/editor and complete QEMU/terminal regressions.
 name: Bare-metal boot
 
 on:
@@ -21,7 +21,7 @@ jobs:
       - name: Install host utilities
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends qemu-system-x86 xorriso curl dpkg-dev gcc
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 xorriso curl dpkg-dev gcc e2fsprogs
       - name: Load the pinned Rust toolchain
         run: rustup show active-toolchain
       - name: Check formatting
@@ -53,6 +53,8 @@ jobs:
         run: cargo xtask verify
       - name: Verify real serial input and volatile tmpfs across boots
         run: cargo xtask terminal-test
+      - name: Verify persistent sources, binaries, clean shutdown and device failures
+        run: cargo xtask persistence-test
       - name: Upload boot evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

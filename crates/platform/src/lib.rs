@@ -3,6 +3,7 @@
 //! Hardware-independent address types and bounded ACPI decoding.
 
 pub mod acpi;
+pub mod power;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PhysAddr(pub u64);

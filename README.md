@@ -7,16 +7,12 @@ An x86_64 operating system built from scratch in Rust. The goal is to edit,
 compile, debug, and run applications inside AnovaOS itself, while gradually
 supporting selected existing Linux software.
 
-**Current status: M0–M6 are locally verified on QEMU q35/TCG. Native processes
-have private memory, saved CPU/FPU state, preemption and blocking. A read-only
-initramfs, tmpfs/devfs, shared open descriptions, pipes, PID 1 init and an
-interactive native shell now work. `/tmp` is lost on reboot. Linux compatibility
-and persistent disks remain pending; external device IRQs stay masked.**
-
-**M7 is in development, not accepted:** the feature branch adds a bounded native
-`ed` line editor and initial checked block/ext2/virtio policy. No live block
-driver or persisted VFS mount exists yet. See [M7 scope](docs/M7_STORAGE.md)
-and [unverified evidence](docs/validation/M7.md).
+**Current status: M0–M7 are locally verified on QEMU q35/TCG. Native processes,
+VFS, pipes, init and a serial shell now include modern virtio-blk, a checked
+ext2 data volume at `/persist`, a text editor, sync/fsync and clean ACPI shutdown.
+Sources and native binaries survive a verified shutdown/reboot with the same
+explicit persistent image. Plain `run` uses a disposable disk; `/tmp` stays
+volatile. Linux compatibility remains pending and device IRQs stay masked.**
 
 Repository: [ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS).
 
@@ -89,6 +85,8 @@ development language and formatting guide is in English.
 | [docs/validation/M5.md](docs/validation/M5.md) | Actual multiprocess, CPU/FPU, OOM and reclamation evidence |
 | [docs/M6_FILESYSTEM.md](docs/M6_FILESYSTEM.md) | VFS, descriptor/pipe ownership, serial terminal, init and native shell |
 | [docs/validation/M6.md](docs/validation/M6.md) | Actual file, shell, pipe, terminal and volatile-reboot validation |
+| [docs/M7_STORAGE.md](docs/M7_STORAGE.md) | PCI/virtio ownership, ext2 profile, durability, disk images and source editor |
+| [docs/validation/M7.md](docs/validation/M7.md) | Shutdown/reboot, source/binary integrity, device errors and regression evidence |
 | [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) | Mandatory owner requirements, including file-purpose explanations |
 | [docs/FILE_PURPOSES.md](docs/FILE_PURPOSES.md) | Purpose of every repository file |
 | [docs/STATUS.md](docs/STATUS.md) | Current implementation status and next steps |
@@ -142,7 +140,7 @@ native Rust `std` port have separate milestones.
 
 ## Build and boot
 
-Use x86_64 Ubuntu 24.04 or WSL2, rustup, QEMU 8.2.2, xorriso, curl, dpkg-deb and GCC.
+Use x86_64 Ubuntu 24.04 or WSL2, rustup, QEMU 8.2.2, xorriso, curl, dpkg-deb, GCC and e2fsprogs.
 The repository selects Rust 1.90.0, rustfmt, Clippy, and the bare-metal target.
 See [development setup](docs/DEVELOPMENT.md) for dependencies and firmware paths.
 
@@ -157,17 +155,19 @@ cargo xtask run         # Run boot workloads, PID 1 init and the interactive nat
 cargo xtask smoke       # CPU/memory/process tests, VFS/pipe/shell/OOM suite AND exit 33
 cargo xtask verify      # 13 cases: boot passes; fault, panic, timeout and OOM fail
 cargo xtask terminal-test # Real serial editing/EOF and two-boot tmpfs-loss validation
+cargo xtask persistence-test # Source/binary reboot integrity, clean FS and I/O failures
+cargo xtask root-image build/disks/work.ext2 # Create a new persistent data image
+cargo xtask run --disk build/disks/work.ext2 # Reuse that image; shutdown cleanly in guest
 ```
 
 These commands now exist in the host `xtask` package. Images, caches, logs, and
-disposable firmware variable copies stay in `build/`. Normal runs attach no data
-disk or network. GitHub Actions is configured to run the same checks; its status
-is reported separately from [local validation](docs/validation/M6.md).
+disposable firmware variable copies stay in `build/`. Normal runs use a temporary data disk and no network. GitHub Actions is configured to run the same checks; its status
+is reported separately from [local validation](docs/validation/M7.md).
 
 ## Next steps
 
-M7 adds persistent storage with virtio-blk, a supported ext2 subset and an
-editable environment. See the [filesystem/shell design](docs/M6_FILESYSTEM.md),
+M8 adds an explicitly separate Linux syscall personality and fixed static CLI
+compatibility tests. The current disk/editor bounds are in [M7 storage](docs/M7_STORAGE.md). See
 [current status](docs/STATUS.md) and [roadmap](ROADMAP.md).
 
 ## License

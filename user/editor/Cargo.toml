@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
-# Build the no_std line editor as a native userspace executable and host-testable text buffer.
+# Builds the bounded native serial line editor without a libc or heap allocator.
 [package]
-name = "editor"
+name = "edit"
 version = "0.1.0"
 edition = "2024"
 license = "Apache-2.0"
