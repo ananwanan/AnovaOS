@@ -87,7 +87,7 @@ impl<D: BlockDevice> Ext2<D> {
         if bytes > device.sectors().checked_mul(512).ok_or(Error::Overflow)? {
             return Err(Error::OutOfRange);
         }
-        let descriptor = u64::from(if block_size == 1024 { 2 } else { 1 }) * u64::from(block_size);
+        let descriptor = if block_size == 1024 { 2_u64 } else { 1_u64 } * u64::from(block_size);
         let mut gd = [0; 32];
         block::read_at(&mut device, descriptor, &mut gd)?;
         let bitmap = le32(&gd, 0);
