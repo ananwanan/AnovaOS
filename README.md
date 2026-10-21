@@ -6,8 +6,9 @@ An x86_64 operating system built from scratch in Rust. The goal is to edit,
 compile, debug, and run applications inside AnovaOS itself, while gradually
 supporting selected existing Linux software.
 
-**Current status: project planning and development conventions only. No kernel,
-bootable image, or software compatibility has been implemented or verified.**
+**Current status: M0/M1 implemented and locally verified. A bare-metal Rust kernel
+boots through OVMF/Limine in QEMU TCG, reports boot data over COM1, and passes
+success/panic/timeout validation. User space and Linux compatibility are pending.**
 
 Repository: [ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS).
 
@@ -41,7 +42,7 @@ C/C++ or other languages; rewriting mature tools is not a prerequisite.
 | --- | --- | --- |
 | Architecture | x86_64, four-level paging, initially one CPU | No initial 32-bit or x32 ABI support |
 | Boot | UEFI + Limine, ELF kernel | Secure Boot signing comes later |
-| Kernel | Modular monolithic kernel, Rust `no_std` + `alloc` | Initially `panic=abort`; minimal necessary assembly |
+| Kernel | Modular monolithic kernel, Rust `no_std`; `alloc` after M3 | `panic=abort`; minimal necessary assembly |
 | Compilation target | `x86_64-unknown-none` for the kernel | Separate targets and linker configuration for user applications |
 | Reference platform | QEMU q35, OVMF, serial output, modern virtio PCI | TCG must work; KVM is optional |
 | User space | ELF64, System V AMD64 function calling convention | Document native and Linux ABIs separately |
@@ -66,9 +67,10 @@ development language and formatting guide is in English.
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Kernel, application, ABI, driver, and directory boundaries |
 | [COMPATIBILITY.md](COMPATIBILITY.md) | Software compatibility strategy, ABI requirements, and validation matrix |
 | [docs/TOOLCHAINS.md](docs/TOOLCHAINS.md) | GCC/G++/Rust from cross-compilation to development inside AnovaOS |
-| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Host environment, planned commands, validation, and version records |
+| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Host setup, implemented commands, outputs, and failure handling |
 | [docs/CODING_STYLE.md](docs/CODING_STYLE.md) | English development conventions and Rust formatting |
-| [docs/FIRST_TASK.md](docs/FIRST_TASK.md) | First implementation tasks for Codex |
+| [docs/FIRST_TASK.md](docs/FIRST_TASK.md) | Ordered M0/M1 implementation steps and completion criteria |
+| [docs/validation/M0-M1.md](docs/validation/M0-M1.md) | Actual local build and boot validation evidence |
 | [docs/STATUS.md](docs/STATUS.md) | Current implementation status and next steps |
 | [docs/GITHUB_SETUP.md](docs/GITHUB_SETUP.md) | Cloning, documentation maintenance, and contribution conventions |
 | [docs/LICENSING.md](docs/LICENSING.md) | Apache-2.0 usage and third-party licensing boundaries |
@@ -84,15 +86,13 @@ and existing Chinese planning documents as described in the
 
 Rust formatting is defined in [rustfmt.toml](rustfmt.toml): four spaces, a
 preferred width of 100 columns, LF line endings, Rust 2024 parser/style editions,
-and stable rustfmt options. Once a Cargo workspace exists, format and check it
-from the repository root:
+and stable rustfmt options. Format and check the workspace from the repository root:
 
 ```sh
 cargo fmt --all
 cargo fmt --all -- --check
 ```
 
-These commands require a real `Cargo.toml`; the repository does not have one yet.
 Keep this English README and [README.zh-CN.md](README.zh-CN.md) synchronized when
 shared project information changes.
 
@@ -115,14 +115,32 @@ The Linux compatibility layer may initially provide the environment for these
 tools; they still run on the AnovaOS kernel. An AnovaOS-specific target and a
 native Rust `std` port have separate milestones.
 
+## Build and boot
+
+Use x86_64 Ubuntu 24.04 or WSL2, rustup, QEMU 8.2.2, xorriso, curl, and dpkg-deb.
+The repository selects Rust 1.90.0, rustfmt, Clippy, and the bare-metal target.
+See [development setup](docs/DEVELOPMENT.md) for dependencies and firmware paths.
+
+```sh
+cargo xtask fetch       # Download and verify pinned Limine/OVMF inputs
+cargo xtask doctor      # Report all missing or mismatched prerequisites
+cargo xtask build       # Build and inspect the bare-metal kernel ELF
+cargo xtask image       # Build build/images/anova-normal.iso
+cargo xtask run         # Serial console; the normal kernel stays idle
+cargo xtask smoke       # Ordered boot markers AND QEMU exit 33 are required
+cargo xtask verify      # Boot passes; controlled panic and timeout are rejected
+```
+
+These commands now exist in the host `xtask` package. Images, caches, logs, and
+disposable firmware variable copies stay in `build/`. Normal runs attach no data
+disk or network. GitHub Actions is configured to run the same checks; its status
+is reported separately from [local validation](docs/validation/M0-M1.md).
+
 ## Next steps
 
-Start with the [first implementation tasks](docs/FIRST_TASK.md) for M0 and M1:
-project scaffolding, a pinned toolchain, QEMU boot, serial logging, and smoke
-tests that reliably detect failure.
-
-The documented `cargo xtask ...` interfaces are planned and have not been
-implemented. There is currently no `Cargo.toml` or CI workflow.
+M2 adds GDT/TSS/IDT, diagnostic exceptions, and a timer interrupt. Memory
+allocation, user applications, filesystems, and compiler ports retain their
+[roadmap dependencies](ROADMAP.md).
 
 ## License
 

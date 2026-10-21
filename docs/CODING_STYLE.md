@@ -55,7 +55,7 @@ Use that toolchain for local formatting and future CI; do not select a floating
 nightly just to change layout. Rustfmt does not check that comments are in
 English; language and safety explanations require review.
 
-### Once the Cargo workspace exists
+### Workspace formatting
 
 Run from the repository root with the pinned toolchain:
 
@@ -67,24 +67,10 @@ cargo fmt --all
 cargo fmt --all -- --check
 ```
 
-These are standard Cargo commands, but they require a real `Cargo.toml`. The
-repository currently has no workspace, so they are not yet runnable here.
+The workspace and pinned toolchain are now present, so these commands run from
+the repository root.
 Clippy, builds, and host/guest tests remain separate checks selected for each
 target; formatting alone does not validate kernel behavior.
-
-### Before the Cargo workspace exists
-
-An installed stable rustfmt with Rust 2024 support can format an existing Rust
-file without a Cargo manifest:
-
-```sh
-rustfmt --config-path rustfmt.toml path/to/file.rs
-rustfmt --check --config-path rustfmt.toml path/to/file.rs
-```
-
-Replace `path/to/file.rs` with a real first-party source file. No Rust source
-files are committed yet; do not create placeholder crates or report a workspace
-format check as passing at this stage.
 
 ### Editor setup
 

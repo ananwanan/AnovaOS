@@ -1,6 +1,6 @@
 # 架构设计
 
-本文描述目标架构，不代表已实现。当前能力见 [STATUS](docs/STATUS.md)。
+本文描述目标架构；仅以下 M0/M1 启动子集已实现，其余部分仍为规划。当前能力见 [STATUS](docs/STATUS.md)。
 
 ## 1. 总体结构
 
@@ -29,6 +29,15 @@ UEFI 固件启动 Limine；Limine 装载内核 ELF 和 initramfs，并按锁定�
 引导器可能已建立页表，接管前不能假定所有映射都由自己拥有。UEFI Boot Services 退出后的可用接口受固件约束；正常内核运行不依赖已经结束的固件服务。Rust 的 UEFI target 用于 UEFI 程序，内核使用独立裸机 target。
 
 最初平台：q35、OVMF、COM1、现代 virtio PCI block/net/rng。设备按阶段加入；M1 不依赖 virtio。PS/2 可用于模拟器早期输入，不能据此宣称支持实机 USB 键盘。
+
+### 当前 M1 实现
+
+- `kernel/src/boot.rs` 使用 Limine 9.5.0 + `limine = 0.5.0`，显式请求并校验 base revision 3、UEFI64、4 级分页、HHDM、内存图和内核基址；请求由 linker `KEEP` 保留在可写专用段。
+- `kernel/src/serial.rs` 以 115200/8N1 输出 COM1；单 BSP、IRQ 关闭，没有日志锁或分配。panic 独立构造 writer，UART 轮询有次数上限。
+- 所有响应和 memory map 在整个 M1 生命周期内借用，全部内存保留。尚无 allocator，不回收 bootloader-reclaimable 区域，不接管引导器栈或页表；M3 必须先建立显式所有权才能回收。
+- base revision 3 的 RSDP 是物理地址，M1 只检查非零/范围溢出并报告，ACPI 表映射和校验留给 M2；UEFI 地址不要求 legacy 扫描用的 16 字节对齐。framebuffer 只检查元数据，不写显存，缺失时降级；不加载 initramfs。
+- `xtask` 使用宿主 `std`；内核使用独立裸机目标和 linker script。镜像为 UEFI El Torito ISO，仅由固定路径的普通文件生成。默认 q35/TCG、256 MiB、1 vCPU，无网卡和数据盘；变量固件从校验过的模板复制到 `build/tmp/`，代码固件只读。
+- 普通镜像输出 `[BOOT:OK]` 后 `cli; hlt`。测试特性才访问 QEMU `isa-debug-exit`：成功写 `0x10`（宿主 33），panic 写 `0x11`（宿主 35）；测试器同时验证阶段顺序、最终标记和退出状态，并对挂起执行 kill/wait。
 
 ## 3. 目录规划
 

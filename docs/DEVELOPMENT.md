@@ -1,81 +1,112 @@
-# 开发环境与验证约定
+# Development and validation
 
-## 当前可用内容
+M0/M1 provide a real Cargo workspace, host xtask, bare-metal kernel and UEFI ISO.
+Start from dev or its task branch. Read [STATUS.md](STATUS.md) and
+[AGENTS.md](../AGENTS.md); the implemented scope ends at boot and idle.
 
-仓库目前只有 Markdown 规划、git 忽略、文本格式配置与根目录 `rustfmt.toml`。尚无 Cargo workspace、内核、镜像生成器和 CI；本页中的工程命令除明确标明外均为计划接口。
+## Host setup
 
-当前可以阅读文档并将 [FIRST_TASK](FIRST_TASK.md) 交给 Codex 开始 M0/M1。不要运行不存在的脚本，也不要用预设测试输出代替真实结果。
-
-日常开发以 `dev` 为基线，任务分支从 `dev` 创建，Pull Request 以 `dev` 为目标；`main` 接收阶段验收后的稳定快照。克隆时可以显式指定 `--branch dev`，避免工作区停留在旧分支。
-
-## 开发语言与 Rust 格式
-
-默认入口为英文 [README.md](../README.md)，中文翻译保留在 [README.zh-CN.md](../README.zh-CN.md)，共享内容变更时同步维护。代码标识符、注释、Rustdoc、`SAFETY:`/`TODO:` 说明、日志与错误消息、测试名称、提交消息和 PR 标题/描述均使用英文。新开发文档使用英文；现有中文规划文档与明确的翻译/本地化资源保留对应语言。
-
-完整规则见英文 [CODING_STYLE.md](CODING_STYLE.md)。根目录 [rustfmt.toml](../rustfmt.toml) 是统一格式依据：Rust 2024 parser/style edition、4 空格缩进、100 列建议宽度、LF 换行，仅使用稳定版选项。新建自有 Cargo package 声明 `edition = "2024"`。
-
-M0 验证并固定工具链时包含 `rustfmt`、`clippy` 组件。**以下标准命令需要先有真实 Cargo workspace；当前不能运行，也不能据此报告已通过：**
+The tested host is x86_64 Ubuntu 24.04.3. Ubuntu 24.04 under WSL2 can use TCG;
+WSL2 itself was not exercised in this validation environment. Install rustup
+from its official distribution, then install host utilities:
 
 ```sh
-cargo fmt --all
-cargo fmt --all -- --check
+sudo apt-get update
+sudo apt-get install --no-install-recommends qemu-system-x86 xorriso curl dpkg-dev
+rustup show active-toolchain
+cargo xtask fetch
+cargo xtask doctor
 ```
 
-编辑器使用项目工具链的 rustfmt 并读取根配置。配置只能控制布局，英文注释和安全前提需要单独审阅。
+Rustup loads rust-toolchain.toml: stable Rust 1.90.0, rustfmt, Clippy and the
+precompiled x86_64-unknown-none target. QEMU 8.2.2 is checked; Ubuntu package
+suffixes may differ. dpkg-deb comes from dpkg (also installed with dpkg-dev).
+fetch extracts a fixed OVMF package locally, so system OVMF is unnecessary.
+No xtask command uses sudo or runs package installation scripts.
 
-## 宿主环境
+Cargo.lock pins registry packages and checksums. boot/dependencies.toml pins
+Limine 9.5.0 binary commit, protocol reference, OVMF package and boot-file hashes.
+Downloads use HTTPS and are verified before extraction/use. A corrupt cached
+file causes an error; inspect and remove that named cache file before retrying.
 
-首个受测宿主选择 x86_64 Linux；Windows 用户可通过 WSL2 构建并采用 QEMU TCG。KVM 作为可选加速，不能作为 CI 或普通启动的强制前提。后续根据真实验证增加 Windows 原生/macOS 宿主说明。
+Firmware defaults to build/firmware/usr/share/OVMF/. ANOVA_OVMF_CODE and
+ANOVA_OVMF_VARS can select existing regular files; their contents must still
+match the locked CODE/VARS hashes. Explicit paths do not disable verification.
 
-M0 需要核对并记录：Rust/rustup/Cargo、裸机 target、QEMU x86_64、OVMF 固件、Limine 及协议绑定、LLD/LLVM 工具、镜像制作工具、Python 等实际采用组件。镜像方案决定是否需要 xorriso、mtools 等，不一次性添加无用依赖。
+## Implemented commands
 
-在 M0 实际验证之前，不编造 Rust nightly 日期、crate 版本、OVMF 文件路径或 apt 包名组合；发行版路径必须由 doctor 检测或配置。
+Run from the repository root:
 
-## 计划命令契约
-
-由 M0/M1 实现以下命令。实现前不能声称运行成功。
-
-| 命令 | 应完成的工作 | 失败行为 |
+| Command | Output/behavior | Failure behavior |
 | --- | --- | --- |
-| `cargo xtask doctor` | 检查依赖、版本与固件/引导器输入 | 缺失项逐项说明，返回非零 |
-| `cargo xtask build` | 构建内核及需要的自有用户组件 | 编译/链接失败原样传播 |
-| `cargo xtask image` | 由受控输入生成 UEFI 启动镜像 | 输入缺失、校验失败时停止 |
-| `cargo xtask run` | QEMU 启动；默认临时数据盘与固件变量 | 不自动 sudo，不访问真实磁盘 |
-| `cargo xtask smoke` | 无交互启动、标记验证、超时和退出结果解码 | panic/超时/错误退出判为失败 |
-| `cargo xtask test-host` | 运行已存在的纯逻辑宿主测试 | 不把不能运行的内核测试算通过 |
+| `cargo xtask fetch` | Verified build/cache/ and build/firmware/ | Network, extraction or checksum error returns 1 |
+| `cargo xtask doctor` | Checks tools, versions, target and boot inputs | Reports all discovered problems; returns 1 |
+| `cargo xtask build` | target/x86_64-unknown-none/debug/anova-kernel and ELF checks | Build/link/ELF failure returns 1 |
+| `cargo xtask image` | build/images/anova-normal.iso | Missing/corrupt inputs stop image generation |
+| `cargo xtask run` | UEFI boot, serial on stdio, then idle | Process errors propagate; stop QEMU with Ctrl+C |
+| `cargo xtask smoke` | Test ISO and build/logs/boot.* | Missing stages, panic, wrong exit or deadline returns 1 |
+| `cargo xtask smoke --case panic` | Controlled panic and QEMU 35 | Intentionally returns 1 |
+| `cargo xtask smoke --case timeout --timeout-secs 8` | Controlled hang, killed by watchdog | Intentionally returns 1 |
+| `cargo xtask verify` | Boot passes; reached controlled panic and hang are rejected | Any unexpected outcome or unreached injection fails |
+| `cargo xtask test-host` | Host transcript, checksum, ELF and CLI boundary tests | Test failures propagate |
 
-后续按需加入 app 构建、持久化测试、compat 测试、sysroot 和打包子命令；每增加入口先实现再写入使用说明。
+smoke accepts --case boot/panic/timeout and --timeout-secs 1..300; its default is
+30 seconds. verify uses 30/30/8 seconds. Deadlines bound the QEMU process;
+compilation and downloads have their own failure behavior.
 
-## target 隔离
+## Target and image boundaries
 
-- workspace 的宿主工具用宿主 target 构建，不设置一个会污染所有 crate 的裸机默认目标。
-- kernel 的 linker script、code model、panic、CPU features 单独配置。
-- native app 和 Linux 兼容 app 各有独立 target、runtime 与 sysroot，日志打印实际配置。
-- 纯逻辑库在宿主测试；需要硬件/内核语义的用例放 guest 测试。
-- Cargo.lock、构建配方、外部输入清单与校验和提交 git；生成缓存和镜像忽略。
+The alias runs host xtask. No global build.target is configured; default-members
+excludes the kernel from accidental host builds. Kernel build.rs rejects the
+wrong target and selects its own linker script. The bare-metal target defaults
+to soft-float/no SIMD, kernel code model and no red zone; no host libc, allocator
+or std is linked. Future user targets need their own configuration.
 
-## 测试与日志
+The linker retains writable Limine requests between delimiters and separates
+RX/R/RW segments at 0xffffffff80000000. build checks ELF class/endian/machine,
+ET_EXEC, program header bounds, segment ranges/permissions and executable entry;
+PT_INTERP/PT_DYNAMIC and RWX are rejected.
 
-系统测试采用清楚的阶段标记，runner 还必须验证最终状态和退出结果。例如 `[BOOT:OK]` 可以表示完成 M1，但不能用于证明内存隔离或应用开发。标记名在实现中统一，不能用文本替代实际执行。
+The image is a UEFI-only El Torito ISO. There is no BIOS installation or physical
+block-device access. Fixed output paths reject symlinks and device files. QEMU
+uses q35/TCG, qemu64, 256 MiB, one vCPU, no network or data disk. CODE is read-only;
+VARS is copied into a unique build/tmp/ directory and removed on normal process
+completion. The watchdog kills and reaps its guest. This does not test disk
+persistence.
 
-使用测试专用 QEMU 退出设备时，记录宿主观察到的退出码变换；不能简单要求 QEMU 返回 0。测试模式与交互模式分开，正常交互启动不应自动退出。
+## Validation
 
-持久盘验证使用专用用例：启动 → 创建/修改文件 → flush → 正常关机 → 再启动 → 比较内容。默认 snapshot/overlay 适合普通试运行，但不能证明持久化。
+```sh
+cargo fmt --all -- --check
+cargo clippy --locked -p xtask --all-targets -- -D warnings
+cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features qemu-test -- -D warnings
+cargo xtask test-host
+cargo xtask build
+cargo xtask fetch
+cargo xtask doctor
+cargo xtask verify
+```
 
-## 验证记录格式
+Do not use cargo test --workspace for the hardware kernel or enable both fault
+injection features together. The kernel has no host test harness.
 
-每个里程碑在 `docs/validation/` 按实际需要创建记录：
+Success requires ordered stage markers and TEST:PASS plus QEMU 33. isa-debug-exit
+maps guest values as (value << 1) | 1: success 0x10 becomes 33; panic 0x11 becomes
+35. Exit 0 is rejected. Only test features access this device; normal startup
+stays idle. Panic reports phase, source location and message through an
+independent bounded writer without a lock or heap allocation.
 
-- 内核 commit、工作区是否有修改、日期。
-- 宿主 OS、Rust/引导器/QEMU/OVMF 版本、关键依赖锁定值。
-- 启动配置、内存、CPU、vCPU 数、设备、测试盘输入。
-- 实际命令、退出码、关键日志和产物哈希。
-- 成功/失败/未执行的测试与原因，以及支持范围。
+Complete firmware/bootloader transcripts remain in *.serial.log, process
+messages in *.qemu.log, and case/exit/timeout/classification in *.result.txt.
+A banner alone never passes.
 
-不提交密钥、个人目录、真实磁盘内容或大型无关日志。二进制发布产物按发布流程提供，不塞进源码提交。
+## CI and evidence
 
-## CI 引入时机
+[boot.yml](../.github/workflows/boot.yml) runs the above checks on Ubuntu 24.04,
+including all three QEMU cases, and uploads logs even on failure. Actions are
+pinned to commits. Configured CI and remote CI execution are separate facts.
+Local evidence is in [validation/M0-M1.md](validation/M0-M1.md).
 
-文档阶段没有必须运行的 Rust CI。M0/M1 命令可复现后再加格式/构建/适当宿主测试/QEMU 冒烟工作流；有条件依赖时明确区分未运行和通过。
-
-关键检查失败要阻止通过，不能用 `|| true`、虚构成功日志或 `continue-on-error` 规避。没有新改动或新风险时，无需重复扩张验证范围。
+Record source baseline, host/tool versions, input hashes, commands, results and
+artifact hashes for boot changes. Debug paths and ISO timestamps still affect
+artifact bytes. Synchronize both READMEs and current status.

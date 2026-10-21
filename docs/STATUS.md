@@ -1,37 +1,42 @@
-# 当前状态
+# Implementation status
 
-记录日期：2026-10-21。
+Recorded: 2026-10-21 (Asia/Shanghai). Source baseline:
+847f7c66ddef25616c27a088d0c7044c6f9e8c0d on dev.
+Implementation revision: `4919eb38aef2882c0c55d8fe809c10b52f988bdc`.
+See [M0/M1 evidence](validation/M0-M1.md) for actual commands and scope.
 
-## 已完成
+## Implemented and locally verified
 
-- 项目目标、架构边界与模块划分。
-- M0–M15 路线图、依赖关系与验收规则。
-- Linux 软件兼容策略与待验证矩阵。
-- GCC/G++、Rust/Cargo 系统内开发路线。
-- 根目录 AGENTS.md 与第一批 Codex 实施任务。
-- `dev` 开发分支及开发/稳定分支约定。
-- 原创内容采用 Apache-2.0，保留独立的第三方许可边界。
-- 默认英文 README 与独立中文翻译，以及同步维护规则。
-- 英文注释、Rustdoc、开发消息与协作规范；稳定版选项的 `rustfmt.toml`。
+- M0: kernel/host xtask workspace, Rust 1.90.0, Rust 2024, committed Cargo.lock,
+  kernel-only linker script, pinned boot inputs and SHA-256 checks.
+- M1: OVMF/Limine UEFI ISO, x86_64 bare-metal ELF, COM1 logging, required response
+  validation, map/reservation reporting, optional framebuffer metadata and idle.
+- Commands: fetch, doctor, build, image, run, smoke, verify and test-host.
+- Boot stages plus QEMU 33 pass. Controlled panic produces QEMU 35; controlled
+  hang is killed by the watchdog. Standalone negative cases return 1.
+- Formatting, separate host/kernel Clippy and five meaningful host tests pass.
+- Both READMEs, architecture and implementation-order documentation are updated.
+- CI is configured to use these commands; remote execution is tracked separately.
 
-## 尚未实现
-
-| 能力 | 状态 |
+| Capability | Status |
 | --- | --- |
-| Cargo workspace、固定工具链、xtask | 未实现 |
-| UEFI 引导、内核 ELF、串口与镜像 | 未实现 |
-| 中断、分页、堆、用户隔离、调度 | 未实现 |
-| 文件系统、终端、持久盘、网络 | 未实现 |
-| native app、Linux ABI 与现有软件 | 未实现/未验证 |
-| 系统内 GCC/G++、rustc、Cargo | 未实现/未验证 |
-| GUI、多核、实机支持与自举 | 未实现/未验证 |
+| M0 engineering baseline | Locally accepted |
+| M1 UEFI/COM1/QEMU and failure detection | Locally accepted on q35/TCG |
+| M2 CPU exceptions, interrupts and timer | Not implemented |
+| Page allocator, heap, owned page tables | Not implemented; Limine memory retained |
+| User isolation, scheduling, syscalls and apps | Not implemented |
+| Filesystem, terminal, persistent disk and network | Not implemented |
+| Linux ABI and existing software | Not implemented or verified |
+| GCC/G++, rustc/Cargo inside AnovaOS | Not implemented or verified |
+| GUI, SMP, physical hardware and bootstrap | Not implemented or verified |
 
-## 当前验证边界
+Framebuffer metadata is reported without drawing. RSDP is reported as a physical
+address; ACPI mapping/checksums belong to M2. There is no initramfs, module
+execution, allocation or memory reclamation. Normal runs attach no data disk.
 
-当前仍是文档与开发规范准备阶段。本次已检查 Markdown 本地链接、双语 README 的共享入口与命令、TOML 语法和配置选项的稳定性。这些检查不等于 workspace 格式检查、内核构建或启动测试；目前没有 Cargo workspace 或可运行的系统测试命令，未执行 `cargo fmt`、Rust 构建或 QEMU 测试。
+## Next task
 
-## 下一批工作
-
-执行 [FIRST_TASK](FIRST_TASK.md)：M0 工程基线 + M1 UEFI/串口/QEMU 闭环。
-
-完成后把实际 commit、工具版本、命令和结果写入验证记录，再更新本页；不以 TODO 或预期输出代替结果。
+Implement M2: GDT/TSS/IDT, diagnostic CPU exceptions and an isolated double fault
+path, followed by ACPI/APIC and timer interrupts. Keep panic logging usable when
+introducing IRQ contexts. M3 must define ownership and reservation lifetimes
+before reclaiming boot memory.

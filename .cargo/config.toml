@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+[alias]
+xtask = "run --locked --package xtask --"
+
+# Do not set build.target: xtask must use the host's std and linker.
+[target.x86_64-unknown-none]
+rustflags = [
+    "-C", "relocation-model=static",
+    "-C", "code-model=kernel",
+    "-C", "no-redzone=yes",
+]
+
