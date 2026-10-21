@@ -17,7 +17,7 @@ fn syscalls() {
     unsafe {
         assert_eq!(rt::raw(9999, 0, 0, 0), UNSUPPORTED);
         assert_eq!(rt::raw(SYS_WRITE, 1, 0, 0), 0);
-        assert_eq!(rt::raw(SYS_WRITE, 9, 0, 0), INVALID_ARGUMENT);
+        assert_eq!(rt::raw(SYS_WRITE, 9, 0, 0), BAD_DESCRIPTOR);
         for address in [
             0,
             0xffff_ffff_8000_0000,

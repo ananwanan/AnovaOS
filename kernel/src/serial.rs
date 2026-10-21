@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Single-BSP COM1 output. No heap, lock, or firmware calls.
+//! Single-BSP COM1 output and nonblocking byte input; no heap, locks or firmware.
 use core::{
     arch::asm,
     fmt::{self, Write},
@@ -81,4 +81,9 @@ pub fn bytes(bytes: &[u8]) {
 /// interleaved output is preferable to waiting for a lock held by the victim.
 pub fn emergency(args: fmt::Arguments<'_>) {
     let _ = EmergencyWriter.write_fmt(args);
+}
+
+/// Read one available byte without enabling UART IRQs or waiting for hardware.
+pub fn try_read() -> Option<u8> {
+    (in8(COM1 + 5) & 1 != 0).then(|| in8(COM1))
 }

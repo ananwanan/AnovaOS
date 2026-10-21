@@ -121,6 +121,26 @@ See [M4 design](docs/M4_USERSPACE.md), [M4 evidence](docs/validation/M4.md),
 See [M5 design](docs/M5_PROCESSES.md) and [M5 evidence](docs/validation/M5.md).
 The M4 section above records the earlier sequential baseline, superseded by M5.
 
+### Current M6 filesystem and shell implementation
+
+- `anova-vfs` owns boot-only initramfs/tmpfs/devfs mounts, component-wise paths,
+  cwd identities, bounded nodes and shared reference-counted open descriptions.
+  Independent opens have independent offsets; dup/fork/spawn share offsets and
+  exec preserves descriptors/cwd. Unlink retains open data until its final close.
+- Native read/open/seek/dup2/pipe/readdir/mkdir/chdir/getcwd/unlink use checked
+  user copying. Blocking I/O stores only a syscall frame, drops all active user
+  borrows and wakes through bounded scheduler readiness scanning at IF=0.
+- One KiB pipes handle partial writes, buffer wrap, final-close EOF and broken
+  readers. The console receives canonical edited lines by bounded BSP UART
+  polling; LAPIC ticks wake input without external IRQ routing.
+- The host packs a checked, hashed project-owned read-only archive. Native PID 1
+  supervises an interactive shell; small native commands use real fork/exec/wait,
+  up to four pipeline stages and file redirection. All tmpfs state is volatile.
+
+See [M6 design](docs/M6_FILESYSTEM.md) and [M6 evidence](docs/validation/M6.md).
+Persistent block storage, a general mount API, POSIX terminals and Linux binaries
+remain later work; these commands are project-owned native applications.
+
 ## 3. 目录规划
 
 以下是后续实现布局，不要求一次性创建：

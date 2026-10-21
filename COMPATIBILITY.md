@@ -1,7 +1,7 @@
 <!-- Separate verified native support from planned existing-software ABI compatibility. -->
 # 现有软件兼容策略
 
-本文记录现有软件兼容策略与验证矩阵。当前 **M0–M5 仅验证自有 native Rust/C 应用和原生进程调度，没有实现或验证现有 Linux 软件兼容。** 其余内容仍为目标与验收计划；native ABI 边界见 [M4_USERSPACE](docs/M4_USERSPACE.md) 和 [M5_PROCESSES](docs/M5_PROCESSES.md)。
+本文记录现有软件兼容策略与验证矩阵。当前 **M0–M6 仅验证自有 native Rust/C 应用、进程调度、VFS 和原生 shell，没有实现或验证现有 Linux 软件兼容。** 其余内容仍为目标与验收计划；native ABI 边界见 [M4_USERSPACE](docs/M4_USERSPACE.md) 、[M5_PROCESSES](docs/M5_PROCESSES.md) 和 [M6_FILESYSTEM](docs/M6_FILESYSTEM.md)。
 
 ## 1. 兼容层次
 

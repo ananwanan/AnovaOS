@@ -3,7 +3,6 @@
 //! Bounded BSP scheduling policy and parent/child lifecycle without hardware or allocation.
 //! The kernel owns contexts/resources; this policy never switches stacks or takes locks.
 use anova_abi::{ExitStatus, NO_CHILD, PROCESS_LIMIT};
-pub mod fd;
 
 pub const CAPACITY: usize = 32;
 
@@ -14,6 +13,7 @@ pub enum State {
     Running,
     Sleeping(u64),
     Waiting(u64),
+    Blocked,
     Zombie(ExitStatus),
 }
 
@@ -74,6 +74,10 @@ impl Scheduler {
 
     pub fn ready(&mut self, index: usize) {
         self.entries[index].state = State::Ready;
+    }
+
+    pub fn block(&mut self, index: usize) {
+        self.entries[index].state = State::Blocked;
     }
 
     pub fn sleep(&mut self, index: usize, deadline: u64) {
@@ -187,6 +191,16 @@ mod tests {
         assert_eq!(s.wait(p, 0), Ok(Some(c)));
         s.remove(c);
         assert_eq!(s.wait(p, 0), Err(NO_CHILD));
+    }
+
+    #[test]
+    fn blocked_io_requires_an_explicit_readiness_wakeup() {
+        let mut s = Scheduler::new(1);
+        let p = s.insert(0).unwrap();
+        s.block(p);
+        assert_eq!(s.select(1000), None);
+        s.ready(p);
+        assert_eq!(s.select(1000), Some(p));
     }
 
     #[test]

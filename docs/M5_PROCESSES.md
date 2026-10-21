@@ -5,6 +5,11 @@ process syscalls and their limits. [validation/M5.md](validation/M5.md) records
 measured evidence. It supersedes the sequential lifecycle in
 [M4_USERSPACE.md](M4_USERSPACE.md); the M4 ELF/entry/copy ABI remains applicable.
 
+M6 supersedes the console-only descriptor and executable-catalog boundaries.
+See [M6_FILESYSTEM.md](M6_FILESYSTEM.md) for actual VFS paths, shared open offsets,
+spawn/fork/exec inheritance, blocking pipes, stdin, init and the native shell.
+Historical M4/M5 evidence remains unchanged.
+
 ## Process and execution model
 
 The kernel supports 32 process slots, including unreaped zombies, with one

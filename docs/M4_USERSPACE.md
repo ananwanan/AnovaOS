@@ -6,6 +6,11 @@ measured acceptance results and [M3_MEMORY.md](M3_MEMORY.md) for backing ownersh
 This records the M4 baseline. [M5_PROCESSES.md](M5_PROCESSES.md) supersedes the
 sequential lifecycle and extends native v1 with scheduling and process syscalls.
 
+M6 supersedes the console-only descriptor and executable-catalog boundaries.
+See [M6_FILESYSTEM.md](M6_FILESYSTEM.md) for actual VFS paths, shared open offsets,
+spawn/fork/exec inheritance, blocking pipes, stdin, init and the native shell.
+Historical M4/M5 evidence remains unchanged.
+
 ## Execution and ownership
 
 M4 runs one explicitly selected native application at a time on the single BSP.

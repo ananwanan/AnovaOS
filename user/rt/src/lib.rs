@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #![no_std]
-//! Native Rust CRT, borrowed startup arguments and console/process syscall wrappers.
+//! Native Rust CRT, startup arguments and checked process/file syscall wrappers.
 //! Built with the x86_64 user ABI and SSE2, without libc, allocation or Linux calls.
 pub use anova_abi as abi;
 mod memory;
@@ -130,7 +130,7 @@ pub fn wait(pid: u64) -> Result<abi::WaitStatus, i64> {
     Ok(status)
 }
 pub fn close(fd: u64) -> Result<(), i64> {
-    // SAFETY: Console descriptors carry no user pointers.
+    // SAFETY: Descriptor close takes no user pointers.
     result(unsafe { raw(abi::SYS_CLOSE, fd, 0, 0) }).map(|_| ())
 }
 
@@ -197,4 +197,103 @@ pub fn check_cpu() -> bool {
         && mxcsr == 0x1f80
         && simd == u64::MAX
         && x87 == 0x4000_0000_0000_0000
+}
+
+/// Read into exclusively owned memory. A zero result is EOF, including the final pipe close.
+pub fn read(fd: u64, bytes: &mut [u8]) -> Result<usize, i64> {
+    // SAFETY: Exclusive writable slice remains live while the process blocks.
+    result(unsafe {
+        raw(
+            abi::SYS_READ,
+            fd,
+            bytes.as_mut_ptr() as u64,
+            bytes.len() as u64,
+        )
+    })
+    .map(|n| n as usize)
+}
+pub fn write_fd(fd: u64, bytes: &[u8]) -> Result<usize, i64> {
+    // SAFETY: Immutable slice remains readable until the blocking write completes.
+    result(unsafe {
+        raw(
+            abi::SYS_WRITE,
+            fd,
+            bytes.as_ptr() as u64,
+            bytes.len() as u64,
+        )
+    })
+    .map(|n| n as usize)
+}
+pub fn write_all(fd: u64, mut bytes: &[u8]) -> Result<(), i64> {
+    while !bytes.is_empty() {
+        let n = write_fd(fd, &bytes[..bytes.len().min(abi::MAX_WRITE)])?;
+        if n == 0 {
+            return Err(abi::INVALID_ARGUMENT);
+        }
+        bytes = &bytes[n..];
+    }
+    Ok(())
+}
+pub fn open(path: &str, flags: u64) -> Result<u64, i64> {
+    // SAFETY: The length-delimited path stays live and the kernel only reads it.
+    result(unsafe {
+        raw(
+            abi::SYS_OPEN,
+            path.as_ptr() as u64,
+            path.len() as u64,
+            flags,
+        )
+    })
+}
+pub fn seek(fd: u64, offset: i64, whence: u64) -> Result<u64, i64> {
+    // SAFETY: This call takes only scalar descriptor and offset values.
+    result(unsafe { raw(abi::SYS_SEEK, fd, offset as u64, whence) })
+}
+pub fn dup2(source: u64, target: u64) -> Result<u64, i64> {
+    // SAFETY: Descriptors are scalar process-local handles, never pointers.
+    result(unsafe { raw(abi::SYS_DUP2, source, target, 0) })
+}
+pub fn pipe() -> Result<[u64; 2], i64> {
+    let mut fds = [0; 2];
+    // SAFETY: The initialized local is exactly the writable 16-byte result layout.
+    result(unsafe { raw(abi::SYS_PIPE, fds.as_mut_ptr() as u64, 16, 0) })?;
+    Ok(fds)
+}
+pub fn readdir(fd: u64) -> Result<Option<abi::DirEntry>, i64> {
+    let mut entry = abi::DirEntry::default();
+    // SAFETY: The exclusive initialized output has the ABI's exact size/alignment.
+    let n = result(unsafe {
+        raw(
+            abi::SYS_READDIR,
+            fd,
+            &mut entry as *mut _ as u64,
+            size_of::<abi::DirEntry>() as u64,
+        )
+    })?;
+    Ok((n != 0).then_some(entry))
+}
+fn path_call(number: u64, path: &str) -> Result<(), i64> {
+    // SAFETY: The immutable path remains readable throughout the call.
+    result(unsafe { raw(number, path.as_ptr() as u64, path.len() as u64, 0) }).map(|_| ())
+}
+pub fn mkdir(path: &str) -> Result<(), i64> {
+    path_call(abi::SYS_MKDIR, path)
+}
+pub fn chdir(path: &str) -> Result<(), i64> {
+    path_call(abi::SYS_CHDIR, path)
+}
+pub fn unlink(path: &str) -> Result<(), i64> {
+    path_call(abi::SYS_UNLINK, path)
+}
+pub fn getcwd(output: &mut [u8]) -> Result<usize, i64> {
+    // SAFETY: The borrowed output is exclusively writable and remains live.
+    result(unsafe {
+        raw(
+            abi::SYS_GETCWD,
+            output.as_mut_ptr() as u64,
+            output.len() as u64,
+            0,
+        )
+    })
+    .map(|n| n as usize)
 }

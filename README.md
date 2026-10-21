@@ -7,10 +7,11 @@ An x86_64 operating system built from scratch in Rust. The goal is to edit,
 compile, debug, and run applications inside AnovaOS itself, while gradually
 supporting selected existing Linux software.
 
-**Current status: M0–M5 are locally verified on QEMU q35/TCG. Native Rust/C
-processes have private memory/stacks, saved CPU/FPU state, timer preemption,
-blocking sleep/wait, spawn/exec/eager fork and complete resource reclamation.
-VFS and Linux compatibility remain pending; external device IRQs stay masked.**
+**Current status: M0–M6 are locally verified on QEMU q35/TCG. Native processes
+have private memory, saved CPU/FPU state, preemption and blocking. A read-only
+initramfs, tmpfs/devfs, shared open descriptions, pipes, PID 1 init and an
+interactive native shell now work. `/tmp` is lost on reboot. Linux compatibility
+and persistent disks remain pending; external device IRQs stay masked.**
 
 Repository: [ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS).
 
@@ -81,6 +82,8 @@ development language and formatting guide is in English.
 | [docs/validation/M4.md](docs/validation/M4.md) | Actual M4 isolation and application validation evidence |
 | [docs/M5_PROCESSES.md](docs/M5_PROCESSES.md) | Scheduling, process ownership, native lifecycle ABI and limits |
 | [docs/validation/M5.md](docs/validation/M5.md) | Actual multiprocess, CPU/FPU, OOM and reclamation evidence |
+| [docs/M6_FILESYSTEM.md](docs/M6_FILESYSTEM.md) | VFS, descriptor/pipe ownership, serial terminal, init and native shell |
+| [docs/validation/M6.md](docs/validation/M6.md) | Actual file, shell, pipe, terminal and volatile-reboot validation |
 | [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) | Mandatory owner requirements, including file-purpose explanations |
 | [docs/FILE_PURPOSES.md](docs/FILE_PURPOSES.md) | Purpose of every repository file |
 | [docs/STATUS.md](docs/STATUS.md) | Current implementation status and next steps |
@@ -145,21 +148,21 @@ cargo xtask build       # Build and inspect the bare-metal kernel ELF
 cargo xtask apps        # Build standalone native Rust/C ELFs and ABI/hash inventory
 cargo xtask check-files # Check per-file purpose explanations and inventory
 cargo xtask image       # Build build/images/anova-normal.iso, including native apps
-cargo xtask run         # Run Rust/C apps and concurrent workers, then interruptible idle
-cargo xtask smoke       # Memory, 11 isolation cases, process/FPU/lifecycle suite AND exit 33
+cargo xtask run         # Run boot workloads, PID 1 init and the interactive native shell
+cargo xtask smoke       # CPU/memory/process tests, VFS/pipe/shell/OOM suite AND exit 33
 cargo xtask verify      # 13 cases: boot passes; fault, panic, timeout and OOM fail
+cargo xtask terminal-test # Real serial editing/EOF and two-boot tmpfs-loss validation
 ```
 
 These commands now exist in the host `xtask` package. Images, caches, logs, and
 disposable firmware variable copies stay in `build/`. Normal runs attach no data
 disk or network. GitHub Actions is configured to run the same checks; its status
-is reported separately from [local validation](docs/validation/M5.md).
+is reported separately from [local validation](docs/validation/M6.md).
 
 ## Next steps
 
-M6 adds VFS, init, basic shell, file descriptors and pipes on the M5 process
-baseline. External IRQ routing follows its first device driver. See the
-[process design](docs/M5_PROCESSES.md),
+M7 adds persistent storage with virtio-blk, a supported ext2 subset and an
+editable environment. See the [filesystem/shell design](docs/M6_FILESYSTEM.md),
 [current status](docs/STATUS.md) and [roadmap](ROADMAP.md).
 
 ## License

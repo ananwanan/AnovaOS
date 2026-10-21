@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Gates source purpose, CPU/FPU scheduling, native lifecycle and complete QEMU regressions.
+# Gate file-purpose coverage, native processes/VFS/shell and complete QEMU/terminal regressions.
 name: Bare-metal boot
 
 on:
@@ -31,7 +31,7 @@ jobs:
       - name: Check file-purpose explanations
         run: cargo xtask check-files
       - name: Check host tools
-        run: cargo clippy --locked -p xtask -p anova-platform -p anova-memory -p anova-abi -p anova-elf -p anova-sched --all-targets -- -D warnings
+        run: cargo clippy --locked -p xtask -p anova-platform -p anova-memory -p anova-abi -p anova-elf -p anova-sched -p anova-vfs --all-targets -- -D warnings
       - name: Check and build native Rust/C applications
         run: |
           cargo xtask check-apps
@@ -49,8 +49,10 @@ jobs:
         run: cargo xtask fetch
       - name: Check prerequisites
         run: cargo xtask doctor
-      - name: Verify scheduling, process lifecycle, user isolation, memory and traps
+      - name: Verify VFS, shell, scheduling, user isolation, memory and traps
         run: cargo xtask verify
+      - name: Verify real serial input and volatile tmpfs across boots
+        run: cargo xtask terminal-test
       - name: Upload boot evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

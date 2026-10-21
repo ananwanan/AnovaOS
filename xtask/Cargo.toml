@@ -14,3 +14,4 @@ toml = "=0.8.23"
 anova-abi = { path = "../crates/abi" }
 anova-elf = { path = "../crates/elf" }
 
+anova-vfs = { path = "../crates/vfs" }
