@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Borrow retained Limine data. M3 allocates only USABLE RAM; bootloader data,
 //! original stacks/tables, modules, firmware and the early pool remain reserved.
-//! Validated native ELF modules provide the M4 applications without a filesystem.
+//! Retained native ELF modules support isolation tests; a tagged archive supplies the M6 root.
 use limine::{
     BaseRevision,
     firmware_type::FirmwareType,
@@ -346,6 +346,14 @@ fn kind(value: EntryType) -> &'static str {
 
 /// Select an explicit image personality from the locked ISO manifest, never OSABI.
 pub fn native_module(name: &str) -> &'static [u8] {
+    retained_module(b"anova.native.v1:", name.as_bytes())
+}
+
+pub fn initramfs() -> &'static [u8] {
+    retained_module(b"anova.initramfs.v1", b"")
+}
+
+fn retained_module(prefix: &[u8], name: &[u8]) -> &'static [u8] {
     let info = validate();
     let response = MODULES
         .get_response()
@@ -353,10 +361,10 @@ pub fn native_module(name: &str) -> &'static [u8] {
     let mut selected = None;
     for module in response.modules() {
         let command = module.string().to_bytes();
-        let Some(label) = command.strip_prefix(b"anova.native.v1:") else {
+        let Some(label) = command.strip_prefix(prefix) else {
             continue;
         };
-        if label != name.as_bytes() {
+        if label != name {
             continue;
         }
         assert!(selected.is_none(), "Duplicate native module identity");
@@ -369,7 +377,7 @@ pub fn native_module(name: &str) -> &'static [u8] {
         let length = usize::try_from(module.size()).expect("Module size overflow");
         assert!(
             length > 0
-                && length <= 8 * 1024 * 1024
+                && length <= 16 * 1024 * 1024
                 && info.entries.iter().any(|entry| entry.entry_type
                     == EntryType::EXECUTABLE_AND_MODULES
                     && physical >= entry.base

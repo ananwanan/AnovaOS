@@ -5,7 +5,7 @@
 
 用 Rust 从零开发的 x86_64 操作系统，目标是在自己的系统中编辑、编译、调试和运行应用，并逐步兼容部分现有 Linux 软件。
 
-**当前状态：M0–M5 已通过本地 QEMU q35/TCG 验证。原生 Rust/C 进程具备独立地址空间与内核栈、CPU/FPU 状态保存、定时器抢占、阻塞 sleep/wait、spawn/exec/完整复制 fork 和资源回收。VFS 与 Linux 兼容尚未实现，外设 IRQ 保持屏蔽。**
+**当前状态：M0–M6 已通过本地 QEMU q35/TCG 验证。原生进程具备独立内存、CPU/FPU 状态保存、抢占和阻塞调度；现已支持只读 initramfs、tmpfs/devfs、共享打开文件对象、管道、PID 1 init 和交互式原生 shell。`/tmp` 重启丢失。Linux 兼容与持久磁盘尚未实现，外设 IRQ 保持屏蔽。**
 
 项目仓库：[ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS)。
 
@@ -62,6 +62,8 @@
 | [docs/validation/M4.md](docs/validation/M4.md) | 实际 M4 隔离与应用验收记录 |
 | [docs/M5_PROCESSES.md](docs/M5_PROCESSES.md) | 调度、进程所有权、原生生命周期 ABI 与边界 |
 | [docs/validation/M5.md](docs/validation/M5.md) | 多进程、CPU/FPU、OOM 与资源回收验证 |
+| [docs/M6_FILESYSTEM.md](docs/M6_FILESYSTEM.md) | VFS、文件/管道所有权、串口终端、init 与原生 shell |
+| [docs/validation/M6.md](docs/validation/M6.md) | 文件、shell、管道、终端与 tmpfs 重启丢失验证 |
 | [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) | 强制开发需求，包括文件用途说明 |
 | [docs/FILE_PURPOSES.md](docs/FILE_PURPOSES.md) | 仓库中每个文件的用途 |
 | [docs/STATUS.md](docs/STATUS.md) | 当前已实现能力和下一步 |
@@ -107,16 +109,17 @@ cargo xtask build       # 构建并检查裸机内核 ELF
 cargo xtask apps        # 构建独立 Rust/C 用户 ELF 和 ABI/校验清单
 cargo xtask check-files # 检查每个文件的用途说明与清单覆盖
 cargo xtask image       # 生成包含原生应用的 build/images/anova-normal.iso
-cargo xtask run         # 运行 Rust/C 应用和并发计算进程，然后可中断 idle
-cargo xtask smoke       # 内存、11 个隔离用例、CPU/FPU/多进程生命周期验证和退出码 33
+cargo xtask run         # 启动原生工作负载、PID 1 init 和交互式 shell
+cargo xtask smoke       # CPU/内存/进程与 VFS/管道/shell/OOM 验证，退出码 33
 cargo xtask verify      # 13 场景：启动通过，故障、panic、超时和 OOM 被拒绝
+cargo xtask terminal-test # 真实串口编辑/EOF 与两次启动的 tmpfs 丢失验证
 ```
 
-以上命令已在宿主 `xtask` 包中实现。镜像、缓存、日志和临时固件变量副本均位于 `build/`；普通启动不连接数据盘和网络。GitHub Actions 已配置相同检查，其运行结果与 [本地验收](docs/validation/M5.md) 分开记录。
+以上命令已在宿主 `xtask` 包中实现。镜像、缓存、日志和临时固件变量副本均位于 `build/`；普通启动不连接数据盘和网络。GitHub Actions 已配置相同检查，其运行结果与 [本地验收](docs/validation/M6.md) 分开记录。
 
 ## 下一步
 
-M6 在多进程基线上加入 VFS、init、基础 shell、文件描述符和管道。外设 IRQ 路由随首个相应驱动启用。详见 [进程设计](docs/M5_PROCESSES.md)、[当前状态](docs/STATUS.md) 和 [路线图](ROADMAP.md)。
+M7 将加入 virtio-blk、受限 ext2 持久存储和可编辑环境。详见 [文件系统与 shell 设计](docs/M6_FILESYSTEM.md)、[当前状态](docs/STATUS.md) 和 [路线图](ROADMAP.md)。
 
 ## 许可证
 

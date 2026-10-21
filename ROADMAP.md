@@ -1,7 +1,7 @@
 <!-- Track milestone dependencies, implementation checklists and acceptance criteria. -->
 # 开发路线与阶段验收
 
-日期：2026-10-21。**M0–M5 已通过本地 q35/TCG 验收；M6–M15 尚未实现，外设 IRQ 路由启用待对应驱动。** 证据见 [M5 验证记录](docs/validation/M5.md) 与 [STATUS](docs/STATUS.md)。[FIRST_TASK](docs/FIRST_TASK.md) 记录 M0/M1 原始实现顺序；当前 M2 边界见 [CPU 基线](docs/M2_CPU.md)。
+日期：2026-10-21。**M0–M6 已通过本地 q35/TCG 验收；M7–M15 尚未实现，外设 IRQ 路由启用待对应驱动。** 证据见 [M6 验证记录](docs/validation/M6.md) 与 [STATUS](docs/STATUS.md)。[FIRST_TASK](docs/FIRST_TASK.md) 记录 M0/M1 原始实现顺序；当前 M2 边界见 [CPU 基线](docs/M2_CPU.md)。
 
 ## 阶段总览
 
@@ -13,7 +13,7 @@
 | M3 | 受控页管理和堆 | M2 | 本地验收通过；引导保留区未回收 |
 | M4 | 第一个隔离的用户 app | M3 | 本地验收通过；顺序运行 Rust/C ELF |
 | M5 | 多进程与阻塞/抢占调度 | M4、M2 | 本地验收通过；单核、每进程一个线程 |
-| M6 | VFS、init、基础 shell | M5 | 未开始 |
+| M6 | VFS、init、基础 shell | M5 | 本地验收通过；tmpfs 重启丢失 |
 | M7 | 源码和应用可持久保存 | M6 | 未开始 |
 | M8 | 首批静态 Linux CLI 程序 | M6、M7 | 未开始 |
 | M9 | 线程、信号、动态 musl | M8 | 未开始 |
@@ -108,14 +108,16 @@
 
 ## M6：VFS、init 与基础 shell
 
-- [ ] VFS 与 mount、路径解析、cwd、文件/目录/符号链接的演进设计。
-- [ ] initramfs、tmpfs、devfs、stdin/stdout/stderr。
-- [ ] 文件描述符、打开文件描述、seek/dup 共享偏移语义。
-- [ ] 原生 init、shell、ls/cat/echo 等少量自有命令。
-- [ ] 原生进程执行、管道与重定向的基础接口。
-- [ ] 串口输入行编辑和终端抽象，后续可接 termios/PTY。
+- [x] VFS 与 mount、路径解析、cwd、文件/目录/符号链接的演进设计。
+- [x] initramfs、tmpfs、devfs、stdin/stdout/stderr。
+- [x] 文件描述符、打开文件描述、seek/dup 共享偏移语义。
+- [x] 原生 init、shell、ls/cat/echo 等少量自有命令。
+- [x] 原生进程执行、管道与重定向的基础接口。
+- [x] 串口输入行编辑和终端抽象，后续可接 termios/PTY。
 
-退出条件：通过 shell 列目录、创建/读取 tmpfs 文件、执行用户 app、查看退出码；管道/重定向正常关闭，不在 EOF 处死锁。此阶段 tmpfs 数据重启丢失，应明确说明。
+已验证退出条件：通过 shell 列目录、创建/读取 tmpfs 文件、执行用户 app、查看退出码；管道/重定向正常关闭，不在 EOF 处死锁。此阶段 tmpfs 数据重启丢失，应明确说明。
+
+实现范围见 [M6 文件系统设计](docs/M6_FILESYSTEM.md)，证据见 [M6 验证](docs/validation/M6.md)。挂载仅在引导阶段；32 fd/进程、128 打开对象、16 个 1 KiB 管道、64 KiB/tmpfs 文件。原生 shell 支持四级管道、重定向与串口规范行输入，尚无 termios/PTY、信号、作业控制或 Linux ABI。
 
 ## M7：持久磁盘与可编辑环境
 

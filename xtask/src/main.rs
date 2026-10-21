@@ -4,6 +4,7 @@ mod apps;
 mod assets;
 mod purposes;
 mod smoke;
+mod terminal;
 
 use std::{
     env,
@@ -152,6 +153,7 @@ fn execute() -> Result<()> {
             Ok(())
         }
         "run" => run(&root),
+        "terminal-test" => terminal::verify(&root),
         "smoke" => {
             let (mode, timeout) = smoke_args(&args[1..])?;
             let failure = smoke(&root, mode, timeout)?;
@@ -189,25 +191,40 @@ fn execute() -> Result<()> {
             }
             Ok(())
         }
-        "test-host" => command(Command::new("cargo").args([
-            "test",
-            "--locked",
-            "-p",
-            "xtask",
-            "-p",
-            "anova-platform",
-            "-p",
-            "anova-memory",
-            "-p",
-            "anova-abi",
-            "-p",
-            "anova-elf",
-            "-p",
-            "anova-sched",
-        ])),
+        "test-host" => {
+            command(Command::new("cargo").args([
+                "test",
+                "--locked",
+                "-p",
+                "xtask",
+                "-p",
+                "anova-platform",
+                "-p",
+                "anova-memory",
+                "-p",
+                "anova-abi",
+                "-p",
+                "anova-elf",
+                "-p",
+                "anova-sched",
+                "-p",
+                "anova-vfs",
+            ]))?;
+            command(Command::new("cargo").args([
+                "test",
+                "--locked",
+                "--manifest-path",
+                "user/Cargo.toml",
+                "-p",
+                "shell",
+                "--lib",
+                "--target-dir",
+                "build/user-host-target",
+            ]))
+        }
         "help" | "--help" | "-h" => {
             println!(
-                "AnovaOS host tools\n\n  cargo xtask doctor\n  cargo xtask fetch\n  cargo xtask build\n  cargo xtask image\n  cargo xtask run\n  cargo xtask smoke [--case CASE] [--timeout-secs 1..300]\n  cargo xtask verify\n  cargo xtask test-host\n  cargo xtask apps\n  cargo xtask check-apps\n  cargo xtask check-files\n\nCASE: boot, panic, timeout, invalid-opcode, general-protection, page-fault, double-fault, stack-guard, read-only, no-execute, direct-no-execute, unmapped, oom.\nOutputs stay in build/; run uses a disposable OVMF variable copy. TCG is mandatory."
+                "AnovaOS host tools\n\n  cargo xtask doctor\n  cargo xtask fetch\n  cargo xtask build\n  cargo xtask image\n  cargo xtask run\n  cargo xtask smoke [--case CASE] [--timeout-secs 1..300]\n  cargo xtask verify\n  cargo xtask test-host\n  cargo xtask apps\n  cargo xtask check-apps\n  cargo xtask check-files\n  cargo xtask terminal-test\n\nCASE: boot, panic, timeout, invalid-opcode, general-protection, page-fault, double-fault, stack-guard, read-only, no-execute, direct-no-execute, unmapped, oom.\nOutputs stay in build/; run uses a disposable OVMF variable copy. TCG is mandatory."
             );
             Ok(())
         }
@@ -477,6 +494,13 @@ fn image(root: &Path, mode: Mode) -> Result<PathBuf> {
         root.join("build/apps/manifest.toml"),
         stage.0.join("boot/apps/manifest.toml"),
     )?;
+    fs::copy(
+        root.join("build/apps/initramfs.anovafs"),
+        stage.0.join("boot/initramfs.anovafs"),
+    )?;
+    config.push_str(
+        "    module_path: boot():/boot/initramfs.anovafs\n    module_string: anova.initramfs.v1\n",
+    );
     fs::write(stage.0.join("boot/limine/limine.conf"), config)?;
     for (input, output) in [
         ("BOOTX64.EFI", "EFI/BOOT/BOOTX64.EFI"),

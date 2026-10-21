@@ -102,7 +102,10 @@ fn lifecycle_oom(rust: &[u8]) {
         let parent = kernel
             .add(rust, &["hello-rust", "AnovaOS", "ring3"], 0)
             .unwrap();
-        kernel.process_mut(parent).files.close(1).unwrap();
+        kernel
+            .fs
+            .close(&mut kernel.processes[parent].as_mut().unwrap().files, 1)
+            .unwrap();
         let root = kernel.process(parent).image.as_ref().unwrap().space.root();
         let before = mm::user::free_frames();
         let heap = mm::heap_used();
@@ -134,7 +137,7 @@ fn lifecycle_oom(rust: &[u8]) {
                 root
             );
             assert!(
-                !kernel.process(parent).files.writable(1),
+                !kernel.process(parent).files.contains(1),
                 "Failed exec replaced descriptors"
             );
             assert!((1..CAPACITY).all(|i| kernel.policy.entry(i).state == State::Empty));

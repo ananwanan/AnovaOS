@@ -11,11 +11,12 @@ use crate::{
         traps::{self, TrapFrame},
         user,
     },
-    boot, mm, serial,
+    boot, fs, mm, serial,
 };
 use alloc::vec::Vec;
 use anova_abi::*;
-use anova_sched::{CAPACITY, Scheduler, State, fd::Descriptors};
+use anova_sched::{CAPACITY, Scheduler, State};
+use anova_vfs::{Descriptors, ROOT, Vfs};
 use core::{
     arch::asm,
     ptr,
@@ -50,6 +51,8 @@ struct Process {
     context: user::Context,
     files: Descriptors,
     wait: Option<(u64, UserAddr)>,
+    cwd: usize,
+    io: Option<TrapFrame>,
 }
 static CAPTURE: AtomicPtr<user::Context> = AtomicPtr::new(ptr::null_mut());
 static USER_IRQS: AtomicU64 = AtomicU64::new(0);
@@ -97,11 +100,15 @@ struct Metrics {
     execs: u64,
     spawns: u64,
     reaps: u64,
+    io_blocks: u64,
+    io_wakes: u64,
 }
 struct Kernel {
     policy: Scheduler,
     processes: Vec<Option<Process>>,
     metrics: Metrics,
+    fs: Vfs<'static>,
+    terminal: fs::Terminal,
 }
 impl Kernel {
     fn new(first_pid: u64) -> Result<Self, loader::LoadError> {
@@ -114,6 +121,8 @@ impl Kernel {
             policy: Scheduler::new(first_pid),
             processes,
             metrics: Metrics::default(),
+            fs: Vfs::new(boot::initramfs()).map_err(|_| anova_memory::Error::OutOfMemory)?,
+            terminal: fs::Terminal::new(),
         })
     }
     fn process(&self, i: usize) -> &Process {
@@ -131,12 +140,26 @@ impl Kernel {
                 _ => INVALID_ARGUMENT,
             })?;
             let context = user::Context::new(image.entry, image.stack);
+            let (files, cwd) = if parent == 0 {
+                (self.fs.standard()?, ROOT)
+            } else {
+                let parent = self
+                    .processes
+                    .iter()
+                    .enumerate()
+                    .find(|(slot, p)| p.is_some() && self.policy.entry(*slot).pid == parent)
+                    .map(|(_, p)| p.as_ref().unwrap())
+                    .ok_or(NO_CHILD)?;
+                (self.fs.inherit(&parent.files), parent.cwd)
+            };
             Ok(Process {
                 image: Some(image),
                 stack: Some(stack),
                 context,
-                files: Descriptors::default(),
+                files,
                 wait: None,
+                cwd,
+                io: None,
             })
         })();
         match result {
@@ -150,6 +173,19 @@ impl Kernel {
                 Err(error)
             }
         }
+    }
+    fn executable(&self, i: usize, name: &str) -> Result<&'static [u8], i64> {
+        if name.contains('/') {
+            return self.fs.executable(self.process(i).cwd, name);
+        }
+        let mut path = [0; 128];
+        if name.len() + 5 > path.len() {
+            return Err(TOO_LONG);
+        }
+        path[..5].copy_from_slice(b"/bin/");
+        path[5..5 + name.len()].copy_from_slice(name.as_bytes());
+        self.fs
+            .executable(ROOT, core::str::from_utf8(&path[..5 + name.len()]).unwrap())
     }
     fn fork(&mut self, parent: usize) -> Result<u64, i64> {
         let i = self.policy.insert(self.policy.entry(parent).pid)?;
@@ -168,12 +204,17 @@ impl Kernel {
                 image: Some(image),
                 stack: Some(stack),
                 context,
-                files: old.files,
+                files: Descriptors::default(),
                 wait: None,
+                cwd: old.cwd,
+                io: None,
             })
         })();
         match result {
-            Ok(process) => {
+            Ok(mut process) => {
+                process.files = self
+                    .fs
+                    .inherit(&self.processes[parent].as_ref().unwrap().files);
                 self.processes[i] = Some(process);
                 self.metrics.forks += 1;
                 Ok(self.policy.entry(i).pid)
@@ -213,10 +254,11 @@ impl Kernel {
                 serial::emergency(format_args!("[USER:RETURNREJECT] pid={pid}\n"))
             }
         }
-        let p = self.process_mut(i);
+        let p = self.processes[i].as_mut().unwrap();
         drop(p.image.take());
         drop(p.stack.take());
-        p.files.clear();
+        self.fs.clear(&mut p.files);
+        p.io = None;
         p.wait = None;
         self.policy.exit(i, outcome.status());
     }
@@ -305,9 +347,9 @@ impl Kernel {
                 let request = space.with_active(|| Request::read(space, &f));
                 match request {
                     Err(error) => error,
-                    Ok(request) => match module(request.name()) {
-                        None => NOT_FOUND,
-                        Some(bytes) => {
+                    Ok(request) => match self.executable(i, request.name()) {
+                        Err(error) => error,
+                        Ok(bytes) => {
                             let args = [request.name(), request.argument()];
                             if f.rax == SYS_SPAWN {
                                 self.add(bytes, &args, self.policy.entry(i).pid)
@@ -324,12 +366,28 @@ impl Kernel {
             }
             _ => {
                 let pid = self.policy.entry(i).pid;
-                let p = self.process_mut(i);
+                let p = self.processes[i].as_mut().unwrap();
                 let space = &p.image.as_ref().expect("Missing image").space;
-                space.with_active(|| abi::syscall(&f, space, pid, &mut p.files))
+                space.with_active(|| {
+                    fs::syscall(
+                        &f,
+                        space,
+                        &mut p.files,
+                        &mut p.cwd,
+                        &mut self.fs,
+                        &mut self.terminal,
+                    )
+                    .unwrap_or_else(|| abi::syscall(&f, space, pid))
+                })
             }
         };
-        self.process_mut(i).context.frame.rax = result as u64;
+        if result == WOULD_BLOCK && matches!(f.rax, SYS_READ | SYS_WRITE) {
+            self.process_mut(i).io = Some(f);
+            self.policy.block(i);
+            self.metrics.io_blocks += 1;
+        } else {
+            self.process_mut(i).context.frame.rax = result as u64;
+        }
     }
     fn drive(&mut self, root_pid: u64) -> Outcome {
         let root: u64;
@@ -347,6 +405,19 @@ impl Kernel {
         let mut previous = None;
         let mut preempted = false;
         loop {
+            self.terminal.poll();
+            for i in 0..CAPACITY {
+                if self.policy.entry(i).state == State::Blocked {
+                    let p = self.process(i);
+                    if p.io
+                        .as_ref()
+                        .is_some_and(|f| fs::ready(f, &p.files, &self.fs, &self.terminal))
+                    {
+                        self.policy.ready(i);
+                        self.metrics.io_wakes += 1;
+                    }
+                }
+            }
             for i in 0..CAPACITY {
                 let e = self.policy.entry(i);
                 if e.parent == 0 && matches!(e.state, State::Zombie(_)) {
@@ -375,6 +446,13 @@ impl Kernel {
                 match self.wait(i, pid, output) {
                     Some(result) => self.process_mut(i).context.frame.rax = result as u64,
                     None => continue,
+                }
+            }
+            if let Some(frame) = self.process_mut(i).io.take() {
+                self.process_mut(i).context.frame = frame;
+                self.syscall(i);
+                if self.policy.entry(i).state == State::Blocked {
+                    continue;
                 }
             }
             if !self.valid_return(i) {
@@ -423,6 +501,11 @@ impl Kernel {
         assert!(
             self.processes.iter().all(Option::is_none),
             "Unreaped process resources"
+        );
+        assert_eq!(
+            self.fs.live_objects(),
+            (0, 0),
+            "Open descriptions or pipes leaked"
         );
         root_outcome.expect("Root process did not terminate")
     }
@@ -474,12 +557,6 @@ impl Request {
         core::str::from_utf8(&self.argument[..self.argument_len]).expect("Validated UTF-8")
     }
 }
-fn module(name: &str) -> Option<&'static [u8]> {
-    match name {
-        "hello-rust" | "hello-c" | "probe" | "process-test" => Some(boot::native_module(name)),
-        _ => None,
-    }
-}
 
 fn run(bytes: &[u8], args: &[&str], pid: u64) -> Result<Outcome, loader::LoadError> {
     cpu::without_interrupts(|| {
@@ -514,6 +591,16 @@ fn run(bytes: &[u8], args: &[&str], pid: u64) -> Result<Outcome, loader::LoadErr
                 m.execs,
                 m.spawns,
                 m.reaps
+            ));
+        }
+        if args.first() == Some(&"/bin/init") && cfg!(feature = "qemu-test") {
+            assert!(
+                kernel.metrics.io_blocks > 0 && kernel.metrics.io_wakes > 0,
+                "I/O blocking was not exercised"
+            );
+            serial::write(format_args!(
+                "[VFS:IO] blocks={} wakes={} open_descriptions=0 pipes=0\n",
+                kernel.metrics.io_blocks, kernel.metrics.io_wakes
             ));
         }
         Ok(outcome)
@@ -570,5 +657,28 @@ pub fn start() {
     ));
     serial::write(format_args!(
         "[USER:READY] Rust/C apps and concurrent processes exited; kernel resumed\n"
+    ));
+    serial::write(format_args!(
+        "[VFS:MOUNTS] root=initramfs:ro /tmp=tmpfs:rw /dev=devfs stdin=0 stdout=1 stderr=2\n"
+    ));
+    let init = {
+        let root = Vfs::new(boot::initramfs()).expect("Invalid initramfs");
+        root.executable(ROOT, "/bin/init").expect("Missing init")
+    };
+    checked_run(
+        init,
+        &[
+            "/bin/init",
+            if cfg!(feature = "qemu-test") {
+                "test"
+            } else {
+                ""
+            },
+        ],
+        1,
+        Outcome::Exit(0),
+    );
+    serial::write(format_args!(
+        "[VFS:READY] frames_restored=true heap_restored=true tmpfs=volatile\n"
     ));
 }

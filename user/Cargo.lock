@@ -14,7 +14,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "fs-test"
+version = "0.1.0"
+dependencies = [
+ "anova-rt",
+]
+
+[[package]]
 name = "hello-rust"
+version = "0.1.0"
+dependencies = [
+ "anova-rt",
+]
+
+[[package]]
+name = "init"
 version = "0.1.0"
 dependencies = [
  "anova-rt",
@@ -29,6 +43,13 @@ dependencies = [
 
 [[package]]
 name = "process-test"
+version = "0.1.0"
+dependencies = [
+ "anova-rt",
+]
+
+[[package]]
+name = "shell"
 version = "0.1.0"
 dependencies = [
  "anova-rt",

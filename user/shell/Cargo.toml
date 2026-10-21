@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+# Build the standalone native shell application with the shared no_std runtime.
+[package]
+name = "shell"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+build = "../build.rs"
+
+[dependencies]
+anova-rt = { path = "../rt" }

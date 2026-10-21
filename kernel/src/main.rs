@@ -8,6 +8,7 @@ extern crate alloc;
 mod abi;
 mod arch;
 mod boot;
+mod fs;
 mod mm;
 mod serial;
 mod task;
@@ -104,7 +105,7 @@ extern "C" fn kernel_main(timer_port: u64, timer_mask: u64) -> ! {
     mm::inject_fault();
     task::start();
     serial::write(format_args!(
-        "[BOOT:OK] M5 processes reclaimed; BSP idle, interrupts enabled\n"
+        "[BOOT:OK] M6 init/shell/files/pipes reclaimed; BSP idle, interrupts enabled\n"
     ));
     #[cfg(feature = "qemu-test")]
     {

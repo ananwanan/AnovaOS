@@ -15,6 +15,65 @@ pub const SYS_EXEC: u64 = 6;
 pub const SYS_WAIT: u64 = 7;
 pub const SYS_FORK: u64 = 8;
 pub const SYS_CLOSE: u64 = 9;
+pub const SYS_READ: u64 = 10;
+pub const SYS_OPEN: u64 = 11;
+pub const SYS_SEEK: u64 = 12;
+pub const SYS_DUP2: u64 = 13;
+pub const SYS_PIPE: u64 = 14;
+pub const SYS_READDIR: u64 = 15;
+pub const SYS_MKDIR: u64 = 16;
+pub const SYS_CHDIR: u64 = 17;
+pub const SYS_GETCWD: u64 = 18;
+pub const SYS_UNLINK: u64 = 19;
+pub const OPEN_READ: u64 = 1;
+pub const OPEN_WRITE: u64 = 2;
+pub const OPEN_CREATE: u64 = 4;
+pub const OPEN_TRUNCATE: u64 = 8;
+pub const OPEN_APPEND: u64 = 16;
+pub const OPEN_DIRECTORY: u64 = 32;
+pub const OPEN_FLAGS: u64 = 63;
+pub const FILE_LIMIT: i64 = -10;
+pub const READ_ONLY: i64 = -11;
+pub const NOT_DIRECTORY: i64 = -12;
+pub const IS_DIRECTORY: i64 = -13;
+pub const ALREADY_EXISTS: i64 = -14;
+pub const WOULD_BLOCK: i64 = -15;
+pub const BROKEN_PIPE: i64 = -16;
+pub const NOT_SEEKABLE: i64 = -17;
+pub const NO_SPACE: i64 = -18;
+pub const LINK_LOOP: i64 = -19;
+pub const PERMISSION_DENIED: i64 = -20;
+
+/// Fixed little-endian directory record, with all 80 bytes initialized.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct DirEntry {
+    pub inode: u64,
+    pub kind: u32,
+    pub name_len: u32,
+    pub name: [u8; 64],
+}
+impl Default for DirEntry {
+    fn default() -> Self {
+        Self {
+            inode: 0,
+            kind: 0,
+            name_len: 0,
+            name: [0; 64],
+        }
+    }
+}
+impl DirEntry {
+    pub fn bytes(self) -> [u8; 80] {
+        let mut bytes = [0; 80];
+        bytes[..8].copy_from_slice(&self.inode.to_le_bytes());
+        bytes[8..12].copy_from_slice(&self.kind.to_le_bytes());
+        bytes[12..16].copy_from_slice(&self.name_len.to_le_bytes());
+        bytes[16..].copy_from_slice(&self.name);
+        bytes
+    }
+}
+const _: () = assert!(size_of::<DirEntry>() == 80 && align_of::<DirEntry>() == 8);
 pub const BAD_ADDRESS: i64 = -1;
 pub const UNSUPPORTED: i64 = -2;
 pub const INVALID_ARGUMENT: i64 = -3;

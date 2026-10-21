@@ -8,7 +8,9 @@ or its task branch; read [STATUS.md](STATUS.md), [M3_MEMORY.md](M3_MEMORY.md)
 and [AGENTS.md](../AGENTS.md). M4 adds isolated native Rust/C applications; read
 [M4_USERSPACE.md](M4_USERSPACE.md) for the ABI/SDK and lifetime boundaries.
 M5 adds saved CPU/FPU contexts, user preemption, blocking and process lifecycle;
-read [M5_PROCESSES.md](M5_PROCESSES.md). External device IRQ delivery remains pending.
+read [M5_PROCESSES.md](M5_PROCESSES.md). M6 adds VFS, init, an interactive shell,
+blocking pipes and polled canonical serial input; read [M6_FILESYSTEM.md](M6_FILESYSTEM.md).
+External device IRQ delivery remains pending.
 
 ## Host setup
 
@@ -48,12 +50,12 @@ Run from the repository root:
 | `cargo xtask fetch` | Verified build/cache/ and build/firmware/ | Network, extraction or checksum error returns 1 |
 | `cargo xtask doctor` | Checks tools, versions, target and boot inputs | Reports all discovered problems; returns 1 |
 | `cargo xtask build` | target/x86_64-unknown-none/debug/anova-kernel and ELF checks | Build/link/ELF failure returns 1 |
-| `cargo xtask apps` | build/apps/: Rust/C ELF files and explicit ABI/SHA-256 manifest | Compiler/linker/ELF failure returns 1 |
+| `cargo xtask apps` | build/apps/: seven Rust/C ELFs, checked initramfs and ABI/SHA-256 manifest | Compiler/linker/ELF failure returns 1 |
 | `cargo xtask check-apps` | Rust user workspace Clippy with actual user target/linker flags | Warnings are errors |
 | `cargo xtask check-files` | Header and per-file inventory coverage required by DEV-001 | Missing explanation/inventory entry returns 1 |
 | `cargo xtask image` | build/images/anova-normal.iso | Missing/corrupt inputs stop image generation |
-| `cargo xtask run` | UEFI boot, native Rust/C apps on serial, then idle | Process errors propagate; stop QEMU with Ctrl+C |
-| `cargo xtask smoke` | Memory/CPU and 11 isolation cases, then CPU/FPU/process lifecycle/OOM/capacity suite | Missing isolation/reclamation evidence, fatal kernel fault, wrong exit or deadline returns 1 |
+| `cargo xtask run` | UEFI boot workloads, native PID 1 and interactive serial shell | Process errors propagate; stop QEMU with Ctrl+C |
+| `cargo xtask smoke` | Memory/CPU and 11 isolation cases, then CPU/FPU/process lifecycle plus VFS/pipe/shell/tmpfs-OOM suite | Missing isolation/reclamation evidence, fatal kernel fault, wrong exit or deadline returns 1 |
 | `cargo xtask smoke --case panic` | Controlled panic and QEMU 35 | Intentionally returns 1 |
 | `cargo xtask smoke --case timeout --timeout-secs 8` | Controlled hang, killed by watchdog | Intentionally returns 1 |
 | `cargo xtask smoke --case page-fault` | Real guard write faults on IST2, QEMU 37 | Intentionally returns 1 |
@@ -65,7 +67,8 @@ Run from the repository root:
 | `cargo xtask smoke --case unmapped` | Access after unmap and TLB flush, QEMU 37 | Intentionally returns 1 |
 | `cargo xtask smoke --case oom` | Infallible allocation panic, QEMU 35 | Intentionally returns 1 |
 | `cargo xtask verify` | Boot passes; twelve reached failure injections are rejected | Wrong vector/error/IST/address, unexpected outcome or unreached injection fails |
-| `cargo xtask test-host` | Frame/buddy/table boundaries and rollback; transcript/ACPI/PM/ELF/CLI tests | Test failures propagate |
+| `cargo xtask terminal-test` | Two normal boots: UART editing/CRLF/EOF, shell restart and volatile file loss | Missing actual output, guest failure or 30-second/session watchdog returns 1 |
+| `cargo xtask test-host` | Frame/buddy/table, VFS/pipe/FD, scheduler, archive/parser and transcript tests | Test failures propagate |
 
 smoke accepts --case boot/panic/timeout/invalid-opcode/general-protection/page-fault/
 double-fault/stack-guard/read-only/no-execute/direct-no-execute/unmapped/oom
@@ -101,7 +104,7 @@ persistence.
 cargo fmt --all -- --check
 cargo fmt --manifest-path user/Cargo.toml --all -- --check
 cargo xtask check-files
-cargo clippy --locked -p xtask -p anova-platform -p anova-memory -p anova-abi -p anova-elf -p anova-sched --all-targets -- -D warnings
+cargo clippy --locked -p xtask -p anova-platform -p anova-memory -p anova-abi -p anova-elf -p anova-sched -p anova-vfs --all-targets -- -D warnings
 cargo xtask check-apps
 cargo xtask apps
 cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features qemu-test -- -D warnings
@@ -112,6 +115,7 @@ cargo xtask build
 cargo xtask fetch
 cargo xtask doctor
 cargo xtask verify
+cargo xtask terminal-test
 ```
 
 Do not use cargo test --workspace for the hardware kernel or enable multiple fault
@@ -121,8 +125,8 @@ Success requires ordered boot/memory/CPU/timer markers, 8+ IRQs with consistent
 nanoseconds, both returning breakpoint IF states, TEST:PASS and QEMU 33.
 isa-debug-exit maps guest values as (value << 1) | 1: success 0x10 becomes 33,
 panic 0x11 becomes 35, and exception 0x12 becomes 37. Exit 0 is rejected.
-Only test features access this device; normal startup stays interruptible in
-sti/hlt. Panic reports phase, source location and message through independent
+Only test features access this device; normal startup stays in the interactive
+shell, with blocked input yielding to interruptible scheduler STI/HLT. Panic reports phase, source location and message through independent
 bounded output. Exceptions report registers, CR2, errors and actual IST.
 The gate treats exceptions as failures and separately validates each expected
 injection. See [M2_CPU.md](M2_CPU.md) for IRQ, mapping and time limitations.
@@ -134,9 +138,10 @@ A banner alone never passes.
 ## CI and evidence
 
 [boot.yml](../.github/workflows/boot.yml) runs the above checks on Ubuntu 24.04,
-including all 13 QEMU cases, and uploads logs even on failure. Actions are
+including all 13 QEMU cases and the two-boot terminal scenario, and uploads logs even on failure. Actions are
 pinned to commits. Configured CI and remote CI execution are separate facts.
-Current local evidence is in [validation/M5.md](validation/M5.md);
+Current local evidence is in [validation/M6.md](validation/M6.md);
+[validation/M5.md](validation/M5.md),
 [validation/M4.md](validation/M4.md),
 [validation/M3.md](validation/M3.md),
 [validation/M2.md](validation/M2.md) and

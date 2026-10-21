@@ -4,7 +4,15 @@
 use super::*;
 use sha2::{Digest, Sha256};
 
-pub const NAMES: [&str; 4] = ["hello-rust", "hello-c", "probe", "process-test"];
+pub const NAMES: [&str; 7] = [
+    "hello-rust",
+    "hello-c",
+    "probe",
+    "process-test",
+    "init",
+    "shell",
+    "fs-test",
+];
 const USER_TARGET: &str = "x86_64-unknown-linux-gnu";
 
 pub fn build(root: &Path, clippy: bool) -> Result<()> {
@@ -64,7 +72,14 @@ pub fn build(root: &Path, clippy: bool) -> Result<()> {
         return Ok(());
     }
     let apps = directory(root, "apps")?;
-    for name in ["hello-rust", "probe", "process-test"] {
+    for name in [
+        "hello-rust",
+        "probe",
+        "process-test",
+        "init",
+        "shell",
+        "fs-test",
+    ] {
         let path = apps.join(format!("{name}.elf"));
         output_path(&path)?;
         fs::copy(target.join(USER_TARGET).join("release").join(name), path)?;
@@ -114,6 +129,91 @@ pub fn build(root: &Path, clippy: bool) -> Result<()> {
     let path = apps.join("manifest.toml");
     output_path(&path)?;
     fs::write(path, manifest)?;
+    initramfs(&apps)?;
     println!("Verified native Rust/C ELF outputs in {}", apps.display());
+    Ok(())
+}
+
+/// Pack the bounded project-owned archive; names and permissions are explicit image policy.
+fn initramfs(apps: &Path) -> Result<()> {
+    let mut entries: Vec<(u8, String, Vec<u8>)> = Vec::new();
+    for path in ["/bin", "/etc", "/tmp", "/dev"] {
+        entries.push((2, path.into(), Vec::new()));
+    }
+    for name in NAMES {
+        entries.push((
+            4,
+            format!("/bin/{name}"),
+            fs::read(apps.join(format!("{name}.elf")))?,
+        ));
+    }
+    for name in ["ls", "cat", "echo", "pwd", "mkdir", "rm", "true", "false"] {
+        entries.push((3, format!("/bin/{name}"), b"shell".to_vec()));
+    }
+    entries.push((
+        1,
+        "/etc/motd".into(),
+        b"AnovaOS native v1; /tmp is volatile.\n".to_vec(),
+    ));
+    entries.push((1, "/etc/large".into(), vec![b'Q'; 5000]));
+    entries.push((
+        1,
+        "/etc/smoke.sh".into(),
+        br#"ls /
+echo M6-shell-ok > /tmp/message
+cat /tmp/message
+echo pipeline-data | cat > /tmp/pipe
+cat < /tmp/pipe
+echo again >> /tmp/message
+cat /etc/large | cat | cat > /tmp/large
+cat /etc/large | true
+status
+cd /tmp/work
+pwd
+echo relative > note
+cat note
+cd /
+ls /dev
+hello-rust from-shell
+hello-c from-shell
+status
+missing-command
+status
+echo cannot-write > /etc/motd
+status
+echo malformed |
+status
+fs-test shell-check
+exit 0
+"#
+        .to_vec(),
+    ));
+    let mut bytes = b"ANOVAFS1".to_vec();
+    bytes.extend_from_slice(&(entries.len() as u32).to_le_bytes());
+    for (kind, path, data) in entries {
+        bytes.extend_from_slice(&[kind, 0]);
+        bytes.extend_from_slice(&(path.len() as u16).to_le_bytes());
+        bytes.extend_from_slice(&(data.len() as u64).to_le_bytes());
+        bytes.extend_from_slice(path.as_bytes());
+        bytes.extend_from_slice(&data);
+    }
+    let path = apps.join("initramfs.anovafs");
+    output_path(&path)?;
+    fs::write(&path, &bytes)?;
+    let fs = anova_vfs::Vfs::new(&bytes).map_err(|e| format!("Invalid initramfs: {e}"))?;
+    for name in NAMES {
+        let data = fs
+            .executable(anova_vfs::ROOT, &format!("/bin/{name}"))
+            .map_err(|e| format!("Missing executable: {e}"))?;
+        anova_elf::parse(data).map_err(|e| format!("Invalid archived ELF: {e:?}"))?;
+    }
+    let manifest = apps.join("manifest.toml");
+    let mut file = fs::OpenOptions::new().append(true).open(manifest)?;
+    use std::io::Write;
+    writeln!(
+        file,
+        "\n[initramfs]\nformat = \"anova.initramfs.v1\"\nfile = \"initramfs.anovafs\"\nsha256 = \"{:x}\"",
+        Sha256::digest(&bytes)
+    )?;
     Ok(())
 }
