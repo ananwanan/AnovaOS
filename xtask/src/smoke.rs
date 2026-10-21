@@ -81,6 +81,7 @@ pub fn assess(log: &str, code: Option<i32>, timed_out: bool) -> Result<(), Failu
         remaining = &remaining[index + marker.len()..];
     }
     for marker in [
+        "[LINUX:BOUNDARY] page_end=true vector_fault=true writev_partial=true empty_random=true",
         "[LINUX:MEMORY] partial_oom=rolled_back overlap=retained frames_restored=true heap_restored=true",
         "[LINUX:PROBE] errno=true mmap=true TLS=true fork=true wait=true exec=true env=true CLOEXEC=true SIGPIPE=true random=true sleep=true",
         "[LINUX:MUSL] TLS=true malloc=true errno=true file=true",
@@ -338,6 +339,7 @@ pub fn reached_oom(log: &str, code: Option<i32>) -> bool {
 mod tests {
     use super::*;
     const GOOD: &str = concat!(
+        "[LINUX:BOUNDARY] page_end=true vector_fault=true writev_partial=true empty_random=true\n",
         "[LINUX:MEMORY] partial_oom=rolled_back overlap=retained frames_restored=true heap_restored=true\n[LINUX:PROBE] errno=true mmap=true TLS=true fork=true wait=true exec=true env=true CLOEXEC=true SIGPIPE=true random=true sleep=true\n[LINUX:MUSL] TLS=true malloc=true errno=true file=true\n[LINUX:BUSYBOX] applet=echo passed=true\n[LINUX:BUSYBOX] applet=ls passed=true\n[LINUX:BUSYBOX] applet=cat passed=true\n[LINUX:SHELL] bytes=12 redirection=true verified=true\n[LINUX:SHELL] bytes=5000 redirection=true verified=true\nM8-status-1\n",
         "[BOOT:ENTRY]\n[BOOT:PROTOCOL]\n[BOOT:MEMORY]\n[CPU:PAGING]\n[CPU:TABLES]\n[TRAP:BREAKPOINT] saved_if=0 return=iretq\n[CPU:ACPI]\n[CPU:IOAPIC]\n[CPU:APIC]\n[MM:FRAMES]\n[MM:TABLES] boot_table_refs=0 NX=on WP=on direct_map=NX\n[MM:HEAP]\n[MM:STACK]\n[MM:TEST] mappings=256 invalid_free=rejected frame_oom=recovered map_oom=rolled_back\n[MM:ALLOC] coalesced=true fallible_oom=recovered used=0\n[MM:READY]\n[CPU:TIMER] ticks=8 monotonic_ns=80000000\n[TRAP:BREAKPOINT] saved_if=1 return=iretq\n",
         "[USER:CPU] syscall=true return=iretq\n[APP:RUST] args: hello-rust AnovaOS ring3; BSS=zero x87/SSE2=ok\n[USER:EXIT] pid=1 status=0\n[APP:C] args: hello-c native-v1; BSS=zero SSE2=ok\n[USER:EXIT] pid=2 status=7\n[USER:COPYFAULT] write=false recovered=true\n[USER:COPYFAULT] write=true recovered=true\n[USER:LOADER] partial_oom=rolled_back\n[USER:CASE] name=syscalls passed=true\n[USER:CASE] name=timer passed=true\n[USER:CASE] name=page-fault passed=true\n[USER:CASE] name=kernel-read passed=true\n[USER:CASE] name=kernel-write passed=true\n[USER:CASE] name=stack-guard passed=true\n[USER:CASE] name=invalid-opcode passed=true\n[USER:CASE] name=privileged passed=true\n[USER:CASE] name=bad-rsp passed=true\n[USER:CASE] name=read-only passed=true\n[USER:CASE] name=no-execute passed=true\n[USER:TEST] cases=11 repeated=8 pointers=rejected syscalls=checked faults=contained frames_restored=true user_irqs=1\n",

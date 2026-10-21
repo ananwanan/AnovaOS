@@ -1,9 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Translate native errors and supported Linux x86_64 open flags at the ABI boundary.
+//! Define Linux error/flag translations and bounded string decoding at the ABI boundary.
 //! No Linux syscall numbers or wire layouts belong in generic VFS or scheduling policy.
+pub mod strings;
+
 use crate::*;
 pub const PERSONALITY: &str = "linux.x86_64.static.v1";
 pub const ENOSYS: i64 = -38;
+pub const E2BIG: i64 = -7;
+pub const EFAULT: i64 = -14;
+pub const EINVAL: i64 = -22;
+pub const ENAMETOOLONG: i64 = -36;
 pub fn errno(value: i64) -> i64 {
     match value {
         BAD_ADDRESS => -14,

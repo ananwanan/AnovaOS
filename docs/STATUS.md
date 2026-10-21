@@ -1,8 +1,9 @@
 # Implementation status
 
 This document records verified capabilities, remaining limits and the next task.
-Recorded 2026-10-21 (Asia/Shanghai). M8 source baseline:
+Recorded 2026-10-22 (Asia/Shanghai). M8 source baseline:
 `3dfdf6e` on `dev` (merged M7). Task branch: `feat/m8-linux-static`.
+Optimization baseline: `b65ac15`; see [optimization validation](validation/M8_OPTIMIZATION.md).
 See [M8 design](M8_LINUX.md) and [validation/M8.md](validation/M8.md).
 
 ## Implemented and locally verified
@@ -39,7 +40,7 @@ See [M8 design](M8_LINUX.md) and [validation/M8.md](validation/M8.md).
   RDRAND, descriptor CLOEXEC, fork/exec/wait, basic signal masks/default/ignore
   and the selected static musl/BusyBox CLI tests. Full signal handlers remain
   unsupported and return ENOSYS.
-- 61 host tests (including storage, ACPI-power and shell-parser coverage),
+- 65 host tests (including storage, ACPI-power and shell-parser coverage),
   formatting, Clippy with warnings denied, source-purpose coverage, all 13
   QEMU regression classifications and both terminal-input boots pass.
   Remote CI execution is recorded separately and has not been run for M7.

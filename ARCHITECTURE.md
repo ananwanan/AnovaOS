@@ -248,3 +248,10 @@ backend-neutral types. Startup stacks expose checked argv/envp/auxv. Native disk
 image policy remains native v1. Static musl and a pinned BusyBox profile are
 verified; custom signal handlers, dynamic loading, threads and general Linux
 compatibility are not implemented. See [M8 design](docs/M8_LINUX.md).
+
+M8 optimization keeps page-bounded C-string/vector decoding in
+`crates/abi/src/linux/strings.rs`, parameterized by the kernel's checked copy
+operation. Exec fills owned buffers in place; no user reference survives the
+activation boundary. The native/Linux stack encoder places payload and words
+once. `kernel/task/linux/io.rs` imports descriptor arrays before I/O and retains
+partial-write progress independently of later user-buffer faults.

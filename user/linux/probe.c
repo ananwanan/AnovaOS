@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Exercise the Linux register ABI, errno isolation, anonymous pages, TLS and fork/wait.
+// Exercise Linux startup, checked string/vector boundaries, partial I/O, TLS and process lifetime.
 typedef unsigned long u64;
 static long call(u64 n,u64 a,u64 b,u64 c,u64 d,u64 e,u64 f) {
     register u64 r10 __asm__("r10")=d, r8 __asm__("r8")=e, r9 __asm__("r9")=f;
@@ -54,6 +54,34 @@ void probe_main(u64 *stack) {
     CHECK(C(11,p,8192,0)==0);
     long fd=C(2,"/tmp/probe",0x242,0644);
     CHECK(fd==3 && C(1,fd,"Z",1)==1 && C(8,fd,0,0)==0);
+    long q=call(9,0,4096,3,0x22,(u64)-1,0);
+    CHECK(q>0);
+    char *path=(void*)(q+4096-11);
+    static const char guard_path[]="/tmp/guard";
+    for(unsigned i=0;i<sizeof(guard_path);++i) path[i]=guard_path[i];
+    long guard=C(2,path,0x242,0644);
+    CHECK(guard>=0 && C(3,guard,0,0)==0 && C(87,path,0,0)==0);
+    CHECK(C(59,"/bin/linux-probe",q+4096,0)==-14);
+    const char *excess[18];
+    for(unsigned i=0;i<17;++i) excess[i]="x";
+    excess[17]=0;
+    CHECK(C(59,"/bin/linux-probe",excess,0)==-7);
+    char *payload=(void*)q;
+    payload[0]='V'; payload[1]='W';
+    u64 *iov=(void*)(q+4096-16);
+    iov[0]=(u64)payload; iov[1]=2;
+    CHECK(C(8,fd,0,2)==1);
+    CHECK(C(20,fd,q+4096,1)==-14);
+    CHECK(C(20,fd,iov,2)==-14 && C(8,fd,0,1)==1);
+    u64 invalid_length[]={q,2,q,(u64)-1};
+    CHECK(C(20,fd,invalid_length,2)==-22 && C(8,fd,0,1)==1);
+    u64 invalid_buffer[]={q,2,1,1};
+    CHECK(C(20,fd,invalid_buffer,2)==2);
+    CHECK(C(20,31,0,0)==-9);
+    CHECK(C(318,0,0,0)==0);
+    CHECK(C(8,fd,0,0)==0 && C(11,q,4096,0)==0);
+    static const char boundary[]="[LINUX:BOUNDARY] page_end=true vector_fault=true writev_partial=true empty_random=true\n";
+    CHECK(C(1,1,boundary,sizeof(boundary)-1)==sizeof(boundary)-1);
     CHECK(C(72,fd,1030,10)==10 && C(72,10,1,0)==1);
     child=C(57,0,0,0); CHECK(child>=0);
     if(child==0) {

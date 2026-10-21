@@ -213,7 +213,6 @@ impl Kernel {
                 sigmask: image.sigmask,
                 ignored: image.ignored,
                 pending: 0,
-                mmap: image.mmap,
                 space: image.space.clone_eager().map_err(|_| NO_MEMORY)?,
                 entry: image.entry,
                 stack: image.stack,

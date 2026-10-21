@@ -87,6 +87,18 @@ the specifically tested synchronous wait and noninteractive scripts work.
 No claim is made for ash `trap`, Ctrl+C, job control or arbitrary shell scripts.
 These are M9 work, not fake-success registrations.
 
+The string decoder copies at most the remaining bytes of one user page at a
+time and stops after finding NUL; it does not touch the following guard page.
+argv/envp share one bounded decoder and are filled in place while the address
+space is pinned. Native and Linux startup blocks now use the same checked
+placement helper without constructing an intermediate native header.
+
+writev imports its complete descriptor array before publishing writes. A bad
+array, signed-negative length or invalid address range fails before I/O; a
+later buffer access fault returns the number of bytes already written. Empty
+getrandom requests return zero without touching the pointer or entropy source.
+See [optimization validation](validation/M8_OPTIMIZATION.md).
+
 Linux reads use the existing canonical COM1 terminal: CR/LF normalization,
 backspace/DEL, echo and Ctrl+D. Device IRQs stay masked and the BSP polls input.
 The minimal ash build has no interactive prompt/job control; it can consume

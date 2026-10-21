@@ -1,9 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Implement the bounded Linux AMD64 personality on the BSP scheduler boundary.
-//! Translate wire formats here; generic VFS, native ABI and scheduling remain independent.
+//! Translate wire formats at this boundary; generic VFS, native ABI and scheduling remain independent.
+mod io;
+pub(super) use io::io_frame;
+
 use super::*;
 use crate::mm::uaccess;
-use anova_abi::linux::{ENOSYS, errno, open_flags};
+use anova_abi::linux::{
+    ENOSYS, errno, open_flags,
+    strings::{self, StringVector},
+};
 
 pub fn random(bytes: &mut [u8]) -> Result<(), i64> {
     // SAFETY: CPUID is present in long mode; RDRAND is executed only after feature detection.
@@ -27,23 +33,12 @@ pub fn random(bytes: &mut [u8]) -> Result<(), i64> {
     }
     Ok(())
 }
-pub fn io_frame(mut f: TrapFrame, linux: bool) -> TrapFrame {
-    if linux {
-        f.rax = if f.rax == 0 { SYS_READ } else { SYS_WRITE };
-    }
-    f
-}
 fn string(space: &mm::user::UserSpace, address: u64, bytes: &mut [u8; 129]) -> Result<usize, i64> {
-    for i in 0..bytes.len() {
-        let at = address.checked_add(i as u64).ok_or(-14)?;
-        uaccess::from_user(space, UserAddr(at), &mut bytes[i..i + 1]).map_err(errno)?;
-        if bytes[i] == 0 {
-            core::str::from_utf8(&bytes[..i]).map_err(|_| -22)?;
-            return Ok(i);
-        }
-    }
-    Err(-36)
+    strings::read_c_string(address, bytes, &mut |at, output| {
+        uaccess::from_user(space, UserAddr(at), output).map_err(errno)
+    })
 }
+
 fn stat_bytes(meta: (u64, u32, usize, bool)) -> [u8; 144] {
     let (inode, kind, size, exec) = meta;
     let mut b = [0; 144];
@@ -241,67 +236,35 @@ impl Kernel {
     fn linux_exec(&mut self, i: usize, f: &TrapFrame) -> Result<(), i64> {
         let space = &self.process(i).image.as_ref().unwrap().space;
         let mut name = [0; 129];
-        let mut storage = [[0; 129]; 16];
-        let mut lengths = [0; 16];
-        let mut env_storage = [[0; 129]; 16];
-        let mut env_lengths = [0; 16];
-        let mut env_count = 0;
-        let (n, count) = space.with_active(|| -> Result<(usize, usize), i64> {
-            let n = string(space, f.rdi, &mut name)?;
-            let mut count = 0;
-            loop {
-                let mut word = [0; 8];
-                let at = f.rsi.checked_add(count as u64 * 8).ok_or(-14)?;
-                uaccess::from_user(space, UserAddr(at), &mut word).map_err(errno)?;
-                let address = u64::from_le_bytes(word);
-                if address == 0 {
-                    break;
-                }
-                if count == 16 {
-                    return Err(-7);
-                }
-                lengths[count] = string(space, address, &mut storage[count])?;
-                count += 1;
-            }
+        let mut arguments = StringVector::empty();
+        let mut environment = StringVector::empty();
+        // Keep large argument buffers in this frame; the active-root closure returns only a length.
+        let n = space.with_active(|| -> Result<_, i64> {
+            let mut copy = |at, output: &mut [u8]| {
+                uaccess::from_user(space, UserAddr(at), output).map_err(errno)
+            };
+            let n = strings::read_c_string(f.rdi, &mut name, &mut copy)?;
+            arguments.read(f.rsi, &mut copy)?;
             if f.rdx != 0 {
-                loop {
-                    let mut word = [0; 8];
-                    let at = f.rdx.checked_add(env_count as u64 * 8).ok_or(-14)?;
-                    uaccess::from_user(space, UserAddr(at), &mut word).map_err(errno)?;
-                    let address = u64::from_le_bytes(word);
-                    if address == 0 {
-                        break;
-                    }
-                    if env_count == 16 {
-                        return Err(-7);
-                    }
-                    env_lengths[env_count] = string(space, address, &mut env_storage[env_count])?;
-                    env_count += 1;
-                }
+                environment.read(f.rdx, &mut copy)?;
             }
-            if count == 0 {
+            if arguments.is_empty() {
                 return Err(-22);
             }
-            Ok((n, count))
+            Ok(n)
         })?;
         let name = core::str::from_utf8(&name[..n]).unwrap();
         if !self.executable_linux(i, name).map_err(errno)? {
             return Err(-8);
         }
         let bytes = self.executable(i, name).map_err(errno)?;
-        let mut args = [""; 16];
-        for k in 0..count {
-            args[k] = core::str::from_utf8(&storage[k][..lengths[k]]).unwrap();
-        }
-        let mut env = [""; 16];
-        for k in 0..env_count {
-            env[k] = core::str::from_utf8(&env_storage[k][..env_lengths[k]]).unwrap();
-        }
+        let args = arguments.strings();
+        let env = environment.strings();
         let mut image = loader::load_env(
             &bytes,
             anova_abi::linux::PERSONALITY,
-            &args[..count],
-            &env[..env_count],
+            &args[..arguments.len()],
+            &env[..environment.len()],
         )
         .map_err(|e| match e {
             loader::LoadError::Memory(_) => -12i64,
@@ -471,45 +434,14 @@ impl Kernel {
                             -9
                         }
                     } // No termios ioctl is claimed by this profile.
-                    20 => {
-                        // writev: validate all descriptors and preserve partial completion.
-                        if f.rdx > 16 {
-                            return Err(-22);
-                        }
-                        let mut total = 0;
-                        for k in 0..f.rdx {
-                            let mut pair = [0; 16];
-                            let at = f.rsi.checked_add(k * 16).ok_or(-14)?;
-                            uaccess::from_user(space, UserAddr(at), &mut pair).map_err(errno)?;
-                            native.rax = SYS_WRITE;
-                            native.rsi = u64::from_le_bytes(pair[..8].try_into().unwrap());
-                            let length = u64::from_le_bytes(pair[8..].try_into().unwrap());
-                            native.rdx = length.min(MAX_WRITE as u64);
-                            let result = fs::syscall(
-                                &native,
-                                space,
-                                &mut p.files,
-                                &mut p.cwd,
-                                &mut self.fs,
-                                &mut self.terminal,
-                            )
-                            .unwrap();
-                            if result < 0 {
-                                return Ok(if total != 0 {
-                                    total
-                                } else if result == WOULD_BLOCK {
-                                    WOULD_BLOCK
-                                } else {
-                                    errno(result)
-                                });
-                            }
-                            total += result;
-                            if result as u64 != length {
-                                break;
-                            }
-                        }
-                        total
-                    }
+                    20 => io::writev(
+                        f,
+                        space,
+                        &mut p.files,
+                        &mut p.cwd,
+                        &mut self.fs,
+                        &mut self.terminal,
+                    ),
                     21 => {
                         if f.rsi & !7 != 0 {
                             return Err(-22);
@@ -666,6 +598,9 @@ impl Kernel {
                             return Err(-22);
                         }
                         let n = f.rsi.min(4096) as usize;
+                        if n == 0 {
+                            return Ok(0);
+                        }
                         let mut bytes = [0; 4096];
                         if !space.accessible(UserAddr(f.rdi), n, true, false) {
                             return Err(-14);
@@ -808,7 +743,6 @@ impl Kernel {
                 if !found || image.space.map_anonymous(start, start + size).is_err() {
                     return -12;
                 }
-                image.mmap = start + size;
                 start as i64
             }
             11 => {

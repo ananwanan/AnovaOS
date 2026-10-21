@@ -1,50 +1,87 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Encode bounded native and Linux argc/argv/envp/auxv startup blocks without host pointers.
+//! Encode native/Linux startup blocks once, with checked downward string and word placement.
 use crate::Error;
 use anova_abi::UserAddr;
 
-pub fn build(args: &[&str], page: &mut [u8; 4096], top: u64) -> Result<u64, Error> {
-    if args.is_empty()
-        || args.len() > 16
-        || top & 4095 != 0
-        || top
-            .checked_sub(4096)
-            .and_then(|base| UserAddr(base).checked_end(4096))
-            != Some(top)
-    {
-        return Err(Error::Arguments);
-    }
-    page.fill(0);
-    let mut cursor = page.len();
-    let mut pointers = [0_u64; 16];
-    for (i, arg) in args.iter().enumerate().rev() {
-        if arg.len() > 128 || arg.as_bytes().contains(&0) {
+const PAGE_BYTES: usize = 4096;
+const STRING_LIMIT: usize = 16;
+const STRING_BYTES: usize = 128;
+
+struct StackPage<'a> {
+    page: &'a mut [u8; PAGE_BYTES],
+    base: u64,
+    cursor: usize,
+}
+impl<'a> StackPage<'a> {
+    fn new(page: &'a mut [u8; PAGE_BYTES], top: u64) -> Result<Self, Error> {
+        let base = top.checked_sub(PAGE_BYTES as u64).ok_or(Error::Arguments)?;
+        if top & (PAGE_BYTES as u64 - 1) != 0 || UserAddr(base).checked_end(PAGE_BYTES) != Some(top)
+        {
             return Err(Error::Arguments);
         }
-        cursor = cursor.checked_sub(arg.len() + 1).ok_or(Error::Arguments)?;
-        page[cursor..cursor + arg.len()].copy_from_slice(arg.as_bytes());
-        pointers[i] = top - 4096 + cursor as u64;
+        page.fill(0);
+        Ok(Self {
+            page,
+            base,
+            cursor: PAGE_BYTES,
+        })
     }
-    cursor = cursor
-        .checked_sub((args.len() + 3) * 8)
-        .ok_or(Error::Arguments)?
-        & !15;
-    let rsp = top - 4096 + cursor as u64;
-    for value in core::iter::once(args.len() as u64)
-        .chain(pointers[..args.len()].iter().copied())
-        .chain([0, 0])
-    {
-        page[cursor..cursor + 8].copy_from_slice(&value.to_le_bytes());
-        cursor += 8;
+    fn bytes(&mut self, bytes: &[u8]) -> Result<u64, Error> {
+        let start = self
+            .cursor
+            .checked_sub(bytes.len())
+            .ok_or(Error::Arguments)?;
+        self.page[start..self.cursor].copy_from_slice(bytes);
+        self.cursor = start;
+        Ok(self.base + start as u64)
     }
-    Ok(rsp)
+    fn strings(&mut self, strings: &[&str]) -> Result<[u64; STRING_LIMIT], Error> {
+        if strings.len() > STRING_LIMIT {
+            return Err(Error::Arguments);
+        }
+        let mut pointers = [0; STRING_LIMIT];
+        for (index, string) in strings.iter().enumerate().rev() {
+            if string.len() > STRING_BYTES || string.as_bytes().contains(&0) {
+                return Err(Error::Arguments);
+            }
+            self.bytes(&[0])?;
+            pointers[index] = self.bytes(string.as_bytes())?;
+        }
+        Ok(pointers)
+    }
+    fn finish(self, argv: &[u64], envp: &[u64], auxv: &[(u64, u64)]) -> Result<u64, Error> {
+        let words = argv.len() + envp.len() + 3 + auxv.len() * 2;
+        let start = self.cursor.checked_sub(words * 8).ok_or(Error::Arguments)? & !15;
+        let values = core::iter::once(argv.len() as u64)
+            .chain(argv.iter().copied())
+            .chain([0])
+            .chain(envp.iter().copied())
+            .chain([0])
+            .chain(auxv.iter().flat_map(|&(kind, value)| [kind, value]));
+        for (slot, value) in self.page[start..start + words * 8]
+            .chunks_exact_mut(8)
+            .zip(values)
+        {
+            slot.copy_from_slice(&value.to_le_bytes());
+        }
+        Ok(self.base + start as u64)
+    }
+}
+
+pub fn build(args: &[&str], page: &mut [u8; PAGE_BYTES], top: u64) -> Result<u64, Error> {
+    if args.is_empty() {
+        return Err(Error::Arguments);
+    }
+    let mut stack = StackPage::new(page, top)?;
+    let argv = stack.strings(args)?;
+    stack.finish(&argv[..args.len()], &[], &[])
 }
 
 /// Build the Linux AMD64 entry contract, including an AT_NULL-terminated aux vector.
 /// Random bytes must come from the kernel entropy source, never a fixed fixture in production.
 pub fn build_linux(
     args: &[&str],
-    page: &mut [u8; 4096],
+    page: &mut [u8; PAGE_BYTES],
     top: u64,
     image: &crate::Image,
     random: [u8; 16],
@@ -55,39 +92,23 @@ pub fn build_linux(
 pub fn build_linux_env(
     args: &[&str],
     env: &[&str],
-    page: &mut [u8; 4096],
+    page: &mut [u8; PAGE_BYTES],
     top: u64,
     image: &crate::Image,
     random: [u8; 16],
 ) -> Result<u64, Error> {
-    if env.len() > 16 {
+    if args.is_empty() {
         return Err(Error::Arguments);
     }
-    // Reuse the checked argument encoder and preserve its strings/pointers.
-    let base = build(args, page, top)?;
-    let old = (base - (top - 4096)) as usize;
-    let mut pointers = [0u64; 16];
-    for (i, value) in pointers[..args.len()].iter_mut().enumerate() {
-        *value = u64::from_le_bytes(page[old + 8 + i * 8..old + 16 + i * 8].try_into().unwrap());
-    }
-    let mut env_pointers = [0u64; 16];
-    let mut cursor = old;
-    for (i, text) in env.iter().enumerate().rev() {
-        if text.len() > 128 || text.as_bytes().contains(&0) {
-            return Err(Error::Arguments);
-        }
-        cursor = cursor.checked_sub(text.len() + 1).ok_or(Error::Arguments)?;
-        page[cursor..cursor + text.len()].copy_from_slice(text.as_bytes());
-        page[cursor + text.len()] = 0;
-        env_pointers[i] = top - 4096 + cursor as u64;
-    }
-    let random_offset = cursor.checked_sub(16).ok_or(Error::Arguments)?;
-    page[random_offset..random_offset + 16].copy_from_slice(&random);
-    let aux = [
+    let mut stack = StackPage::new(page, top)?;
+    let argv = stack.strings(args)?;
+    let envp = stack.strings(env)?;
+    let random = stack.bytes(&random)?;
+    let auxv = [
         (3, image.phdr),
         (4, 56),
         (5, image.phnum),
-        (6, 4096),
+        (6, PAGE_BYTES as u64),
         (7, 0),
         (8, 0),
         (9, image.entry),
@@ -96,25 +117,10 @@ pub fn build_linux_env(
         (13, 0),
         (14, 0),
         (23, 0),
-        (25, top - 4096 + random_offset as u64),
+        (25, random),
         (0, 0),
     ];
-    let start = random_offset
-        .checked_sub((args.len() + env.len() + 3 + aux.len() * 2) * 8)
-        .ok_or(Error::Arguments)?
-        & !15;
-    let mut cursor = start;
-    for value in core::iter::once(args.len() as u64)
-        .chain(pointers[..args.len()].iter().copied())
-        .chain([0])
-        .chain(env_pointers[..env.len()].iter().copied())
-        .chain([0])
-        .chain(aux.into_iter().flat_map(|(a, b)| [a, b]))
-    {
-        page[cursor..cursor + 8].copy_from_slice(&value.to_le_bytes());
-        cursor += 8;
-    }
-    Ok(top - 4096 + start as u64)
+    stack.finish(&argv[..args.len()], &envp[..env.len()], &auxv)
 }
 
 #[cfg(test)]
@@ -187,6 +193,18 @@ mod tests {
         assert_eq!(word(at + 1), 0);
         assert!(
             build_linux_env(&["app"], &["bad\0value"], &mut page, top, &image, [0; 16]).is_err()
+        );
+        let fitting = "x".repeat(106);
+        assert!(
+            build_linux_env(
+                &[fitting.as_str(); 16],
+                &[fitting.as_str(); 16],
+                &mut page,
+                top,
+                &image,
+                [0x5a; 16]
+            )
+            .is_ok()
         );
         let long = "x".repeat(128);
         assert!(
