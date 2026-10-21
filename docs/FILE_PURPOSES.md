@@ -142,3 +142,16 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `user/editor/src/main.rs` | Open/edit bounded ASCII text, retain failed-save buffers and fsync successful saves. |
 | `user/fs-test/src/disk.rs` | Exercise real ext2 fd/indirect/sparse/unlink syscalls and verify persisted source/ELF data. |
 | `xtask/src/disk.rs` | Create safe regular ext2 images and drive independent reboot/integrity/device-error scenarios. |
+| `crates/abi/src/linux.rs` | Translate native errors and supported Linux open flags without contaminating generic subsystems. |
+| `kernel/src/task/linux.rs` | Dispatch the static Linux personality, checked wire formats, TLS, memory, process and limited signal operations. |
+| `user/linux/probe.S` | Pass the real Linux startup stack to the freestanding ABI probe with SysV alignment. |
+| `user/linux/probe.c` | Exercise Linux stack, errno, memory, TLS, fork/exec/env/wait, CLOEXEC, SIGPIPE, random and sleep. |
+| `user/linux/musl.c` | Verify unmodified static musl startup, compiler TLS, allocation, errno and actual file I/O. |
+| `user/linux/busybox.config` | Select the pinned static BusyBox applet profile from allnoconfig defaults. |
+| `xtask/src/linux.rs` | Build verified BusyBox sources, preserve notices/source bundle and trace exact guest ELFs on Linux. |
+| `docs/M8_LINUX.md` | Define supported Linux startup/syscalls, bounded semantics, build recipes and explicit unsupported behavior. |
+| `docs/validation/M8.md` | Record actual M8 binaries, host traces, guest cases, regression evidence and limitations. |
+| `docs/third-party/musl.md` | Preserve the unmodified tested musl package copyright and MIT notices for guest distribution. |
+| `crates/abi/src/linux/strings.rs` | Decode page-bounded C strings and pointer vectors through a checked copy callback without allocation. |
+| `kernel/src/task/linux/io.rs` | Import Linux writev descriptors before I/O and preserve completed bytes across later buffer faults. |
+| `docs/validation/M8_OPTIMIZATION.md` | Record M8 string/stack/I/O improvements, measurable copy counts, boundary tests and regression evidence. |

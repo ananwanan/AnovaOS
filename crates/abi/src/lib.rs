@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 #![no_std]
-//! Native v1 constants, checked user addresses and padding-free process/query layouts.
-//! These are AnovaOS interfaces; they do not implement the Linux syscall ABI.
+//! Native v1 constants, checked addresses and layouts; Linux translations live in a distinct module.
+//! Top-level syscall constants are native AnovaOS interfaces, never Linux syscall numbers.
+
+pub mod linux;
 
 pub const VERSION: u32 = 1;
 pub const PERSONALITY: &str = "anova.native.v1";
@@ -106,7 +108,7 @@ pub struct ExecRequest {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[repr(C)]
 pub struct ExitStatus {
-    /// 0=exit, 1=CPU fault (code is vector), 2=unsafe return rejected.
+    /// 0=exit, 1=CPU fault (vector), 2=unsafe return rejected, 3=signal termination (number).
     pub reason: u32,
     pub code: u32,
 }

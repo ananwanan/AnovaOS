@@ -73,6 +73,7 @@ pub struct Vfs<'a> {
     opens: Vec<Option<Open>>,
     pipes: Vec<Option<Pipe>>,
     disk: Option<Ext2>,
+    linux: [bool; NODE_LIMIT],
 }
 fn slots<T>(n: usize, mut f: impl FnMut() -> T) -> Result<Vec<T>, i64> {
     let mut v = Vec::new();
@@ -98,6 +99,7 @@ impl<'a> Vfs<'a> {
             opens: slots(OPEN_LIMIT, || None)?,
             pipes: slots(PIPE_LIMIT, || None)?,
             disk: None,
+            linux: [false; NODE_LIMIT],
         };
         let mut input = archive::Archive::new(archive)?;
         while let Some(entry) = input.entry()? {
@@ -106,7 +108,10 @@ impl<'a> Vfs<'a> {
                 archive::SYMLINK => {
                     Data::Link(core::str::from_utf8(entry.data).map_err(|_| INVALID_ARGUMENT)?)
                 }
-                kind => Data::Borrowed(entry.data, kind == archive::EXECUTABLE),
+                kind => Data::Borrowed(
+                    entry.data,
+                    matches!(kind, archive::EXECUTABLE | archive::LINUX_EXECUTABLE),
+                ),
             };
             let (parent, name) = fs.parent(ROOT, entry.path)?;
             // Archive paths may never traverse a symlink supplied by an earlier entry.
@@ -116,7 +121,8 @@ impl<'a> Vfs<'a> {
             if !lexical.is_empty() && &canonical[..length] != lexical.as_bytes() {
                 return Err(INVALID_ARGUMENT);
             }
-            fs.insert(parent, name, data, Mount::Initramfs)?;
+            let index = fs.insert(parent, name, data, Mount::Initramfs)?;
+            fs.linux[index] = entry.kind == archive::LINUX_EXECUTABLE;
         }
         fs.mount("/tmp", Mount::Tmpfs)?;
         fs.mount("/dev", Mount::Devfs)?;
@@ -490,6 +496,48 @@ impl<'a> Vfs<'a> {
             _ => Err(PERMISSION_DENIED),
         }
     }
+    /// Image policy comes from the archive record, never an ELF-header heuristic.
+    pub fn linux_executable(&self, cwd: usize, path: &str) -> Result<bool, i64> {
+        Ok(self.linux[self.resolve(cwd, path)?])
+    }
+    /// Return backend-neutral inode, kind, size and executable metadata.
+    pub fn metadata(&self, cwd: usize, path: &str) -> Result<(u64, u32, usize, bool), i64> {
+        self.node_metadata(self.resolve(cwd, path)?)
+    }
+    pub fn metadata_nofollow(
+        &self,
+        cwd: usize,
+        path: &str,
+    ) -> Result<(u64, u32, usize, bool), i64> {
+        if path.ends_with('/') || path == "." || path == ".." {
+            return self.metadata(cwd, path);
+        }
+        let (parent, name) = self.parent(cwd, path)?;
+        self.node_metadata(self.child(parent, name).ok_or(NOT_FOUND)?)
+    }
+    fn node_metadata(&self, n: usize) -> Result<(u64, u32, usize, bool), i64> {
+        let (kind, size, executable) = match &self.nodes[n].data {
+            Data::Directory => (2, 0, true),
+            Data::Borrowed(b, x) => (1, b.len(), *x),
+            Data::Mutable(b) => (1, b.len(), false),
+            Data::Persistent { size, executable } => (1, *size, *executable),
+            Data::Link(b) => (3, b.len(), false),
+            Data::Device(_) => (4, 0, false),
+        };
+        Ok((n as u64, kind, size, executable))
+    }
+    pub fn descriptor_metadata(
+        &self,
+        fds: &Descriptors,
+        fd: u64,
+    ) -> Result<(u64, u32, usize, bool), i64> {
+        match self.opens[fds.handle(fd)?].unwrap().target {
+            Target::Node(n) => self.node_metadata(n),
+            Target::ReadPipe(p) | Target::WritePipe(p) => {
+                Ok(((NODE_LIMIT + p) as u64, 5, 0, false))
+            }
+        }
+    }
     pub fn standard(&mut self) -> Result<Descriptors, i64> {
         let mut fds = Descriptors::default();
         for flags in [OPEN_READ, OPEN_WRITE, OPEN_WRITE] {
@@ -582,7 +630,7 @@ impl<'a> Vfs<'a> {
                     .ok_or(IO_ERROR)?
                     .truncate(inode.unwrap())?;
                 *size = 0;
-            } else {
+            } else if !matches!(self.nodes[node].data, Data::Device(_)) {
                 return Err(INVALID_ARGUMENT);
             }
         }
@@ -601,12 +649,14 @@ impl<'a> Vfs<'a> {
         }
         Descriptors {
             slots: parent.slots,
+            close_on_exec: parent.close_on_exec,
         }
     }
     pub fn close(&mut self, fds: &mut Descriptors, fd: u64) -> Result<(), i64> {
         let mut cleanup = Ok(());
         let id = fds.handle(fd)?;
         fds.slots[fd as usize] = None;
+        fds.close_on_exec[fd as usize] = false;
         let open = self.opens[id].as_mut().unwrap();
         open.refs -= 1;
         if open.refs == 0 {
@@ -641,6 +691,13 @@ impl<'a> Vfs<'a> {
         }
         cleanup
     }
+    pub fn close_exec(&mut self, fds: &mut Descriptors) {
+        for i in 0..fd::FD_LIMIT {
+            if fds.close_on_exec[i] {
+                let _ = self.close(fds, i as u64);
+            }
+        }
+    }
     pub fn clear(&mut self, fds: &mut Descriptors) {
         for i in 0..fd::FD_LIMIT {
             if fds.slots[i].is_some() {
@@ -662,6 +719,7 @@ impl<'a> Vfs<'a> {
         }
         self.opens[id].as_mut().unwrap().refs += 1;
         fds.slots[target as usize] = Some(id);
+        fds.close_on_exec[target as usize] = false;
         Ok(target)
     }
     pub fn pipe(&mut self, fds: &mut Descriptors) -> Result<[u64; 2], i64> {
@@ -892,6 +950,14 @@ impl<'a> Vfs<'a> {
         Ok(offset)
     }
     pub fn readdir(&mut self, fds: &Descriptors, fd: u64) -> Result<Option<DirEntry>, i64> {
+        let entry = self.peek_readdir(fds, fd)?;
+        if let Some(entry) = entry {
+            self.opens[fds.handle(fd)?].as_mut().unwrap().offset = entry.inode as usize + 1;
+        }
+        Ok(entry)
+    }
+    /// Inspect the next record without consuming it before an ABI buffer has been validated.
+    pub fn peek_readdir(&self, fds: &Descriptors, fd: u64) -> Result<Option<DirEntry>, i64> {
         let id = fds.handle(fd)?;
         let open = self.opens[id].unwrap();
         if open.flags & OPEN_READ == 0 {
@@ -912,7 +978,6 @@ impl<'a> Vfs<'a> {
         else {
             return Ok(None);
         };
-        self.opens[id].as_mut().unwrap().offset = i + 1;
         let kind = match node.data {
             Data::Directory => 2,
             Data::Link(_) => 3,

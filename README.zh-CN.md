@@ -5,7 +5,7 @@
 
 用 Rust 从零开发的 x86_64 操作系统，目标是在自己的系统中编辑、编译、调试和运行应用，并逐步兼容部分现有 Linux 软件。
 
-**当前状态：M0–M7 已通过本地 QEMU q35/TCG 验证。原生进程、VFS、管道、init 和串口 shell 现已接入现代 virtio-blk、挂载于 `/persist` 的受限 ext2、文本编辑器、sync/fsync 与正常 ACPI 关机。同一个显式持久盘经过关机/重启后，源码和原生二进制校验一致。普通 `run` 使用临时盘，`/tmp` 仍然易失；Linux 兼容尚未实现，外设 IRQ 保持屏蔽。**
+**当前状态：M0–M8 已通过本地 QEMU q35/TCG 验证。原生进程、VFS、管道、init 和串口 shell 现已接入现代 virtio-blk、挂载于 `/persist` 的受限 ext2、文本编辑器、sync/fsync 与正常 ACPI 关机。同一个显式持久盘经过关机/重启后，源码和原生二进制校验一致。普通 `run` 使用临时盘，`/tmp` 仍然易失；显式静态 Linux ABI 已运行 musl 1.2.4 测试程序和固定 BusyBox 1.36.1 的 echo/ls/cat/ash 子集，受测管道和重定向通过；自定义信号处理器、动态链接和通用 Linux 兼容仍待实现，外设 IRQ 保持屏蔽。**
 
 项目仓库：[ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS)。
 
@@ -133,3 +133,6 @@ M8 将加入独立的 Linux syscall personality 和固定静态 CLI 程序兼容
 该许可证允许商用、修改和分发，也允许在遵守许可条件的前提下发布闭源衍生作品，并包含贡献者专利授权。分发时须履行许可证、归属声明与修改标记等要求；详见 [许可说明](docs/LICENSING.md) 与 [NOTICE](NOTICE)。
 
 第三方引导器、libc、编译器、依赖库与导入代码仍适用各自许可证，不因放入本仓库或系统镜像而改为 Apache-2.0。
+
+详见 [M8 静态 Linux CLI](docs/M8_LINUX.md)，包含边界、构建依赖以及 `cargo xtask trace-compat` / `cargo xtask test-compat`。
+普通串口会话可执行 `/linux/sh`，进入后使用 `/linux/echo`、`/linux/cat` 和 `/linux/ls`。

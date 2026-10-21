@@ -1,7 +1,7 @@
 <!-- Track milestone dependencies, implementation checklists and acceptance criteria. -->
 # 开发路线与阶段验收
 
-日期：2026-10-21。**M0–M7 已通过本地 q35/TCG 验收；M8–M15 尚未实现，外设 IRQ 路由启用待对应驱动。** 证据见 [M7 验证记录](docs/validation/M7.md) 与 [STATUS](docs/STATUS.md)。[FIRST_TASK](docs/FIRST_TASK.md) 记录 M0/M1 原始实现顺序；当前 M2 边界见 [CPU 基线](docs/M2_CPU.md)。
+日期：2026-10-21。**M0–M8 已通过本地 q35/TCG 验收；M9–M15 尚未实现，外设 IRQ 路由启用待对应驱动。** 证据见 [M7 验证记录](docs/validation/M7.md) 与 [STATUS](docs/STATUS.md)。[FIRST_TASK](docs/FIRST_TASK.md) 记录 M0/M1 原始实现顺序；当前 M2 边界见 [CPU 基线](docs/M2_CPU.md)。
 
 ## 阶段总览
 
@@ -15,7 +15,7 @@
 | M5 | 多进程与阻塞/抢占调度 | M4、M2 | 本地验收通过；单核、每进程一个线程 |
 | M6 | VFS、init、基础 shell | M5 | 本地验收通过；tmpfs 重启丢失 |
 | M7 | 源码和应用可持久保存 | M6 | 本地验收通过；单块组 ext2、正常关机保证 |
-| M8 | 首批静态 Linux CLI 程序 | M6、M7 | 未开始 |
+| M8 | 首批静态 Linux CLI 程序 | M6、M7 | 本地验收通过；受限静态 CLI profile |
 | M9 | 线程、信号、动态 musl | M8 | 未开始 |
 | M10 | 网络和受控包安装 | M7、M9 | 未开始 |
 | M11 | 系统内 GCC/G++ 应用开发 | M7–M9；可先离线 | 未开始 |
@@ -134,14 +134,16 @@
 
 目标：运行首批固定构建的 Linux x86_64 程序。
 
-- [ ] Linux syscall 分派、errno/布局/flags、用户栈与 auxv。
-- [ ] 以固定程序 trace 为依据实现内存、文件、目录、时间、随机数和执行接口。
-- [ ] Linux `arch_prctl`/TLS 等所需 CPU 用户态设施。
-- [ ] 必要信号基础、基本终端语义、管道、重定向、wait/fork/exec 行为。
-- [ ] tiny Linux syscall ELF、静态 musl hello/文件程序、BusyBox 精选 applet。
-- [ ] 对程序版本/构建选项/SHA-256 建立兼容测试清单。
+- [x] Linux syscall 分派、errno/布局/flags、用户栈与 auxv。
+- [x] 以固定程序 trace 为依据实现内存、文件、目录、时间、随机数和执行接口。
+- [x] Linux `arch_prctl`/TLS 等所需 CPU 用户态设施。
+- [x] 必要信号基础、基本终端语义、管道、重定向、wait/fork/exec 行为。
+- [x] tiny Linux syscall ELF、静态 musl hello/文件程序、BusyBox 精选 applet。
+- [x] 对程序版本/构建选项/SHA-256 建立兼容测试清单。
 
 退出条件：固定的静态 hello、文件操作工具、BusyBox `echo/ls/cat` 通过，`sh` 的受测管道与重定向用例通过；未知 syscall 返回真实错误。未验证的 applet 保持“未验证”。
+
+实现范围和限制见 [M8 Linux ABI](docs/M8_LINUX.md)，证据见 [M8 验证](docs/validation/M8.md)。仅固定 BusyBox 1.36.1 applet/profile 和所列脚本通过；自定义信号处理器明确返回 ENOSYS，完整信号/termios/动态链接仍属于 M9。
 
 ## M9：线程、信号、终端与动态 musl
 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Build standalone native Rust/C ELF files with user-only target/linker flags.
-//! Validate each output and record its explicit ABI identity and SHA-256 manifest.
+//! Build native Rust/C and explicit static Linux images with separate user target/linker flags.
+//! Validate every ELF and record its explicit ABI identity and SHA-256 before packing initramfs.
 use super::*;
 use sha2::{Digest, Sha256};
 
@@ -131,6 +131,47 @@ pub fn build(root: &Path, clippy: bool) -> Result<()> {
     let path = apps.join("manifest.toml");
     output_path(&path)?;
     fs::write(path, manifest)?;
+    for (name, source, musl) in [
+        ("linux-probe", "probe.c", false),
+        ("linux-musl", "musl.c", true),
+    ] {
+        let path = apps.join(format!("{name}.elf"));
+        let mut cc = Command::new(if musl { "musl-gcc" } else { "gcc" });
+        cc.args([
+            "-static",
+            "-no-pie",
+            "-fcf-protection=none",
+            "-O2",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-fno-stack-protector",
+            "-Wl,--build-id=none",
+            "-Wl,-z,noexecstack",
+        ]);
+        if !musl {
+            cc.arg(root.join("user/linux/probe.S"));
+            cc.args(["-nostdlib", "-fno-builtin"]);
+        }
+        command(
+            cc.arg(root.join("user/linux").join(source))
+                .arg("-o")
+                .arg(&path),
+        )?;
+        let bytes = fs::read(&path)?;
+        anova_elf::parse_linux(&bytes).map_err(|e| format!("Invalid Linux ELF {name}: {e:?}"))?;
+        use std::io::Write;
+        let mut manifest = fs::OpenOptions::new()
+            .append(true)
+            .open(apps.join("manifest.toml"))?;
+        writeln!(
+            manifest,
+            "\n[[apps]]\nname = \"{name}\"\nabi = \"{}\"\nfile = \"{name}.elf\"\nsha256 = \"{:x}\"",
+            anova_abi::linux::PERSONALITY,
+            Sha256::digest(&bytes)
+        )?;
+    }
+    linux::build(root, &apps)?;
     initramfs(&apps)?;
     println!("Verified native Rust/C ELF outputs in {}", apps.display());
     Ok(())
@@ -139,12 +180,43 @@ pub fn build(root: &Path, clippy: bool) -> Result<()> {
 /// Pack the bounded project-owned archive; names and permissions are explicit image policy.
 fn initramfs(apps: &Path) -> Result<()> {
     let mut entries: Vec<(u8, String, Vec<u8>)> = Vec::new();
-    for path in ["/bin", "/etc", "/tmp", "/dev", "/persist"] {
+    for path in ["/bin", "/etc", "/tmp", "/dev", "/persist", "/linux"] {
         entries.push((2, path.into(), Vec::new()));
     }
     for name in NAMES {
         entries.push((
             4,
+            format!("/bin/{name}"),
+            fs::read(apps.join(format!("{name}.elf")))?,
+        ));
+    }
+    entries.push((
+        1,
+        "/etc/musl.LICENSE".into(),
+        fs::read(
+            apps.parent()
+                .unwrap()
+                .parent()
+                .unwrap()
+                .join("docs/third-party/musl.md"),
+        )?,
+    ));
+    entries.push((
+        1,
+        "/etc/busybox.LICENSE".into(),
+        fs::read(apps.join("busybox.LICENSE"))?,
+    ));
+    entries.push((
+        5,
+        "/linux/busybox".into(),
+        fs::read(apps.join("busybox.elf"))?,
+    ));
+    for name in ["echo", "cat", "ls", "sh", "true", "false"] {
+        entries.push((3, format!("/linux/{name}"), b"busybox".to_vec()));
+    }
+    for name in ["linux-probe", "linux-musl"] {
+        entries.push((
+            5,
             format!("/bin/{name}"),
             fs::read(apps.join(format!("{name}.elf")))?,
         ));

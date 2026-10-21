@@ -3,6 +3,7 @@
 mod apps;
 mod assets;
 mod disk;
+mod linux;
 mod purposes;
 mod smoke;
 mod terminal;
@@ -148,6 +149,9 @@ fn execute() -> Result<()> {
             Ok(())
         }
         "apps" => apps::build(&root, false),
+        "trace-compat" => linux::trace(&root),
+        "test-compat" => smoke(&root, Mode::Boot, 60)?
+            .map_err(|e| format!("Compatibility test failed: {e:?}").into()),
         "check-apps" => apps::build(&root, true),
         "check-files" => purposes::check(&root),
         "image" => {
@@ -246,7 +250,7 @@ fn execute() -> Result<()> {
         }
         "help" | "--help" | "-h" => {
             println!(
-                "AnovaOS host tools\n\n  cargo xtask doctor\n  cargo xtask fetch\n  cargo xtask build\n  cargo xtask image\n  cargo xtask run [--disk build/disks/NAME.ext2]\n  cargo xtask smoke [--case CASE] [--timeout-secs 1..300]\n  cargo xtask verify\n  cargo xtask test-host\n  cargo xtask apps\n  cargo xtask check-apps\n  cargo xtask check-files\n  cargo xtask terminal-test\n  cargo xtask root-image build/disks/NAME.ext2\n  cargo xtask persistence-test\n\nCASE: boot, panic, timeout, invalid-opcode, general-protection, page-fault, double-fault, stack-guard, read-only, no-execute, direct-no-execute, unmapped, oom.\nOutputs stay in build/; run uses disposable OVMF variables and a temporary data disk unless --disk is explicit. Use guest shutdown for persistent images. TCG is mandatory."
+                "AnovaOS host tools\n\n  cargo xtask doctor\n  cargo xtask fetch\n  cargo xtask build\n  cargo xtask image\n  cargo xtask run [--disk build/disks/NAME.ext2]\n  cargo xtask smoke [--case CASE] [--timeout-secs 1..300]\n  cargo xtask verify\n  cargo xtask test-host\n  cargo xtask test-compat\n  cargo xtask trace-compat\n  cargo xtask apps\n  cargo xtask check-apps\n  cargo xtask check-files\n  cargo xtask terminal-test\n  cargo xtask root-image build/disks/NAME.ext2\n  cargo xtask persistence-test\n\nCASE: boot, panic, timeout, invalid-opcode, general-protection, page-fault, double-fault, stack-guard, read-only, no-execute, direct-no-execute, unmapped, oom.\nOutputs stay in build/; run uses disposable OVMF variables and a temporary data disk unless --disk is explicit. Use guest shutdown for persistent images. TCG is mandatory."
             );
             Ok(())
         }
@@ -335,6 +339,11 @@ fn doctor(root: &Path) -> Result<()> {
         ("curl", vec!["--version"], None),
         ("dpkg-deb", vec!["--version"], None),
         ("gcc", vec!["--version"], None),
+        ("musl-gcc", vec!["--version"], None),
+        ("make", vec!["--version"], None),
+        ("git", vec!["--version"], None),
+        ("tar", vec!["--version"], None),
+        ("gzip", vec!["--version"], None),
         ("mke2fs", vec!["-V"], None),
         ("e2fsck", vec!["-V"], None),
     ] {
@@ -584,7 +593,7 @@ fn qemu_disk(
         "-machine",
         "q35,accel=tcg",
         "-cpu",
-        "qemu64",
+        "qemu64,+rdrand",
         "-m",
         "256M",
         "-smp",

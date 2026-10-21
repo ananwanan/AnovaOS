@@ -22,7 +22,7 @@ from its official distribution, then install host utilities:
 
 ```sh
 sudo apt-get update
-sudo apt-get install --no-install-recommends qemu-system-x86 xorriso curl dpkg-dev gcc e2fsprogs
+sudo apt-get install --no-install-recommends qemu-system-x86 xorriso curl dpkg-dev gcc make musl-tools qemu-user e2fsprogs
 rustup show active-toolchain
 cargo xtask fetch
 cargo xtask doctor
@@ -159,3 +159,14 @@ Current local evidence is in [validation/M7.md](validation/M7.md);
 Record source baseline, host/tool versions, input hashes, commands, results and
 artifact hashes for boot changes. Debug paths and ISO timestamps still affect
 artifact bytes. Synchronize both READMEs and current status.
+
+## M8 static Linux tools
+
+Read [M8_LINUX.md](M8_LINUX.md) before extending the compatibility boundary.
+`cargo xtask apps` now also requires musl-gcc and GNU make and builds a pinned
+BusyBox source revision. Initial source acquisition requires Git/network access;
+build logs/config/source bundle stay in build/. `cargo xtask trace-compat` uses
+qemu-x86_64 -strace on Linux and records actual host calls. `cargo xtask test-compat`
+runs the full boot regression with required Linux evidence. The ordinary UART
+test also launches musl and ash. Other applets and full signal/terminal behavior
+remain unverified.

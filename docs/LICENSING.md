@@ -63,3 +63,14 @@ OVMF is an external host firmware input, extracted from a pinned Ubuntu package
 and excluded from the ISO. The extracted package retains its copyright and
 license files under build/firmware/usr/share/doc/ovmf/. QEMU and xorriso are host
 tools and are not embedded in the kernel or ISO.
+
+## M8 guest software
+
+The unmodified BusyBox 1.36.1 build remains GPL-2.0-only and is a separate guest
+ELF, not kernel-linked code. Its exact source revision, configuration and rebuild
+instructions are bundled as build/images/busybox-1.36.1-source.tar.gz alongside
+the generated ISO. Preserve that corresponding-source bundle when distributing
+the image. The ISO contains /etc/busybox.LICENSE and /etc/musl.LICENSE.
+The tested musl 1.2.4 package notices are preserved in
+[third-party/musl.md](third-party/musl.md). First-party syscall probes and the
+compatibility adapter retain Apache-2.0; no Linux kernel implementation is imported.

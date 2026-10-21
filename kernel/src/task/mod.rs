@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Schedule bounded native processes on one BSP with private roots/stacks and saved CPU state.
+//! Schedule bounded native/Linux processes on one BSP with private roots/stacks and saved CPU state.
 //! User traps only capture state; lifecycle, copying and reclamation run on the kernel root.
+mod linux;
 mod loader;
 #[cfg(feature = "qemu-test")]
 mod validation;
@@ -26,6 +27,7 @@ use core::{
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Outcome {
     Exit(u32),
+    Signal(u32),
     Fault {
         vector: u64,
         error: u64,
@@ -37,6 +39,7 @@ impl Outcome {
     fn status(self) -> ExitStatus {
         match self {
             Self::Exit(code) => ExitStatus { reason: 0, code },
+            Self::Signal(code) => ExitStatus { reason: 3, code },
             Self::Fault { vector, .. } => ExitStatus {
                 reason: 1,
                 code: vector as u32,
@@ -131,11 +134,21 @@ impl Kernel {
     fn process_mut(&mut self, i: usize) -> &mut Process {
         self.processes[i].as_mut().expect("Missing process")
     }
+    #[cfg(feature = "qemu-test")]
     fn add(&mut self, bytes: &[u8], args: &[&str], parent: u64) -> Result<usize, i64> {
+        self.add_personality(bytes, args, parent, PERSONALITY)
+    }
+    fn add_personality(
+        &mut self,
+        bytes: &[u8],
+        args: &[&str],
+        parent: u64,
+        personality: &str,
+    ) -> Result<usize, i64> {
         let i = self.policy.insert(parent)?;
         let result = (|| {
             let stack = mm::user::KernelStack::new(i).map_err(|_| NO_MEMORY)?;
-            let image = loader::load(bytes, PERSONALITY, args).map_err(|e| match e {
+            let image = loader::load(bytes, personality, args).map_err(|e| match e {
                 loader::LoadError::Memory(_) => NO_MEMORY,
                 _ => INVALID_ARGUMENT,
             })?;
@@ -194,6 +207,12 @@ impl Kernel {
             let old = self.process(parent);
             let image = old.image.as_ref().expect("Missing parent image");
             let image = loader::Loaded {
+                linux: image.linux,
+                brk: image.brk,
+                clear_tid: 0,
+                sigmask: image.sigmask,
+                ignored: image.ignored,
+                pending: 0,
                 space: image.space.clone_eager().map_err(|_| NO_MEMORY)?,
                 entry: image.entry,
                 stack: image.stack,
@@ -225,8 +244,18 @@ impl Kernel {
             }
         }
     }
+    #[cfg(feature = "qemu-test")]
     fn exec(&mut self, i: usize, bytes: &[u8], args: &[&str]) -> Result<(), i64> {
-        let image = loader::load(bytes, PERSONALITY, args).map_err(|e| match e {
+        self.exec_personality(i, bytes, args, PERSONALITY)
+    }
+    fn exec_personality(
+        &mut self,
+        i: usize,
+        bytes: &[u8],
+        args: &[&str],
+        personality: &str,
+    ) -> Result<(), i64> {
+        let image = loader::load(bytes, personality, args).map_err(|e| match e {
             loader::LoadError::Memory(_) => NO_MEMORY,
             _ => INVALID_ARGUMENT,
         })?;
@@ -239,6 +268,9 @@ impl Kernel {
     fn finish(&mut self, i: usize, outcome: Outcome) {
         let pid = self.policy.entry(i).pid;
         match outcome {
+            Outcome::Signal(signal) => {
+                serial::write(format_args!("[USER:SIGNAL] pid={pid} signal={signal}\n"))
+            }
             Outcome::Exit(status) => {
                 serial::write(format_args!("[USER:EXIT] pid={pid} status={status}\n"))
             }
@@ -255,6 +287,14 @@ impl Kernel {
             }
         }
         let p = self.processes[i].as_mut().unwrap();
+        if let Some(image) = &p.image
+            && image.linux
+            && image.clear_tid != 0
+        {
+            let _ = image.space.with_active(|| {
+                mm::uaccess::to_user(&image.space, UserAddr(image.clear_tid), &[0; 4])
+            });
+        }
         drop(p.image.take());
         drop(p.stack.take());
         self.fs.clear(&mut p.files);
@@ -287,7 +327,12 @@ impl Kernel {
         }
         .bytes();
         let space = &self.process(i).image.as_ref().expect("Missing image").space;
-        if let Err(error) = space.with_active(|| mm::uaccess::to_user(space, output, &bytes)) {
+        let linux = self.process(i).image.as_ref().unwrap().linux;
+        let linux_bytes = linux::wait_bytes(status);
+        let bytes = if linux { &linux_bytes[..] } else { &bytes[..] };
+        if !(linux && output.0 == 0)
+            && let Err(error) = space.with_active(|| mm::uaccess::to_user(space, output, bytes))
+        {
             return Some(error);
         }
         self.reap(child);
@@ -308,6 +353,10 @@ impl Kernel {
         valid
     }
     fn syscall(&mut self, i: usize) {
+        if self.process(i).image.as_ref().unwrap().linux {
+            self.linux_syscall(i);
+            return;
+        }
         let f = self.process(i).context.frame;
         let result = match f.rax {
             SYS_EXIT if f.rdi <= u32::MAX as u64 => {
@@ -385,12 +434,28 @@ impl Kernel {
                     Ok(request) => match self.executable(i, request.name()) {
                         Err(error) => error,
                         Ok(bytes) => {
-                            let args = [request.name(), request.argument()];
-                            if f.rax == SYS_SPAWN {
-                                self.add(&bytes, &args, self.policy.entry(i).pid)
-                                    .map_or_else(|e| e, |child| self.policy.entry(child).pid as i64)
+                            let linux = self.executable_linux(i, request.name()).unwrap_or(false);
+                            let personality = if linux {
+                                anova_abi::linux::PERSONALITY
                             } else {
-                                match self.exec(i, &bytes, &args) {
+                                PERSONALITY
+                            };
+                            let args = [request.name(), request.argument()];
+                            let args = if linux && request.argument().is_empty() {
+                                &args[..1]
+                            } else {
+                                &args[..]
+                            };
+                            if f.rax == SYS_SPAWN {
+                                self.add_personality(
+                                    &bytes,
+                                    args,
+                                    self.policy.entry(i).pid,
+                                    personality,
+                                )
+                                .map_or_else(|e| e, |child| self.policy.entry(child).pid as i64)
+                            } else {
+                                match self.exec_personality(i, &bytes, args, personality) {
                                     Ok(()) => return,
                                     Err(error) => error,
                                 }
@@ -444,10 +509,14 @@ impl Kernel {
             for i in 0..CAPACITY {
                 if self.policy.entry(i).state == State::Blocked {
                     let p = self.process(i);
-                    if p.io
-                        .as_ref()
-                        .is_some_and(|f| fs::ready(f, &p.files, &self.fs, &self.terminal))
-                    {
+                    if p.io.as_ref().is_some_and(|f| {
+                        fs::ready(
+                            &linux::io_frame(*f, p.image.as_ref().unwrap().linux),
+                            &p.files,
+                            &self.fs,
+                            &self.terminal,
+                        )
+                    }) {
                         self.policy.ready(i);
                         self.metrics.io_wakes += 1;
                     }
@@ -477,9 +546,23 @@ impl Kernel {
             }
             previous = Some(i);
             preempted = false;
+            if let Some(signal) = self.linux_pending(i) {
+                self.finish(i, Outcome::Signal(signal));
+                if self.policy.entry(i).pid == root_pid {
+                    root_outcome = Some(Outcome::Signal(signal));
+                }
+                continue;
+            }
             if let Some((pid, output)) = self.process_mut(i).wait.take() {
                 match self.wait(i, pid, output) {
-                    Some(result) => self.process_mut(i).context.frame.rax = result as u64,
+                    Some(result) => {
+                        let result = if self.process(i).image.as_ref().unwrap().linux {
+                            anova_abi::linux::errno(result)
+                        } else {
+                            result
+                        };
+                        self.process_mut(i).context.frame.rax = result as u64;
+                    }
                     None => continue,
                 }
             }
@@ -513,10 +596,25 @@ impl Kernel {
                 preempted = true;
                 self.policy.ready(i);
             } else if f.vector == 0x80 {
-                let exiting = f.rax == SYS_EXIT && f.rdi <= u32::MAX as u64;
+                let linux = self.process(i).image.as_ref().unwrap().linux;
+                let exiting = if linux {
+                    matches!(f.rax, 60 | 231)
+                } else {
+                    f.rax == SYS_EXIT && f.rdi <= u32::MAX as u64
+                };
                 self.syscall(i);
+                if let State::Zombie(status) = self.policy.entry(i).state
+                    && status.reason == 3
+                    && self.policy.entry(i).pid == root_pid
+                {
+                    root_outcome = Some(Outcome::Signal(status.code));
+                }
                 if exiting && self.policy.entry(i).pid == root_pid {
-                    root_outcome = Some(Outcome::Exit(f.rdi as u32));
+                    root_outcome = Some(Outcome::Exit(if linux {
+                        (f.rdi & 255) as u32
+                    } else {
+                        f.rdi as u32
+                    }));
                 }
                 if self.policy.entry(i).state == State::Running {
                     active = Some(i);
@@ -603,11 +701,53 @@ fn run(bytes: &[u8], args: &[&str], pid: u64) -> Result<Outcome, loader::LoadErr
                 "[DISK:REJECT] mount error={error}; /persist unavailable\n"
             ));
         }
+        let linux = args
+            .first()
+            .is_some_and(|name| kernel.fs.linux_executable(ROOT, name).unwrap_or(false));
+        let personality = if linux {
+            anova_abi::linux::PERSONALITY
+        } else {
+            PERSONALITY
+        };
         let index = kernel
-            .add(bytes, args, 0)
+            .add_personality(bytes, args, 0, personality)
             .map_err(|_| loader::LoadError::Memory(anova_memory::Error::OutOfMemory))?;
         let pid = kernel.policy.entry(index).pid;
         let outcome = kernel.drive(pid);
+        #[cfg(feature = "qemu-test")]
+        if args.first() == Some(&"/linux/busybox") && args.get(1) == Some(&"sh") {
+            let script = args.get(3).copied().unwrap_or("");
+            let (path, length, byte) = if script.contains("/tmp/large") {
+                ("/tmp/large", 5000, b'Q')
+            } else if script.contains("/tmp/bb") {
+                ("/tmp/bb", 12, 0)
+            } else {
+                ("", 0, 0)
+            };
+            if length != 0 {
+                let mut files = Descriptors::default();
+                let fd = kernel.fs.open(&mut files, ROOT, path, OPEN_READ).unwrap();
+                let mut bytes = [0; 4096];
+                let mut total = 0;
+                loop {
+                    let n = kernel.fs.read(&files, fd, &mut bytes).unwrap();
+                    if n == 0 {
+                        break;
+                    }
+                    if byte != 0 {
+                        assert!(bytes[..n].iter().all(|b| *b == byte));
+                    } else {
+                        assert_eq!(&bytes[..n], b"M8-pipeline\n");
+                    }
+                    total += n;
+                }
+                kernel.fs.clear(&mut files);
+                assert_eq!(total, length);
+                serial::write(format_args!(
+                    "[LINUX:SHELL] bytes={length} redirection=true verified=true\n"
+                ));
+            }
+        }
         if args.first() == Some(&"process-test") {
             let m = &kernel.metrics;
             #[cfg(feature = "qemu-test")]
@@ -707,6 +847,52 @@ pub fn start() {
     serial::write(format_args!(
         "[VFS:MOUNTS] root=initramfs:ro /tmp=tmpfs:rw /dev=devfs stdin=0 stdout=1 stderr=2\n"
     ));
+    #[cfg(feature = "qemu-test")]
+    for (name, args) in [
+        ("/bin/linux-probe", &["/bin/linux-probe"][..]),
+        ("/bin/linux-probe", &["/bin/linux-probe", "exit-high"][..]),
+        ("/bin/linux-musl", &["/bin/linux-musl", "test"][..]),
+    ] {
+        let bytes = Vfs::new(boot::initramfs())
+            .unwrap()
+            .executable(ROOT, name)
+            .unwrap();
+        checked_run(bytes, args, 100, Outcome::Exit(0));
+    }
+    #[cfg(feature = "qemu-test")]
+    for args in [
+        &["/linux/busybox", "echo", "M8-busybox-echo"][..],
+        &["/linux/busybox", "ls", "/etc"][..],
+        &["/linux/busybox", "cat", "/etc/motd"][..],
+        &[
+            "/linux/busybox",
+            "sh",
+            "-c",
+            "/linux/echo M8-pipeline | /linux/cat > /tmp/bb; /linux/cat /tmp/bb",
+        ][..],
+        &[
+            "/linux/busybox",
+            "sh",
+            "-c",
+            "/linux/cat /etc/large | /linux/cat > /tmp/large; /linux/cat /tmp/large > /dev/null",
+        ][..],
+        &[
+            "/linux/busybox",
+            "sh",
+            "-c",
+            "/linux/false; /linux/echo M8-status-$?",
+        ][..],
+    ] {
+        let bytes = Vfs::new(boot::initramfs())
+            .unwrap()
+            .executable(ROOT, "/linux/busybox")
+            .unwrap();
+        checked_run(bytes, args, 100, Outcome::Exit(0));
+        serial::write(format_args!(
+            "[LINUX:BUSYBOX] applet={} passed=true\n",
+            args[1]
+        ));
+    }
     let init = {
         let root = Vfs::new(boot::initramfs()).expect("Invalid initramfs");
         root.executable(ROOT, "/bin/init").expect("Missing init")
