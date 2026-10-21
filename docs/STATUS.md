@@ -1,83 +1,76 @@
 # Implementation status
 
-This file records verified capabilities, remaining boundaries and the next milestone.
-Recorded: 2026-10-21 (Asia/Shanghai). M4 source baseline:
-`3d7d42b0e416b2019d7b55410b87ac7b045e593c` on `dev`.
-Task branch: `feat/m4-user-apps`. The implementation is the commit introducing
-[M4 evidence](validation/M4.md); its Git history identifies the revision.
-See [user-space design](M4_USERSPACE.md), [memory design](M3_MEMORY.md),
-[CPU design](M2_CPU.md) and the historical
-[M2 evidence](validation/M2.md) / [M0/M1 evidence](validation/M0-M1.md).
+This document records verified capabilities, remaining boundaries and the next
+milestone. Recorded 2026-10-21 (Asia/Shanghai). M5 source baseline:
+`9795803929c833569a87f9ec19c28d64caa09961` on `dev` (merged M4).
+Task branch: `feat/m5-process-scheduler`. The commit introducing
+[validation/M5.md](validation/M5.md) identifies the implementation revision.
 
 ## Implemented and locally verified
 
-- M0/M1: Rust 1.90.0 workspace, locked boot inputs, kernel ELF, UEFI/Limine ISO,
-  retained boot data, COM1 and failure-aware host tooling.
-- M2: BSP GDT/TSS/IDT, independent guarded ISTs, real #UD/#GP/#PF/#DF diagnostics,
-  returning breakpoints, ACPI parsing and a calibrated 100 Hz LAPIC timer.
-- M3: checked 4 KiB frame allocation/release with explicit metadata reservation,
-  owner tags, invalid/double/wrong-owner release rejection and DMA32 constraints.
-  Only USABLE RAM is admitted; every bootloader/non-usable reservation remains.
-- Every active page-table frame is owned after full hierarchy cloning. Dynamic
-  map/protect/unmap, effective permissions, empty-table reclamation and OOM
-  rollback use the shared host-tested algorithms. Imported huge leaves remain.
-- Supervisor mappings, NX including HHDM aliases, CR0.WP, explicit WB RAM / UC
-  MMIO attributes, and local TLB/paging-structure invalidation before reuse.
-- The BSP executes on a new 64 KiB normal stack with two absent guards and owned
-  RSP0. The three M2 ISTs remain independent and permanently kernel-reserved.
-- A fixed 2 MiB buddy heap enables `Box`, `Vec` and `String`, block reuse and
-  coalescing, fallible allocation errors and terminal infallible OOM diagnostics.
-- `verify` now checks 13 QEMU images. The boot test requires memory ownership,
-  physical exhaustion/recovery, rollback, mapping/container stress, two returning
-  breakpoint IF states and at least eight timer IRQs. Actual protection faults,
-  OOM panic and the prior negative cases must fail at their expected injection.
-- Full pressure tests run only in test images. Normal startup still checks stack,
-  control registers, table ownership and RAM/device mapping permissions.
-- M4: real Ring 3 static ET_EXEC Rust/C apps, separate private user roots and
-  guarded kernel stacks, zeroed BSS, argc/argv and an explicit native v1 personality.
-- Actual SYSCALL entry and validated IRETQ return, bounded console/exit/info,
-  page-wise pointer validation and two exercised access-time #PF copy fixups.
-- x87/SSE2 initialization, actual user timer IRQ delivery, contained synchronous
-  user faults, complete exit/failed-load reclamation and repeated application runs.
-- Normal boot runs Rust hello (exit 0) and C hello (exit 7), then idles. Test boot
-  additionally runs 11 user cases, partial-load OOM rollback and eight repeated apps.
-- DEV-001 requires purpose explanations in every new/modified file; the complete
-  repository inventory and `cargo xtask check-files` coverage gate are implemented.
-- Formatting, host/kernel/user Clippy, 32 host tests and local q35/TCG verification
-  pass. Configured CI uses the same gate; remote CI is recorded separately.
+- M0/M1: pinned Rust 1.90.0 host/kernel workspace, verified Limine/OVMF inputs,
+  native UEFI ISO, retained boot data, COM1 and failure-aware QEMU tooling.
+- M2: BSP CPU/exception tables, guarded ISTs, returning breakpoints, ACPI parsing,
+  calibrated LAPIC 100 Hz timer and real #UD/#GP/#PF/#DF diagnostics.
+- M3: checked physical-page ownership, complete page-table ownership, local TLB
+  invalidation, supervisor/NX/WP permissions, 64 KiB guarded normal stack and
+  fixed 2 MiB reclaiming buddy heap. Bootloader/firmware reservations remain.
+- M4: private static ET_EXEC Rust/C Ring 3 images, explicit native v1 personality,
+  checked syscall/IRETQ boundary, bounded user copying with actual #PF fixups,
+  fault containment, ELF/OOM rollback and standalone Rust/C SDK.
+- M5: up to 32 single-threaded native processes including zombies; private user
+  roots/pages, unique guarded kernel stacks and saved GPR/segment/base/x87/MMX/
+  XMM0–15/MXCSR contexts. XSAVE/AVX and FSGSBASE stay disabled.
+- User timer preemption and round-robin scheduling, yield, deadline sleep,
+  blocking child wait and interruptible HLT when nothing is ready. Kernel code
+  and usercopy remain non-preemptible at IF=0 on one BSP.
+- Spawn/transactional exec/eager fork/exit/wait, parent relationships, fault exit
+  status, kernel orphan adoption/reaping and process-slot reuse.
+- Owned console descriptor slots with fork inheritance, exec retention, close
+  and exit cleanup. General files/open descriptions/shared offsets are M6.
+- Actual syscall-free CPU/FPU sentinel loops in two concurrent workers, child
+  #UD with survivor progress, private fork memory, inherited fork CPU state,
+  fresh exec state and retained closed fd, wait-any/target and invalid requests.
+- Partial spawn/fork/exec allocation failures roll back exactly. Sixteen repeated
+  create/wait cycles, full 32-slot exhaustion/reuse and complete teardown restore
+  the exact physical-frame and heap counts.
+- 37 host tests, root/user formatting, host/kernel/user Clippy with warnings
+  denied, normal kernel build, source-purpose coverage and all 13 QEMU cases.
+  Remote CI status is recorded separately in [M5 evidence](validation/M5.md).
+- Normal boot runs Rust/C hello, two concurrent workers with parent waits, then
+  idles interruptibly. Test images additionally run all isolation/lifecycle cases.
+- DEV-001 requires English purpose explanations and a complete
+  [per-file inventory](FILE_PURPOSES.md), checked by `cargo xtask check-files`.
 
 | Capability | Status |
 | --- | --- |
-| M0 engineering baseline | Locally accepted |
-| M1 UEFI/COM1/QEMU and failure detection | Locally accepted on q35/TCG |
-| M2 BSP exceptions, IST guards, LAPIC timer | Locally accepted on q35/TCG |
-| M3 checked frames, owned tables/stack, reclaiming heap | Locally accepted on q35/TCG |
-| M4 isolated native Rust/C ELF, syscalls, copying and teardown | Locally accepted on q35/TCG |
-| Bootloader/firmware reclamation and heap resizing | Not implemented; reservations/backing retained |
-| External device IRQ delivery, NMI routing | Deferred to corresponding device drivers |
-| Scheduling, simultaneous processes and saved task/FPU contexts | M5; not implemented |
-| Filesystem, terminal, persistent disk and network | Not implemented |
+| M0 engineering / M1 UEFI and COM1 | Locally accepted on q35/TCG |
+| M2 BSP exceptions and calibrated timer | Locally accepted on q35/TCG |
+| M3 owned memory, guarded stack and reclaiming heap | Locally accepted on q35/TCG |
+| M4 isolated native applications and SDK | Locally accepted on q35/TCG |
+| M5 saved contexts, preemption/blocking and process lifecycle | Locally accepted on q35/TCG |
+| Bootloader/firmware reclamation and heap resizing | Not implemented |
+| External IRQ/NMI routing and device drivers | Deferred to corresponding drivers |
+| VFS, init, shell, pipes and general file descriptors | M6; not implemented |
+| Persistent storage and network | Not implemented |
 | Linux ABI and existing software | Not implemented or verified |
-| GCC/G++, rustc/Cargo inside AnovaOS | Not implemented or verified |
-| GUI, SMP, physical hardware and bootstrap | Not implemented or verified |
+| GCC/G++, rustc/Cargo running inside AnovaOS | Not implemented or verified |
+| Multiple threads, signals, COW, SMP, GUI and physical hardware | Not implemented or verified |
 
-The time API remains a coarse delivered-IRQ count, not wall time. HHDM aliases
-of the kernel image retain write permission while being NX. Physical-page-wide
-immutability, general huge-leaf editing and SMP shootdown
-are not claimed. There is no DMA device implementation or contiguous DMA pool.
-See [M3_MEMORY.md](M3_MEMORY.md) for exact bounds and lock/lifetime rules.
+See [M5_PROCESSES.md](M5_PROCESSES.md) for the precise process/locking/ABI
+contract. Delivered ticks are coarse monotonic time, not wall time or real-time
+scheduling. The kernel is non-preemptible; no address space is shared. HHDM
+aliases of the kernel image retain write permission while being NX. Huge-leaf
+editing, SMP shootdown, DMA and contiguous DMA pools remain outside scope.
 
 ## Next task
 
-Implement M5: multiple processes, owned saved CPU/FPU contexts and kernel stacks,
-blocking/preemptive scheduling, spawn/exec/exit/wait and repeated lifecycle tests.
-Before concurrent user unmapping, replace M4's IF=0 single-BSP copy assumption
-with appropriate address-space synchronization/pinning. M4 resets x87/SSE2 per
-invocation; M5 must preserve the enabled state across task switches.
+Implement M6: VFS with initramfs/tmpfs/devfs, init, a basic shell and file tools,
+open-file descriptions/fd ownership, pipes and redirection, and basic serial
+terminal input. Use the real M5 native spawn/exec/wait lifecycle and preserve
+its negative cases. Do not claim persistence for tmpfs; disk support is M7.
 
-Follow [DEV-001](REQUIREMENTS.md), keeping file headers and [FILE_PURPOSES](FILE_PURPOSES.md)
-current. Linux ABI, filesystems and toolchains inside AnovaOS remain later milestones.
-
-Keep original Limine data/tables reserved until every live reference is copied
-or replaced. Enable external IRQ routing only with the corresponding device
-driver, including MADT overrides, polarity/trigger, vector ownership and EOI.
+Follow [DEV-001](REQUIREMENTS.md), keep English file headers and
+[FILE_PURPOSES.md](FILE_PURPOSES.md) current, and synchronize both READMEs.
+Keep Limine reservations until all live references are replaced. Add external
+IRQ routing only with the corresponding driver and verified routing/EOI rules.

@@ -120,7 +120,9 @@ the prior IF after release. They cannot sleep. Lock order is manager before heap
 the fixed heap never calls the manager. IRQ/NMI/exception/panic paths may not
 acquire either lock or allocate. Deliberate protection faults can occur while
 holding the manager lock, and their diagnostics must still finish without it.
-SMP and scheduler preemption remain unimplemented.
+This M3 contract predates scheduling. [M5](M5_PROCESSES.md) now preempts user
+processes; the kernel and these lock-protected sections remain non-preemptible.
+SMP remains unimplemented.
 
 ## Validation boundaries
 

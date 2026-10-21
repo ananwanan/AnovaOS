@@ -1,6 +1,7 @@
+<!-- Track milestone dependencies, implementation checklists and acceptance criteria. -->
 # 开发路线与阶段验收
 
-日期：2026-10-21。**M0–M4 已通过本地 q35/TCG 验收；M5–M15 尚未实现，外设 IRQ 路由启用待对应驱动。** 证据见 [M4 验证记录](docs/validation/M4.md) 与 [STATUS](docs/STATUS.md)。[FIRST_TASK](docs/FIRST_TASK.md) 记录 M0/M1 原始实现顺序；当前 M2 边界见 [CPU 基线](docs/M2_CPU.md)。
+日期：2026-10-21。**M0–M5 已通过本地 q35/TCG 验收；M6–M15 尚未实现，外设 IRQ 路由启用待对应驱动。** 证据见 [M5 验证记录](docs/validation/M5.md) 与 [STATUS](docs/STATUS.md)。[FIRST_TASK](docs/FIRST_TASK.md) 记录 M0/M1 原始实现顺序；当前 M2 边界见 [CPU 基线](docs/M2_CPU.md)。
 
 ## 阶段总览
 
@@ -11,7 +12,7 @@
 | M2 | 异常、中断与时钟可诊断 | M1 | BSP 基线验收；外设 IRQ 待驱动 |
 | M3 | 受控页管理和堆 | M2 | 本地验收通过；引导保留区未回收 |
 | M4 | 第一个隔离的用户 app | M3 | 本地验收通过；顺序运行 Rust/C ELF |
-| M5 | 多进程与阻塞/抢占调度 | M4、M2 | 未开始 |
+| M5 | 多进程与阻塞/抢占调度 | M4、M2 | 本地验收通过；单核、每进程一个线程 |
 | M6 | VFS、init、基础 shell | M5 | 未开始 |
 | M7 | 源码和应用可持久保存 | M6 | 未开始 |
 | M8 | 首批静态 Linux CLI 程序 | M6、M7 | 未开始 |
@@ -90,18 +91,20 @@
 
 退出条件：一个独立 ELF 在 Ring 3 输出参数并正常退出；坏 ELF、坏地址、非法 syscall 和用户 page fault 不破坏内核。app 的 syscall 是真实边界，不是直接链接内核函数。
 
-实现边界与证据见 [M4_USERSPACE](docs/M4_USERSPACE.md) 和 [M4 验证](docs/validation/M4.md)：显式 native v1 模块、SYSCALL/IRETQ、11 个用户用例与 8 次重复执行，尚无并发调度或 Linux ABI。后续开发必须遵守 [DEV-001 文件用途说明](docs/REQUIREMENTS.md)。
+实现边界与证据见 [M4_USERSPACE](docs/M4_USERSPACE.md) 和 [M4 验证](docs/validation/M4.md)：显式 native v1 模块、SYSCALL/IRETQ、11 个用户用例与 8 次重复执行，M5 已加入并发调度，Linux ABI 仍未实现。后续开发必须遵守 [DEV-001 文件用途说明](docs/REQUIREMENTS.md)。
 
 ## M5：进程与调度
 
-- [ ] task/process 模型、PID、上下文切换、每线程内核栈。
-- [ ] FPU/SIMD 等已启用扩展状态的正确保存/恢复。
-- [ ] 抢占、阻塞等待、sleep/wakeup、公平性与闲置路径。
-- [ ] spawn/exec/exit/wait、父子关系、退出状态与资源回收。
-- [ ] 初版 fork 可 eager-copy；COW 后续单独实现和验证。
-- [ ] fd 表与地址空间所有权、关闭/退出时清理。
+- [x] task/process 模型、PID、保存上下文和每进程唯一线程的独立内核栈。
+- [x] GPR、段选择子/FS/GS base、x87/MMX、XMM0–15、MXCSR 的保存/恢复；AVX 禁用。
+- [x] 单核用户态抢占、阻塞 wait、sleep/wakeup、公平轮转与 STI/HLT 闲置。
+- [x] spawn/exec/exit/wait、父子关系、故障退出状态、孤儿收养和资源回收。
+- [x] eager-copy fork 和独立用户页；COW 留待后续单独验证。
+- [x] 地址空间与控制台 fd 表所有权、fork 继承、exec 保留、close/退出清理。VFS 打开文件和共享偏移属于 M6。
 
-退出条件：多个进程交错执行；阻塞等待不忙转；一个进程崩溃其他进程继续；反复创建和退出不持续泄露页、栈或 fd。
+退出条件已验证：两个计算进程交错执行并保持 CPU/FPU 状态；wait/sleep 阻塞且无就绪进程时 HLT；一个子进程崩溃后其他进程继续；16 次重复创建/等待、32 槽耗尽及复用、部分 OOM 回滚后，物理页与堆占用恢复原值。
+
+实现范围见 [M5_PROCESSES](docs/M5_PROCESSES.md)，证据见 [M5 验证](docs/validation/M5.md)。当前最多 32 个进程（含 zombie），每进程一个线程；内核不可抢占、无 SMP，执行入口来自显式原生模块目录。
 
 ## M6：VFS、init 与基础 shell
 

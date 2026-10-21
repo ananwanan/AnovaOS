@@ -1,10 +1,11 @@
+<!-- Provide the synchronized Simplified Chinese project introduction and build guide. -->
 # AnovaOS
 
 [English](README.md) | **简体中文**
 
 用 Rust 从零开发的 x86_64 操作系统，目标是在自己的系统中编辑、编译、调试和运行应用，并逐步兼容部分现有 Linux 软件。
 
-**当前状态：M0–M4 已通过本地 QEMU q35/TCG 验证。内核已具备内存所有权管理，并能在 Ring 3 运行独立 Rust/C ELF 应用，支持原生系统调用、安全用户内存复制、故障隔离和完整页回收；调度和 Linux 兼容尚待实现，外设 IRQ 保持屏蔽。**
+**当前状态：M0–M5 已通过本地 QEMU q35/TCG 验证。原生 Rust/C 进程具备独立地址空间与内核栈、CPU/FPU 状态保存、定时器抢占、阻塞 sleep/wait、spawn/exec/完整复制 fork 和资源回收。VFS 与 Linux 兼容尚未实现，外设 IRQ 保持屏蔽。**
 
 项目仓库：[ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS)。
 
@@ -59,6 +60,8 @@
 | [docs/validation/M3.md](docs/validation/M3.md) | 实际 M3 内存与保护验证记录 |
 | [docs/M4_USERSPACE.md](docs/M4_USERSPACE.md) | Ring 3、ELF、原生 v1 ABI、用户复制和 Rust/C SDK |
 | [docs/validation/M4.md](docs/validation/M4.md) | 实际 M4 隔离与应用验收记录 |
+| [docs/M5_PROCESSES.md](docs/M5_PROCESSES.md) | 调度、进程所有权、原生生命周期 ABI 与边界 |
+| [docs/validation/M5.md](docs/validation/M5.md) | 多进程、CPU/FPU、OOM 与资源回收验证 |
 | [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) | 强制开发需求，包括文件用途说明 |
 | [docs/FILE_PURPOSES.md](docs/FILE_PURPOSES.md) | 仓库中每个文件的用途 |
 | [docs/STATUS.md](docs/STATUS.md) | 当前已实现能力和下一步 |
@@ -104,16 +107,16 @@ cargo xtask build       # 构建并检查裸机内核 ELF
 cargo xtask apps        # 构建独立 Rust/C 用户 ELF 和 ABI/校验清单
 cargo xtask check-files # 检查每个文件的用途说明与清单覆盖
 cargo xtask image       # 生成包含原生应用的 build/images/anova-normal.iso
-cargo xtask run         # 运行 Rust/C 应用，然后 BSP 保持可中断 idle
-cargo xtask smoke       # 内存/CPU 检查、11 个用户用例、8 次重复应用和退出码 33
+cargo xtask run         # 运行 Rust/C 应用和并发计算进程，然后可中断 idle
+cargo xtask smoke       # 内存、11 个隔离用例、CPU/FPU/多进程生命周期验证和退出码 33
 cargo xtask verify      # 13 场景：启动通过，故障、panic、超时和 OOM 被拒绝
 ```
 
-以上命令已在宿主 `xtask` 包中实现。镜像、缓存、日志和临时固件变量副本均位于 `build/`；普通启动不连接数据盘和网络。GitHub Actions 已配置相同检查，其运行结果与 [本地验收](docs/validation/M4.md) 分开记录。
+以上命令已在宿主 `xtask` 包中实现。镜像、缓存、日志和临时固件变量副本均位于 `build/`；普通启动不连接数据盘和网络。GitHub Actions 已配置相同检查，其运行结果与 [本地验收](docs/validation/M5.md) 分开记录。
 
 ## 下一步
 
-M5 将在 M4 隔离执行基线上实现多进程、CPU/FPU 上下文保存和阻塞/抢占调度。外设 IRQ 路由随首个设备驱动启用并验证。详情见 [用户态设计](docs/M4_USERSPACE.md)、[当前状态](docs/STATUS.md) 和 [路线图](ROADMAP.md)。
+M6 在多进程基线上加入 VFS、init、基础 shell、文件描述符和管道。外设 IRQ 路由随首个相应驱动启用。详见 [进程设计](docs/M5_PROCESSES.md)、[当前状态](docs/STATUS.md) 和 [路线图](ROADMAP.md)。
 
 ## 许可证
 

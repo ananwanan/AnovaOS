@@ -1,6 +1,7 @@
+<!-- Describe implemented subsystem boundaries and the planned operating-system architecture. -->
 # 架构设计
 
-本文描述目标架构；以下启动、M2 BSP 异常/时钟、M3 内存与 M4 隔离用户应用子集已实现，其余部分仍为规划。当前能力见 [STATUS](docs/STATUS.md)。
+本文描述目标架构；以下启动、M2 BSP 异常/时钟、M3 内存、M4 隔离用户应用与 M5 单核调度子集已实现，其余部分仍为规划。当前能力见 [STATUS](docs/STATUS.md)。
 
 ## 1. 总体结构
 
@@ -53,7 +54,7 @@ UEFI 固件启动 Limine；Limine 装载内核 ELF 和 initramfs，并按锁定�
   increments an atomic count, sends one EOI, and never logs or allocates.
 - COM1 output preserves IF while serializing normal BSP calls. Panic and fatal
   exception paths use independent bounded, lock-free emergency output. There is
-  no AP startup or scheduler. Normal idle uses `sti; hlt` after timer validation.
+  no AP startup; M5 adds the BSP scheduler below. Normal idle uses `sti; hlt` after timer validation.
 - `xtask` still builds a UEFI El Torito ISO for q35/TCG, 256 MiB and one CPU, with
   disposable firmware variables, no data disk and no network. Smoke passes only
   with ordered CPU/timer markers, 8+ IRQs, returning breakpoints and exit 33.
@@ -99,6 +100,26 @@ M4 adds private user roots as described below; SMP shootdown, DMA drivers and bo
 
 See [M4 design](docs/M4_USERSPACE.md), [M4 evidence](docs/validation/M4.md),
 [per-file inventory](docs/FILE_PURPOSES.md) and [DEV-001](docs/REQUIREMENTS.md).
+
+### Current M5 process implementation
+
+- `anova-sched` supplies bounded state transitions, parent/wait semantics, console
+  descriptor ownership and round-robin policy shared with host tests.
+- Each of 32 process slots owns one thread/context, private user root/pages and
+  a unique 64 KiB guarded kernel stack. Trap capture returns to a separate BSP
+  scheduler continuation; no Rust stack or lock is suspended across scheduling.
+- User-mode timer IRQs save GPRs, segment selectors/bases and complete enabled
+  x87/MMX/SSE2 state, EOI, then rotate. Kernel sections keep IF=0; idle atomically
+  enables IRQs and halts. Address-space copying is pinned by these BSP ownership rules.
+- Native v1 extends to spawn/exec/eager fork, sleep/yield, wait and close. Images
+  come from explicit native modules; console descriptors precede M6 VFS objects.
+- Exit/fault destroys inactive pages/stacks and descriptors; zombies retain only
+  status until parent wait or kernel orphan reaping. Exec publishes only a fully
+  loaded replacement. Partial OOM and repeated lifecycle tests require exact
+  frame and heap restoration.
+
+See [M5 design](docs/M5_PROCESSES.md) and [M5 evidence](docs/validation/M5.md).
+The M4 section above records the earlier sequential baseline, superseded by M5.
 
 ## 3. 目录规划
 

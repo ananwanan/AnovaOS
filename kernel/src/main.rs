@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #![no_std]
 #![no_main]
-//! Boot the BSP, initialize owned memory/CPU state, then run isolated native apps.
+//! Boot owned memory/CPU state and run isolated, preemptively scheduled native processes.
 
 extern crate alloc;
 
@@ -104,7 +104,7 @@ extern "C" fn kernel_main(timer_port: u64, timer_mask: u64) -> ! {
     mm::inject_fault();
     task::start();
     serial::write(format_args!(
-        "[BOOT:OK] M4 native apps completed; BSP idle, interrupts enabled\n"
+        "[BOOT:OK] M5 processes reclaimed; BSP idle, interrupts enabled\n"
     ));
     #[cfg(feature = "qemu-test")]
     {

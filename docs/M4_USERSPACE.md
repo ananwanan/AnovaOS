@@ -3,6 +3,8 @@
 This document defines the implemented Ring 3 execution, ELF loader, native v1
 ABI and Rust/C SDK boundaries. See [validation/M4.md](validation/M4.md) for
 measured acceptance results and [M3_MEMORY.md](M3_MEMORY.md) for backing ownership.
+This records the M4 baseline. [M5_PROCESSES.md](M5_PROCESSES.md) supersedes the
+sequential lifecycle and extends native v1 with scheduling and process syscalls.
 
 ## Execution and ownership
 
@@ -116,8 +118,10 @@ part of its destination if a real access-time fault occurs; callers must treat
 an error accordingly.
 
 IF stays clear through checking and copying, so no unmap can race on this BSP.
-Before M5/SMP introduces concurrent revocation, replace this assumption with
-address-space synchronization/pinning and the corresponding tests. No IRQ or
+M5 retains IF=0 during copies and gives each single-threaded process exclusive
+map ownership: no user unmap or address-space sharing exists. All map edits run
+on the scheduler root. Shared address spaces, concurrent unmapping or SMP must
+replace this BSP critical section with explicit pinning/synchronization. No IRQ or
 fault-recovery path acquires the memory manager or heap lock.
 
 ## CPU state and SDK
@@ -126,8 +130,8 @@ Before user entry, CPUID must report SYSCALL, FXSR, SSE and SSE2. CR0 enables MP
 and NE and clears EM/TS; CR4 enables OSFXSR/OSXMMEXCPT and leaves XSAVE/AVX and
 FSGSBASE disabled. An aligned zeroed FXSAVE image resets x87/MMX and all XMM
 payloads for every invocation, with FCW `0x037f` and MXCSR `0x1f80`. Kernel code
-continues to use the bare-metal soft-float/no-SIMD target. M5 must save and restore
-enabled extended state before switching tasks; resetting it is not context switching.
+continues to use the bare-metal soft-float/no-SIMD target. M5 now saves/restores
+all enabled state on switching; a fresh image alone gets the initial reset state.
 
 `user/` is a separate Cargo workspace. Rust uses the pinned compiler's
 `x86_64-unknown-linux-gnu` core solely for normal x86_64/SSE2 user code generation;

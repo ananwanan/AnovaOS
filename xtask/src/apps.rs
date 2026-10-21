@@ -4,7 +4,7 @@
 use super::*;
 use sha2::{Digest, Sha256};
 
-pub const NAMES: [&str; 3] = ["hello-rust", "hello-c", "probe"];
+pub const NAMES: [&str; 4] = ["hello-rust", "hello-c", "probe", "process-test"];
 const USER_TARGET: &str = "x86_64-unknown-linux-gnu";
 
 pub fn build(root: &Path, clippy: bool) -> Result<()> {
@@ -64,7 +64,7 @@ pub fn build(root: &Path, clippy: bool) -> Result<()> {
         return Ok(());
     }
     let apps = directory(root, "apps")?;
-    for name in ["hello-rust", "probe"] {
+    for name in ["hello-rust", "probe", "process-test"] {
         let path = apps.join(format!("{name}.elf"));
         output_path(&path)?;
         fs::copy(target.join(USER_TARGET).join("release").join(name), path)?;

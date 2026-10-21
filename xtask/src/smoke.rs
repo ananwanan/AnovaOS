@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Interpret the guest transcript and isa-debug-exit result together.
+//! Require real CPU/memory/user/process evidence together with the QEMU exit result.
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Failure {
@@ -53,6 +53,9 @@ pub fn assess(log: &str, code: Option<i32>, timed_out: bool) -> Result<(), Failu
         "[USER:COPYFAULT] write=true",
         "[USER:LOADER]",
         "[USER:TEST]",
+        "[PROC:OOM]",
+        "[SCHED:TEST]",
+        "[SCHED:READY]",
         "[USER:READY]",
         "[BOOT:OK]",
         "[TEST:PASS]",
@@ -140,6 +143,43 @@ pub fn assess(log: &str, code: Option<i32>, timed_out: bool) -> Result<(), Failu
     ] {
         if log
             .matches(&format!("[USER:CASE] name={case} passed=true"))
+            .count()
+            != 1
+        {
+            return Err(Failure::Markers);
+        }
+    }
+    let scheduler = log
+        .lines()
+        .find(|line| line.starts_with("[SCHED:TEST]"))
+        .ok_or(Failure::Markers)?;
+    let number = |name| {
+        field(scheduler, name)
+            .and_then(|v| v.parse::<u64>().ok())
+            .ok_or(Failure::Markers)
+    };
+    let preemptions = number("preemptions")?;
+    let preempt_switches = number("preempt_switches")?;
+    let spawns = number("spawns")?;
+    let forks = number("forks")?;
+    if preempt_switches<2 || preempt_switches>preemptions || number("switches")?<preempt_switches
+        || number("sleeps")?==0 || number("waits")?==0 || number("idle_halts")?==0
+        || forks<2 || number("execs")?<1 || spawns<55
+        || spawns.checked_add(forks)!=Some(number("reaps")?)
+        || !log.contains("[SCHED:READY] processes_reclaimed=true descriptors=0 frames_restored=true heap_restored=true")
+        || !log.contains("[PROC:OOM] spawn=rolled_back fork=rolled_back exec=retained frames_restored=true heap_restored=true")
+        || log.matches("[PROC:WORKER] GPR/XMM0-15/x87/MXCSR preserved").count()!=2
+    {return Err(Failure::Markers);}
+    for case in [
+        "preemption-fpu-fault",
+        "fork-private-fd",
+        "fork-cpu-state",
+        "exec-reset-retain-fd",
+        "wait-any-orphan-repeat",
+        "capacity-reuse",
+    ] {
+        if log
+            .matches(&format!("[PROC:CASE] {case} passed=true"))
             .count()
             != 1
         {
@@ -237,7 +277,8 @@ mod tests {
     use super::*;
     const GOOD: &str = concat!(
         "[BOOT:ENTRY]\n[BOOT:PROTOCOL]\n[BOOT:MEMORY]\n[CPU:PAGING]\n[CPU:TABLES]\n[TRAP:BREAKPOINT] saved_if=0 return=iretq\n[CPU:ACPI]\n[CPU:IOAPIC]\n[CPU:APIC]\n[MM:FRAMES]\n[MM:TABLES] boot_table_refs=0 NX=on WP=on direct_map=NX\n[MM:HEAP]\n[MM:STACK]\n[MM:TEST] mappings=256 invalid_free=rejected frame_oom=recovered map_oom=rolled_back\n[MM:ALLOC] coalesced=true fallible_oom=recovered used=0\n[MM:READY]\n[CPU:TIMER] ticks=8 monotonic_ns=80000000\n[TRAP:BREAKPOINT] saved_if=1 return=iretq\n",
-        "[USER:CPU] syscall=true return=iretq\n[APP:RUST] args: hello-rust AnovaOS ring3; BSS=zero x87/SSE2=ok\n[USER:EXIT] pid=1 status=0\n[APP:C] args: hello-c native-v1; BSS=zero SSE2=ok\n[USER:EXIT] pid=2 status=7\n[USER:COPYFAULT] write=false recovered=true\n[USER:COPYFAULT] write=true recovered=true\n[USER:LOADER] partial_oom=rolled_back\n[USER:CASE] name=syscalls passed=true\n[USER:CASE] name=timer passed=true\n[USER:CASE] name=page-fault passed=true\n[USER:CASE] name=kernel-read passed=true\n[USER:CASE] name=kernel-write passed=true\n[USER:CASE] name=stack-guard passed=true\n[USER:CASE] name=invalid-opcode passed=true\n[USER:CASE] name=privileged passed=true\n[USER:CASE] name=bad-rsp passed=true\n[USER:CASE] name=read-only passed=true\n[USER:CASE] name=no-execute passed=true\n[USER:TEST] cases=11 repeated=8 pointers=rejected syscalls=checked faults=contained frames_restored=true user_irqs=1\n[USER:READY]\n[BOOT:OK]\n[TEST:PASS]\n",
+        "[USER:CPU] syscall=true return=iretq\n[APP:RUST] args: hello-rust AnovaOS ring3; BSS=zero x87/SSE2=ok\n[USER:EXIT] pid=1 status=0\n[APP:C] args: hello-c native-v1; BSS=zero SSE2=ok\n[USER:EXIT] pid=2 status=7\n[USER:COPYFAULT] write=false recovered=true\n[USER:COPYFAULT] write=true recovered=true\n[USER:LOADER] partial_oom=rolled_back\n[USER:CASE] name=syscalls passed=true\n[USER:CASE] name=timer passed=true\n[USER:CASE] name=page-fault passed=true\n[USER:CASE] name=kernel-read passed=true\n[USER:CASE] name=kernel-write passed=true\n[USER:CASE] name=stack-guard passed=true\n[USER:CASE] name=invalid-opcode passed=true\n[USER:CASE] name=privileged passed=true\n[USER:CASE] name=bad-rsp passed=true\n[USER:CASE] name=read-only passed=true\n[USER:CASE] name=no-execute passed=true\n[USER:TEST] cases=11 repeated=8 pointers=rejected syscalls=checked faults=contained frames_restored=true user_irqs=1\n",
+        "[PROC:OOM] spawn=rolled_back fork=rolled_back exec=retained frames_restored=true heap_restored=true\n[PROC:WORKER] GPR/XMM0-15/x87/MXCSR preserved\n[PROC:WORKER] GPR/XMM0-15/x87/MXCSR preserved\n[PROC:CASE] preemption-fpu-fault passed=true\n[PROC:CASE] fork-private-fd passed=true\n[PROC:CASE] fork-cpu-state passed=true\n[PROC:CASE] exec-reset-retain-fd passed=true\n[PROC:CASE] wait-any-orphan-repeat passed=true\n[PROC:CASE] capacity-reuse passed=true\n[SCHED:TEST] preemptions=4 preempt_switches=3 switches=8 sleeps=4 waits=16 idle_halts=3 forks=2 execs=1 spawns=55 reaps=57\n[SCHED:READY] processes_reclaimed=true descriptors=0 frames_restored=true heap_restored=true\n[USER:READY]\n[BOOT:OK]\n[TEST:PASS]\n",
     );
 
     #[test]
@@ -334,6 +375,25 @@ mod tests {
             ),
             ("[USER:COPYFAULT] write=false", "[USER:NOTCOPY] write=false"),
             ("BSS=zero x87/SSE2=ok", "BSS=bad"),
+        ] {
+            assert_eq!(
+                assess(&GOOD.replace(old, new), Some(33), false),
+                Err(Failure::Markers)
+            );
+        }
+    }
+
+    #[test]
+    fn m5_gate_rejects_unexercised_scheduling_and_leaked_processes() {
+        for (old, new) in [
+            ("preempt_switches=3", "preempt_switches=0"),
+            ("waits=16", "waits=0"),
+            ("idle_halts=3", "idle_halts=0"),
+            ("reaps=57", "reaps=56"),
+            ("heap_restored=true", "heap_restored=false"),
+            ("fork=rolled_back", "fork=leaked"),
+            ("capacity-reuse passed=true", "capacity-reuse passed=false"),
+            ("[PROC:WORKER]", "[PROC:SKIPPED]"),
         ] {
             assert_eq!(
                 assess(&GOOD.replace(old, new), Some(33), false),

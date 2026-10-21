@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #![no_std]
-//! Minimal native Rust CRT, borrowed startup arguments and v1 syscall wrappers.
+//! Native Rust CRT, borrowed startup arguments and console/process syscall wrappers.
 //! Built with the x86_64 user ABI and SSE2, without libc, allocation or Linux calls.
 pub use anova_abi as abi;
 mod memory;
@@ -63,6 +63,75 @@ pub fn exit(status: u32) -> ! {
         raw(abi::SYS_EXIT, u64::from(status), 0, 0);
         asm!("ud2", options(noreturn));
     }
+}
+
+fn result(value: i64) -> Result<u64, i64> {
+    if value < 0 {
+        Err(value)
+    } else {
+        Ok(value as u64)
+    }
+}
+pub fn yield_now() {
+    // SAFETY: No pointers; the kernel preserves the caller's live context.
+    unsafe {
+        raw(abi::SYS_YIELD, 0, 0, 0);
+    }
+}
+/// Block for at least this many delivered 100 Hz timer ticks; zero yields.
+pub fn sleep(ticks: u64) -> Result<(), i64> {
+    // SAFETY: No pointers or borrowed resources cross into the kernel.
+    result(unsafe { raw(abi::SYS_SLEEP, ticks, 0, 0) }).map(|_| ())
+}
+fn image_call(number: u64, name: &str, argument: &str) -> Result<u64, i64> {
+    let request = abi::ExecRequest {
+        name: name.as_ptr() as u64,
+        name_len: name.len() as u64,
+        argument: argument.as_ptr() as u64,
+        argument_len: argument.len() as u64,
+    };
+    // SAFETY: The request and both strings remain readable until the call returns.
+    result(unsafe {
+        raw(
+            number,
+            &request as *const _ as u64,
+            size_of::<abi::ExecRequest>() as u64,
+            0,
+        )
+    })
+}
+pub fn spawn(name: &str, argument: &str) -> Result<u64, i64> {
+    image_call(abi::SYS_SPAWN, name, argument)
+}
+/// A successful exec replaces this entire image and never returns.
+pub fn exec(name: &str, argument: &str) -> Result<(), i64> {
+    image_call(abi::SYS_EXEC, name, argument).map(|_| ())
+}
+/// Duplicate this single-threaded process; caller must account for execution in both copies.
+/// # Safety
+/// Copied external resources must tolerate two independent process owners. The
+/// native SDK has no threads, shared allocator or host runtime requiring fork hooks.
+pub unsafe fn fork() -> Result<u64, i64> {
+    // SAFETY: The caller meets the documented independent-owner contract.
+    result(unsafe { raw(abi::SYS_FORK, 0, 0, 0) })
+}
+/// pid=0 waits for any child; a failed copy leaves the child's status waitable.
+pub fn wait(pid: u64) -> Result<abi::WaitStatus, i64> {
+    let mut status = abi::WaitStatus::default();
+    // SAFETY: A live exclusive 16-byte output remains mapped while the caller blocks.
+    result(unsafe {
+        raw(
+            abi::SYS_WAIT,
+            pid,
+            &mut status as *mut _ as u64,
+            size_of::<abi::WaitStatus>() as u64,
+        )
+    })?;
+    Ok(status)
+}
+pub fn close(fd: u64) -> Result<(), i64> {
+    // SAFETY: Console descriptors carry no user pointers.
+    result(unsafe { raw(abi::SYS_CLOSE, fd, 0, 0) }).map(|_| ())
 }
 
 pub struct Args<'a> {
