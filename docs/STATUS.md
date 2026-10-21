@@ -2,6 +2,7 @@
 
 Recorded: 2026-10-21 (Asia/Shanghai). Source baseline:
 847f7c66ddef25616c27a088d0c7044c6f9e8c0d on dev.
+Implementation revision: `4919eb38aef2882c0c55d8fe809c10b52f988bdc`.
 See [M0/M1 evidence](validation/M0-M1.md) for actual commands and scope.
 
 ## Implemented and locally verified
