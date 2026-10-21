@@ -40,7 +40,7 @@ fn load(path: &str, text: &mut Text<8192>) -> Result<(), i64> {
         Err(NOT_FOUND) => return Ok(()),
         Err(error) => return Err(error),
     };
-    let result = (|| {
+    let result: Result<(), i64> = (|| {
         let mut chunk = [0; 512];
         loop {
             let n = rt::read(fd, &mut chunk)?;
