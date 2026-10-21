@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Single-BSP, interrupts-disabled COM1 output. No heap, lock, or firmware calls.
+//! Single-BSP COM1 output. No heap, lock, or firmware calls.
 use core::{
     arch::asm,
     fmt::{self, Write},
@@ -8,8 +8,8 @@ use core::{
 const COM1: u16 = 0x3f8;
 
 pub fn out8(port: u16, value: u8) {
-    // SAFETY: The BSP runs at CPL0 with interrupts disabled. Callers restrict
-    // ports to the q35 UART and the test-only QEMU exit device.
+    // SAFETY: The BSP runs at CPL0. Callers restrict ports to the q35 UART,
+    // legacy PIC masks, and the test-only QEMU exit device.
     unsafe {
         asm!("out dx, al", in("dx") port, in("al") value, options(nomem, nostack, preserves_flags));
     }
@@ -61,5 +61,12 @@ fn write_byte(byte: u8) {
 }
 
 pub fn write(args: fmt::Arguments<'_>) {
+    crate::arch::x86_64::cpu::without_interrupts(|| emergency(args));
+}
+
+/// Fatal exception/panic output is bounded and bypasses normal serialization.
+/// IRQ handlers never log. An NMI/fatal exception can interrupt this writer;
+/// interleaved output is preferable to waiting for a lock held by the victim.
+pub fn emergency(args: fmt::Arguments<'_>) {
     let _ = EmergencyWriter.write_fmt(args);
 }

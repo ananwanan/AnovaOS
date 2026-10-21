@@ -21,6 +21,10 @@ enum Mode {
     Boot,
     Panic,
     Timeout,
+    InvalidOpcode,
+    GeneralProtection,
+    PageFault,
+    DoubleFault,
 }
 
 impl Mode {
@@ -30,6 +34,10 @@ impl Mode {
             Self::Boot => "boot",
             Self::Panic => "panic",
             Self::Timeout => "timeout",
+            Self::InvalidOpcode => "invalid-opcode",
+            Self::GeneralProtection => "general-protection",
+            Self::PageFault => "page-fault",
+            Self::DoubleFault => "double-fault",
         }
     }
     fn features(self) -> Option<&'static str> {
@@ -38,7 +46,41 @@ impl Mode {
             Self::Boot => Some("qemu-test"),
             Self::Panic => Some("test-panic"),
             Self::Timeout => Some("test-timeout"),
+            Self::InvalidOpcode => Some("test-invalid-opcode"),
+            Self::GeneralProtection => Some("test-general-protection"),
+            Self::PageFault => Some("test-page-fault"),
+            Self::DoubleFault => Some("test-double-fault"),
         }
+    }
+
+    fn fault(self) -> Option<smoke::Fault> {
+        Some(match self {
+            Self::InvalidOpcode => smoke::Fault {
+                name: self.name(),
+                vector: 6,
+                error: "0x0",
+                ist: 2,
+            },
+            Self::GeneralProtection => smoke::Fault {
+                name: self.name(),
+                vector: 13,
+                error: "0xfff8",
+                ist: 2,
+            },
+            Self::PageFault => smoke::Fault {
+                name: self.name(),
+                vector: 14,
+                error: "0x2",
+                ist: 2,
+            },
+            Self::DoubleFault => smoke::Fault {
+                name: self.name(),
+                vector: 8,
+                error: "0x0",
+                ist: 1,
+            },
+            _ => return None,
+        })
     }
 }
 
@@ -88,6 +130,10 @@ fn execute() -> Result<()> {
                 (Mode::Boot, 30, Ok(())),
                 (Mode::Panic, 30, Err(smoke::Failure::Panic)),
                 (Mode::Timeout, 8, Err(smoke::Failure::Timeout)),
+                (Mode::InvalidOpcode, 30, Err(smoke::Failure::Exception)),
+                (Mode::GeneralProtection, 30, Err(smoke::Failure::Exception)),
+                (Mode::PageFault, 30, Err(smoke::Failure::Exception)),
+                (Mode::DoubleFault, 30, Err(smoke::Failure::Exception)),
             ] {
                 let actual = smoke(&root, mode, timeout)?;
                 if actual != expected {
@@ -99,10 +145,17 @@ fn execute() -> Result<()> {
             }
             Ok(())
         }
-        "test-host" => command(Command::new("cargo").args(["test", "--locked", "-p", "xtask"])),
+        "test-host" => command(Command::new("cargo").args([
+            "test",
+            "--locked",
+            "-p",
+            "xtask",
+            "-p",
+            "anova-platform",
+        ])),
         "help" | "--help" | "-h" => {
             println!(
-                "AnovaOS host tools\n\n  cargo xtask doctor\n  cargo xtask fetch\n  cargo xtask build\n  cargo xtask image\n  cargo xtask run\n  cargo xtask smoke [--case boot|panic|timeout] [--timeout-secs 1..300]\n  cargo xtask verify\n  cargo xtask test-host\n\nOutputs stay in build/; run uses a disposable OVMF variable copy. TCG is mandatory."
+                "AnovaOS host tools\n\n  cargo xtask doctor\n  cargo xtask fetch\n  cargo xtask build\n  cargo xtask image\n  cargo xtask run\n  cargo xtask smoke [--case CASE] [--timeout-secs 1..300]\n  cargo xtask verify\n  cargo xtask test-host\n\nCASE: boot, panic, timeout, invalid-opcode, general-protection, page-fault, double-fault.\nOutputs stay in build/; run uses a disposable OVMF variable copy. TCG is mandatory."
             );
             Ok(())
         }
@@ -121,6 +174,10 @@ fn smoke_args(args: &[String]) -> Result<(Mode, u64)> {
                     "boot" => Mode::Boot,
                     "panic" => Mode::Panic,
                     "timeout" => Mode::Timeout,
+                    "invalid-opcode" => Mode::InvalidOpcode,
+                    "general-protection" => Mode::GeneralProtection,
+                    "page-fault" => Mode::PageFault,
+                    "double-fault" => Mode::DoubleFault,
                     _ => return Err("Unknown smoke case".into()),
                 }
             }
@@ -500,6 +557,15 @@ fn smoke(root: &Path, mode: Mode, seconds: u64) -> Result<std::result::Result<()
     }
     if mode == Mode::Timeout && (!timed_out || !transcript.contains("[TEST:HANG]")) {
         return Err("Timeout injection did not reach the controlled guest hang".into());
+    }
+    if let Some(fault) = mode.fault()
+        && (timed_out || !smoke::reached_fault(&transcript, code, fault))
+    {
+        return Err(format!(
+            "{} injection did not reach the expected exception, IST, address and exit 37",
+            mode.name()
+        )
+        .into());
     }
     Ok(result)
 }

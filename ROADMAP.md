@@ -1,6 +1,6 @@
 # 开发路线与阶段验收
 
-日期：2026-10-21。**M0/M1 已通过本地 q35/TCG 验收；M2–M15 尚未实现。** 证据见 [验证记录](docs/validation/M0-M1.md) 与 [STATUS](docs/STATUS.md)。[FIRST_TASK](docs/FIRST_TASK.md) 给出本批的实际实现顺序与逐步完成标准。
+日期：2026-10-21。**M0/M1 与 M2 BSP 异常/时钟基线已通过本地 q35/TCG 验收；M3–M15 尚未实现，外设 IRQ 路由启用待对应驱动。** 证据见 [M2 验证记录](docs/validation/M2.md) 与 [STATUS](docs/STATUS.md)。[FIRST_TASK](docs/FIRST_TASK.md) 记录 M0/M1 原始实现顺序；当前 M2 边界见 [CPU 基线](docs/M2_CPU.md)。
 
 ## 阶段总览
 
@@ -8,7 +8,7 @@
 | --- | --- | --- | --- |
 | M0 | 可复现工程与宿主入口 | 无 | 本地验收通过 |
 | M1 | UEFI 启动并可靠输出 | M0 | 本地验收通过 |
-| M2 | 异常、中断与时钟可诊断 | M1 | 未开始 |
+| M2 | 异常、中断与时钟可诊断 | M1 | BSP 基线验收；外设 IRQ 待驱动 |
 | M3 | 受控页管理和堆 | M2 | 未开始 |
 | M4 | 第一个隔离的用户 app | M3 | 未开始 |
 | M5 | 多进程与阻塞/抢占调度 | M4、M2 | 未开始 |
@@ -55,11 +55,12 @@
 
 ## M2：CPU、异常、中断、时钟
 
-- [ ] GDT/TSS/IDT、独立异常栈、double fault 的 IST 与 guard page。
-- [ ] page fault/GP fault/非法指令报告寄存器、地址和错误位。
-- [ ] 解析所需 ACPI 表并校验范围；配置 LAPIC/IOAPIC 与 IRQ 路由。
-- [ ] 校准可用时钟，实现单调时间、定时器中断、正确 EOI。
-- [ ] 区分 trap/IRQ/线程上下文，记录中断开关状态和锁规则。
+- [x] GDT/TSS/IDT、独立异常栈、double fault 的 IST 与 guard page。
+- [x] page fault/GP fault/非法指令报告寄存器、地址和错误位。
+- [x] 解析并校验 RSDP/XSDT（或 RSDT）/MADT/FADT；配置 LAPIC 定时器与保持屏蔽的 IOAPIC 路由。
+- [ ] 外设 IRQ、MADT source override/NMI 路由随首个对应驱动启用并验证；当前不宣称外设中断可用。
+- [x] 使用 ACPI PM 时钟校准 LAPIC，提供粗粒度单调 IRQ 时间、周期中断和正确 EOI。
+- [x] 区分 trap/IRQ/普通 BSP 上下文，记录 IF 和无锁/不分配规则；线程上下文尚未存在。
 
 退出条件：定时中断连续计数；人为异常有可理解诊断；异常/中断不会因为日志锁递归失去全部输出。尚无用户态时，故障注入使用独立测试镜像。
 

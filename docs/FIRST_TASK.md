@@ -1,5 +1,8 @@
 # M0/M1 implementation order and acceptance
 
+This records the historical M0/M1 gate. Current CPU/IRQ behavior and command
+contracts are documented in [M2_CPU.md](M2_CPU.md) and [DEVELOPMENT.md](DEVELOPMENT.md).
+
 The starting revision was `847f7c66ddef25616c27a088d0c7044c6f9e8c0d` on `dev`:
 planning documents only. No Cargo command or kernel was assumed to exist.
 This change implements the following sequence. Follow [AGENTS.md](../AGENTS.md);
@@ -54,5 +57,7 @@ explicit ownership before reclaiming anything.
 
 Base revision 3 supplies a physical RSDP address. M1 reports it without parsing
 ACPI, using firmware services, drawing to the framebuffer, or executing modules.
-M2 next adds GDT/TSS/IDT, diagnostic exceptions, a double fault path and a timer
-interrupt. Page allocation and a heap follow the roadmap dependencies.
+That M0/M1 next task is now implemented by the bounded M2 BSP baseline:
+[M2_CPU.md](M2_CPU.md) and [validation/M2.md](validation/M2.md).
+The current next task is M3 ownership, frame allocation, managed mappings and
+a heap; external device IRQ activation still requires the corresponding driver.

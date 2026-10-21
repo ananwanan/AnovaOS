@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Borrow Limine data for the entire M1 lifetime. No allocator or reclamation
+//! Borrow Limine data through boot and M2. No allocator or reclamation
 //! exists: bootloader stacks, page tables, responses, ACPI and modules stay live.
 use limine::{
     BaseRevision,
@@ -10,6 +10,7 @@ use limine::{
 };
 
 use crate::serial;
+use anova_platform::{PhysAddr, VirtAddr};
 
 #[used]
 #[unsafe(link_section = ".limine_requests_start")]
@@ -38,9 +39,6 @@ request!(MODULES: ModuleRequest = ModuleRequest::new());
 #[used]
 #[unsafe(link_section = ".limine_requests_end")]
 static END: RequestsEndMarker = RequestsEndMarker::new();
-
-struct PhysAddr(u64);
-struct VirtAddr(u64);
 
 pub struct BootInfo {
     entries: &'static [&'static Entry],
@@ -150,6 +148,88 @@ pub fn validate() -> BootInfo {
 }
 
 impl BootInfo {
+    pub fn rsdp(&self) -> PhysAddr {
+        PhysAddr(
+            RSDP.get_response()
+                .expect("M2 requires ACPI RSDP")
+                .address() as u64,
+        )
+    }
+
+    pub fn kernel_physical(&self, address: VirtAddr) -> PhysAddr {
+        let offset = address
+            .0
+            .checked_sub(0xffff_ffff_8000_0000)
+            .expect("Not a kernel address");
+        let physical = PhysAddr(
+            self.kernel_base
+                .0
+                .checked_add(offset)
+                .expect("Kernel address overflow"),
+        );
+        assert!(
+            self.entries.iter().any(
+                |entry| entry.entry_type == EntryType::EXECUTABLE_AND_MODULES
+                    && physical.0 >= entry.base
+                    && physical.0 < entry.base + entry.length
+            ),
+            "Kernel address lacks reservation"
+        );
+        physical
+    }
+
+    pub fn table_pointer(&self, physical: PhysAddr) -> *const u64 {
+        assert_eq!(physical.0 & 0xfff, 0, "Unaligned page table");
+        assert!(
+            self.entries.iter().any(|entry| {
+                (entry.entry_type == EntryType::BOOTLOADER_RECLAIMABLE
+                    || entry.entry_type == EntryType::EXECUTABLE_AND_MODULES)
+                    && physical.0 >= entry.base
+                    && physical
+                        .0
+                        .checked_add(4096)
+                        .is_some_and(|end| end <= entry.base + entry.length)
+            }),
+            "Page table is outside retained, HHDM-mapped memory"
+        );
+        self.hhdm.0.checked_add(physical.0).expect("HHDM overflow") as *const u64
+    }
+
+    pub fn check_firmware(&self, physical: PhysAddr, length: usize) {
+        let end = physical
+            .0
+            .checked_add(length as u64)
+            .expect("Firmware range overflow");
+        assert!(
+            length > 0
+                && self.entries.iter().any(|entry| {
+                    (entry.entry_type == EntryType::ACPI_RECLAIMABLE
+                        || entry.entry_type == EntryType::ACPI_NVS
+                        || entry.entry_type == EntryType::BOOTLOADER_RECLAIMABLE
+                        || entry.entry_type == EntryType::RESERVED)
+                        && physical.0 >= entry.base
+                        && end <= entry.base + entry.length
+                }),
+            "ACPI range is outside reserved firmware memory"
+        );
+    }
+
+    pub fn check_mmio(&self, physical: PhysAddr) {
+        let end = physical.0.checked_add(4096).expect("MMIO range overflow");
+        assert!(
+            self.entries.iter().all(|entry| {
+                let mapped_ram = entry.entry_type == EntryType::USABLE
+                    || entry.entry_type == EntryType::BOOTLOADER_RECLAIMABLE
+                    || entry.entry_type == EntryType::EXECUTABLE_AND_MODULES
+                    || entry.entry_type == EntryType::FRAMEBUFFER
+                    || entry.entry_type == EntryType::ACPI_RECLAIMABLE
+                    || entry.entry_type == EntryType::ACPI_NVS;
+                !mapped_ram || end <= entry.base || physical.0 >= entry.base + entry.length
+            }),
+            "Device page overlaps RAM, firmware, or a framebuffer"
+        );
+    }
+
     pub fn report(&self) {
         serial::write(format_args!(
             "[BOOT:MEMORY] entries={} usable_bytes={} hhdm={:#x} kernel_phys={:#x}\n",
@@ -180,7 +260,7 @@ impl BootInfo {
                 "Invalid RSDP address"
             );
             serial::write(format_args!(
-                "[BOOT:ACPI] rsdp_phys={:#x}; table parsing deferred\n",
+                "[BOOT:ACPI] rsdp_phys={:#x}\n",
                 rsdp.address()
             ));
         } else {

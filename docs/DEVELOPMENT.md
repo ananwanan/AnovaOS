@@ -1,8 +1,10 @@
 # Development and validation
 
-M0/M1 provide a real Cargo workspace, host xtask, bare-metal kernel and UEFI ISO.
-Start from dev or its task branch. Read [STATUS.md](STATUS.md) and
-[AGENTS.md](../AGENTS.md); the implemented scope ends at boot and idle.
+M0/M1 provide the Cargo workspace, host xtask, bare-metal kernel and UEFI ISO.
+The M2 BSP baseline adds CPU tables, guarded exception stacks, ACPI discovery
+and a calibrated periodic LAPIC IRQ. Start from dev or its task branch; read
+[STATUS.md](STATUS.md), [M2_CPU.md](M2_CPU.md) and [AGENTS.md](../AGENTS.md).
+There is still no allocator, user space or external device IRQ delivery.
 
 ## Host setup
 
@@ -44,14 +46,17 @@ Run from the repository root:
 | `cargo xtask build` | target/x86_64-unknown-none/debug/anova-kernel and ELF checks | Build/link/ELF failure returns 1 |
 | `cargo xtask image` | build/images/anova-normal.iso | Missing/corrupt inputs stop image generation |
 | `cargo xtask run` | UEFI boot, serial on stdio, then idle | Process errors propagate; stop QEMU with Ctrl+C |
-| `cargo xtask smoke` | Test ISO and build/logs/boot.* | Missing stages, panic, wrong exit or deadline returns 1 |
+| `cargo xtask smoke` | Test ISO and build/logs/boot.*; 8+ IRQs and returning breakpoints | Missing CPU stages, fatal fault, wrong exit or deadline returns 1 |
 | `cargo xtask smoke --case panic` | Controlled panic and QEMU 35 | Intentionally returns 1 |
 | `cargo xtask smoke --case timeout --timeout-secs 8` | Controlled hang, killed by watchdog | Intentionally returns 1 |
-| `cargo xtask verify` | Boot passes; reached controlled panic and hang are rejected | Any unexpected outcome or unreached injection fails |
-| `cargo xtask test-host` | Host transcript, checksum, ELF and CLI boundary tests | Test failures propagate |
+| `cargo xtask smoke --case page-fault` | Real guard write faults on IST2, QEMU 37 | Intentionally returns 1 |
+| `cargo xtask smoke --case double-fault` | Real stack failure reaches #DF on IST1, QEMU 37 | Intentionally returns 1 |
+| `cargo xtask verify` | Boot passes; six reached failure injections are rejected | Wrong vector/error/IST/address, unexpected outcome or unreached injection fails |
+| `cargo xtask test-host` | Transcript/exception gates, ACPI bounds/checksums, PM wrap, ELF and CLI tests | Test failures propagate |
 
-smoke accepts --case boot/panic/timeout and --timeout-secs 1..300; its default is
-30 seconds. verify uses 30/30/8 seconds. Deadlines bound the QEMU process;
+smoke accepts --case boot/panic/timeout/invalid-opcode/general-protection/page-fault/
+double-fault and --timeout-secs 1..300; its default is 30 seconds. verify uses
+30 seconds per case, except 8 seconds for the deliberately hung image. Deadlines bound the QEMU process;
 compilation and downloads have their own failure behavior.
 
 ## Target and image boundaries
@@ -78,8 +83,9 @@ persistence.
 
 ```sh
 cargo fmt --all -- --check
-cargo clippy --locked -p xtask --all-targets -- -D warnings
+cargo clippy --locked -p xtask -p anova-platform --all-targets -- -D warnings
 cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features qemu-test -- -D warnings
+cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features test-double-fault -- -D warnings
 cargo xtask test-host
 cargo xtask build
 cargo xtask fetch
@@ -90,11 +96,15 @@ cargo xtask verify
 Do not use cargo test --workspace for the hardware kernel or enable both fault
 injection features together. The kernel has no host test harness.
 
-Success requires ordered stage markers and TEST:PASS plus QEMU 33. isa-debug-exit
-maps guest values as (value << 1) | 1: success 0x10 becomes 33; panic 0x11 becomes
-35. Exit 0 is rejected. Only test features access this device; normal startup
-stays idle. Panic reports phase, source location and message through an
-independent bounded writer without a lock or heap allocation.
+Success requires ordered boot/CPU/timer markers, 8+ IRQs with consistent
+nanoseconds, both returning breakpoint IF states, TEST:PASS and QEMU 33.
+isa-debug-exit maps guest values as (value << 1) | 1: success 0x10 becomes 33,
+panic 0x11 becomes 35, and exception 0x12 becomes 37. Exit 0 is rejected.
+Only test features access this device; normal startup stays interruptible in
+sti/hlt. Panic reports phase, source location and message through independent
+bounded output. Exceptions report registers, CR2, errors and actual IST.
+The gate treats exceptions as failures and separately validates each expected
+injection. See [M2_CPU.md](M2_CPU.md) for IRQ, mapping and time limitations.
 
 Complete firmware/bootloader transcripts remain in *.serial.log, process
 messages in *.qemu.log, and case/exit/timeout/classification in *.result.txt.
@@ -103,9 +113,10 @@ A banner alone never passes.
 ## CI and evidence
 
 [boot.yml](../.github/workflows/boot.yml) runs the above checks on Ubuntu 24.04,
-including all three QEMU cases, and uploads logs even on failure. Actions are
+including all seven QEMU cases, and uploads logs even on failure. Actions are
 pinned to commits. Configured CI and remote CI execution are separate facts.
-Local evidence is in [validation/M0-M1.md](validation/M0-M1.md).
+Current local evidence is in [validation/M2.md](validation/M2.md);
+[validation/M0-M1.md](validation/M0-M1.md) records the historical gate.
 
 Record source baseline, host/tool versions, input hashes, commands, results and
 artifact hashes for boot changes. Debug paths and ISO timestamps still affect

@@ -1,6 +1,6 @@
 # 官方参考与设计依据
 
-查阅日期：2026-10-20。下列资料用于核对事实，项目阶段与架构选择由本仓库自行制定。链接的默认分支内容会变化，实施时必须将实际依赖固定到版本/提交。
+查阅日期：2026-10-21。下列资料用于核对事实，项目阶段与架构选择由本仓库自行制定。链接的默认分支内容会变化，实施时必须将实际依赖固定到版本/提交。
 
 | 官方资料 | 用途 |
 | --- | --- |
@@ -16,6 +16,12 @@
 | [GCC：Configuration](https://gcc.gnu.org/install/configure.html) | build/host/target、sysroot 与配置要求 |
 | [GCC：Building](https://gcc.gnu.org/install/build.html) | cross build、运行库与 bootstrap 的不同流程 |
 | [OASIS：virtio 规范目录](https://docs.oasis-open.org/virtio/virtio/) | 选择正式规范版本，核对 PCI、队列、block/net 等设备语义 |
+
+## M2 implementation references
+
+The exact CPU/ACPI references and the pinned Limine protocol used for M2 are
+listed in [M2_CPU.md](M2_CPU.md#primary-specifications). No tutorial kernel code
+or new third-party implementation was imported by this change.
 
 ## 实施时应补充的规范清单
 

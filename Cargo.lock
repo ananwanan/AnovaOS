@@ -6,8 +6,13 @@ version = 4
 name = "anova-kernel"
 version = "0.1.0"
 dependencies = [
+ "anova-platform",
  "limine",
 ]
+
+[[package]]
+name = "anova-platform"
+version = "0.1.0"
 
 [[package]]
 name = "bitflags"
