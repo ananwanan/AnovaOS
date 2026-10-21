@@ -22,6 +22,7 @@ anova-elf = { path = "../crates/elf" }
 anova-sched = { path = "../crates/sched" }
 
 anova-vfs = { path = "../crates/vfs" }
+anova-storage = { path = "../crates/storage" }
 
 [features]
 qemu-test = []

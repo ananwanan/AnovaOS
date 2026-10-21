@@ -56,14 +56,15 @@ UEFI 固件启动 Limine；Limine 装载内核 ELF 和 initramfs，并按锁定�
   exception paths use independent bounded, lock-free emergency output. There is
   no AP startup; M5 adds the BSP scheduler below. Normal idle uses `sti; hlt` after timer validation.
 - `xtask` still builds a UEFI El Torito ISO for q35/TCG, 256 MiB and one CPU, with
-  disposable firmware variables, no data disk and no network. Smoke passes only
+  disposable firmware variables and no network. M7 now attaches a temporary
+  data disk by default, with explicit persistent images described below. Smoke passes only
   with ordered CPU/timer markers, 8+ IRQs, returning breakpoints and exit 33.
   Panic exits 35 and real exceptions exit 37; all are failures. The gate checks
   that each negative case reached its expected injection and diagnosis.
 
 See [M2 CPU details](docs/M2_CPU.md) for exact bounds, contexts and limitations,
 [M0/M1 evidence](docs/validation/M0-M1.md) for the historical boot gate, and
-[M2 evidence](docs/validation/M2.md) for the current validation.
+[M2 evidence](docs/validation/M2.md) for the historical M2 validation.
 
 ### Current M3 memory implementation
 
@@ -81,7 +82,7 @@ See [M2 CPU details](docs/M2_CPU.md) for exact bounds, contexts and limitations,
   images, including real read-only/NX/guard/unmap faults and infallible heap OOM.
 
 See [M3 memory design](docs/M3_MEMORY.md) and [M3 evidence](docs/validation/M3.md).
-M4 adds private user roots as described below; SMP shootdown, DMA drivers and boot-memory reclamation remain pending.
+M4 adds private user roots as described below; M7 adds an owned DMA frame for virtio-blk; SMP shootdown and boot-memory reclamation remain pending.
 
 ### Current M4 native user implementation
 
@@ -138,8 +139,26 @@ The M4 section above records the earlier sequential baseline, superseded by M5.
   up to four pipeline stages and file redirection. All tmpfs state is volatile.
 
 See [M6 design](docs/M6_FILESYSTEM.md) and [M6 evidence](docs/validation/M6.md).
-Persistent block storage, a general mount API, POSIX terminals and Linux binaries
-remain later work; these commands are project-owned native applications.
+A general mount API, POSIX terminals and Linux binaries remain later work;
+these commands are project-owned native applications. M7 adds storage below.
+
+### Current M7 storage and editing implementation
+
+`kernel/drivers` enumerates PCI, maps bounded modern virtio capabilities UC/NX
+and owns one coherent DMA32 frame until confirmed reset. Completion is polled
+with PM-timer deadlines; external IRQ routing remains disabled. `anova-storage`
+shares checked sector I/O and a strict one-group, 4 KiB ext2 implementation
+with host tests. VFS mounts disk metadata at `/persist` and reads file data on
+demand, retaining existing descriptor/offset/process ownership. An explicit
+`.anova-abi` image manifest selects native v1 for executable disk files.
+
+Ordered writes, a dirty-superblock protocol, actual FLUSH, sync/fsync and
+clean unmount precede DMA teardown and restricted QEMU ACPI S5. The native
+line editor and cp/install commands save source and app files; host tooling
+separates temporary disks from explicit persistent images. See
+[M7 design](docs/M7_STORAGE.md) and [M7 evidence](docs/validation/M7.md).
+There is no journal, atomic rename/save, crash recovery, asynchronous block
+layer, hotplug, SMP or guest compiler yet.
 
 ## 3. 目录规划
 

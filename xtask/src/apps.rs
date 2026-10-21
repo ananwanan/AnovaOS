@@ -4,7 +4,7 @@
 use super::*;
 use sha2::{Digest, Sha256};
 
-pub const NAMES: [&str; 7] = [
+pub const NAMES: [&str; 8] = [
     "hello-rust",
     "hello-c",
     "probe",
@@ -12,6 +12,7 @@ pub const NAMES: [&str; 7] = [
     "init",
     "shell",
     "fs-test",
+    "edit",
 ];
 const USER_TARGET: &str = "x86_64-unknown-linux-gnu";
 
@@ -79,6 +80,7 @@ pub fn build(root: &Path, clippy: bool) -> Result<()> {
         "init",
         "shell",
         "fs-test",
+        "edit",
     ] {
         let path = apps.join(format!("{name}.elf"));
         output_path(&path)?;
@@ -137,7 +139,7 @@ pub fn build(root: &Path, clippy: bool) -> Result<()> {
 /// Pack the bounded project-owned archive; names and permissions are explicit image policy.
 fn initramfs(apps: &Path) -> Result<()> {
     let mut entries: Vec<(u8, String, Vec<u8>)> = Vec::new();
-    for path in ["/bin", "/etc", "/tmp", "/dev"] {
+    for path in ["/bin", "/etc", "/tmp", "/dev", "/persist"] {
         entries.push((2, path.into(), Vec::new()));
     }
     for name in NAMES {
@@ -147,7 +149,10 @@ fn initramfs(apps: &Path) -> Result<()> {
             fs::read(apps.join(format!("{name}.elf")))?,
         ));
     }
-    for name in ["ls", "cat", "echo", "pwd", "mkdir", "rm", "true", "false"] {
+    for name in [
+        "ls", "cat", "echo", "pwd", "mkdir", "rm", "true", "false", "cp", "install", "sync",
+        "shutdown",
+    ] {
         entries.push((3, format!("/bin/{name}"), b"shell".to_vec()));
     }
     entries.push((

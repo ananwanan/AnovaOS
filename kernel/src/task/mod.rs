@@ -13,7 +13,7 @@ use crate::{
     },
     boot, fs, mm, serial,
 };
-use alloc::vec::Vec;
+use alloc::{borrow::Cow, vec::Vec};
 use anova_abi::*;
 use anova_sched::{CAPACITY, Scheduler, State};
 use anova_vfs::{Descriptors, ROOT, Vfs};
@@ -174,9 +174,9 @@ impl Kernel {
             }
         }
     }
-    fn executable(&self, i: usize, name: &str) -> Result<&'static [u8], i64> {
+    fn executable(&mut self, i: usize, name: &str) -> Result<Cow<'static, [u8]>, i64> {
         if name.contains('/') {
-            return self.fs.executable(self.process(i).cwd, name);
+            return self.fs.load_executable(self.process(i).cwd, name);
         }
         let mut path = [0; 128];
         if name.len() + 5 > path.len() {
@@ -185,7 +185,7 @@ impl Kernel {
         path[..5].copy_from_slice(b"/bin/");
         path[5..5 + name.len()].copy_from_slice(name.as_bytes());
         self.fs
-            .executable(ROOT, core::str::from_utf8(&path[..5 + name.len()]).unwrap())
+            .load_executable(ROOT, core::str::from_utf8(&path[..5 + name.len()]).unwrap())
     }
     fn fork(&mut self, parent: usize) -> Result<u64, i64> {
         let i = self.policy.insert(self.policy.entry(parent).pid)?;
@@ -327,6 +327,41 @@ impl Kernel {
                 None => INVALID_ARGUMENT,
             },
             SYS_FORK => self.fork(i).map_or_else(|e| e, |pid| pid as i64),
+            SYS_SHUTDOWN if f.rdi == 0 && f.rsi == 0 && f.rdx == 0 => {
+                if !crate::arch::x86_64::acpi::can_poweroff() {
+                    self.process_mut(i).context.frame.rax = UNSUPPORTED as u64;
+                    return;
+                }
+                // Reject an already failed disk while console and caller descriptors still exist.
+                if let Err(error) = self.fs.sync() {
+                    self.process_mut(i).context.frame.rax = error as u64;
+                    return;
+                }
+                // Stop all writers and close orphaned files before recording a clean unmount.
+                for process in self.processes.iter_mut().flatten() {
+                    self.fs.clear(&mut process.files);
+                }
+                match self.fs.shutdown() {
+                    Ok(()) => {
+                        // Drop confirms virtio reset before returning its DMA frame to the allocator.
+                        if let Err(error) = self.fs.detach_disk() {
+                            serial::emergency(format_args!(
+                                "[POWER:FAIL] DMA reset error={error}\n"
+                            ));
+                            crate::halt();
+                        }
+                        crate::arch::x86_64::acpi::poweroff();
+                    }
+                    Err(error) => {
+                        // Writers have been stopped and their descriptors closed; do not resume
+                        // a session that can no longer report or safely retry the final unmount.
+                        serial::emergency(format_args!(
+                            "[POWER:FAIL] final unmount error={error}; halted dirty\n"
+                        ));
+                        crate::halt();
+                    }
+                }
+            }
             SYS_WAIT => {
                 if f.rdx != size_of::<WaitStatus>() as u64 {
                     INVALID_ARGUMENT
@@ -352,10 +387,10 @@ impl Kernel {
                         Ok(bytes) => {
                             let args = [request.name(), request.argument()];
                             if f.rax == SYS_SPAWN {
-                                self.add(bytes, &args, self.policy.entry(i).pid)
+                                self.add(&bytes, &args, self.policy.entry(i).pid)
                                     .map_or_else(|e| e, |child| self.policy.entry(child).pid as i64)
                             } else {
-                                match self.exec(i, bytes, &args) {
+                                match self.exec(i, &bytes, &args) {
                                     Ok(()) => return,
                                     Err(error) => error,
                                 }
@@ -561,6 +596,13 @@ impl Request {
 fn run(bytes: &[u8], args: &[&str], pid: u64) -> Result<Outcome, loader::LoadError> {
     cpu::without_interrupts(|| {
         let mut kernel = Kernel::new(pid)?;
+        if args.first() == Some(&"/bin/init")
+            && let Err(error) = crate::drivers::attach(&mut kernel.fs)
+        {
+            serial::write(format_args!(
+                "[DISK:REJECT] mount error={error}; /persist unavailable\n"
+            ));
+        }
         let index = kernel
             .add(bytes, args, 0)
             .map_err(|_| loader::LoadError::Memory(anova_memory::Error::OutOfMemory))?;
@@ -602,6 +644,10 @@ fn run(bytes: &[u8], args: &[&str], pid: u64) -> Result<Outcome, loader::LoadErr
                 "[VFS:IO] blocks={} wakes={} open_descriptions=0 pipes=0\n",
                 kernel.metrics.io_blocks, kernel.metrics.io_wakes
             ));
+            kernel
+                .fs
+                .shutdown()
+                .map_err(|_| loader::LoadError::Memory(anova_memory::Error::InvalidRange))?;
         }
         Ok(outcome)
     })

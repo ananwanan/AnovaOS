@@ -1,7 +1,7 @@
 <!-- Track milestone dependencies, implementation checklists and acceptance criteria. -->
 # 开发路线与阶段验收
 
-日期：2026-10-21。**M0–M6 已通过本地 q35/TCG 验收；M7–M15 尚未实现，外设 IRQ 路由启用待对应驱动。** 证据见 [M6 验证记录](docs/validation/M6.md) 与 [STATUS](docs/STATUS.md)。[FIRST_TASK](docs/FIRST_TASK.md) 记录 M0/M1 原始实现顺序；当前 M2 边界见 [CPU 基线](docs/M2_CPU.md)。
+日期：2026-10-21。**M0–M7 已通过本地 q35/TCG 验收；M8–M15 尚未实现，外设 IRQ 路由启用待对应驱动。** 证据见 [M7 验证记录](docs/validation/M7.md) 与 [STATUS](docs/STATUS.md)。[FIRST_TASK](docs/FIRST_TASK.md) 记录 M0/M1 原始实现顺序；当前 M2 边界见 [CPU 基线](docs/M2_CPU.md)。
 
 ## 阶段总览
 
@@ -14,7 +14,7 @@
 | M4 | 第一个隔离的用户 app | M3 | 本地验收通过；顺序运行 Rust/C ELF |
 | M5 | 多进程与阻塞/抢占调度 | M4、M2 | 本地验收通过；单核、每进程一个线程 |
 | M6 | VFS、init、基础 shell | M5 | 本地验收通过；tmpfs 重启丢失 |
-| M7 | 源码和应用可持久保存 | M6 | 未开始 |
+| M7 | 源码和应用可持久保存 | M6 | 本地验收通过；单块组 ext2、正常关机保证 |
 | M8 | 首批静态 Linux CLI 程序 | M6、M7 | 未开始 |
 | M9 | 线程、信号、动态 musl | M8 | 未开始 |
 | M10 | 网络和受控包安装 | M7、M9 | 未开始 |
@@ -121,14 +121,14 @@
 
 ## M7：持久磁盘与可编辑环境
 
-- [ ] PCI 枚举、现代 virtio-blk、DMA 缓冲区和队列生命周期。
-- [ ] 块边界、设备容量、错误与 flush 路径。
-- [ ] 明确特性集合的 ext2 读写；未知/不支持特性拒绝挂载。
-- [ ] 数据/元数据更新顺序、sync/fsync、受控关机和根盘镜像工具。
-- [ ] 最小文本编辑器，先支持打开/编辑/保存；之后扩展终端体验。
-- [ ] 默认运行 overlay/临时盘与持久化测试盘分开。
+- [x] PCI 枚举、现代 virtio-blk、DMA 缓冲区和队列生命周期。
+- [x] 块边界、设备容量、错误与 flush 路径。
+- [x] 明确特性集合的 ext2 读写；未知/不支持特性拒绝挂载。
+- [x] 数据/元数据更新顺序、sync/fsync、受控关机和根盘镜像工具。
+- [x] 最小文本编辑器，先支持打开/编辑/保存；之后扩展终端体验。
+- [x] 默认运行 overlay/临时盘与持久化测试盘分开。
 
-退出条件：系统内保存源码与二进制、正常关机、重启读取校验一致；越界 I/O 与坏文件系统明确失败；记录非日志 FS 的断电局限。
+已验证退出条件：系统内用编辑器保存源码、复制原生二进制、正常 ACPI 关机，重启后源码逐字节与 ELF SHA-256 一致，磁盘原生应用再次执行，e2fsck 无错误；越界 I/O、坏特性、只读盘与真实 write/flush 错误明确失败。实现范围与非日志/断电限制见 [M7_STORAGE](docs/M7_STORAGE.md)，证据见 [M7 验证](docs/validation/M7.md)。数据盘挂载于 `/persist`，根仍为 initramfs，默认运行盘为临时盘；32 个单线程进程、2 MiB 固定堆和外设 IRQ 屏蔽仍保持。
 
 ## M8：POSIX 基础与静态 Linux CLI
 

@@ -35,6 +35,7 @@ pub enum Owner {
     Test = 5,
     User = 6,
     ProcessStack = 7,
+    Dma = 8,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -203,6 +204,7 @@ impl<'a> FrameAllocator<'a> {
             5 => Ok(Some(Owner::Test)),
             6 => Ok(Some(Owner::User)),
             7 => Ok(Some(Owner::ProcessStack)),
+            8 => Ok(Some(Owner::Dma)),
             _ => Err(Error::WrongOwner),
         }
     }

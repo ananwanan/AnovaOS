@@ -56,7 +56,7 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `docs/M6_FILESYSTEM.md` | Define VFS/archive, fd/pipe ownership, native ABI, terminal, init and shell contracts. |
 | `docs/REFERENCES.md` | Primary architecture, protocol, ABI and toolchain reference links. |
 | `docs/REQUIREMENTS.md` | Owner-mandated development requirements, including DEV-001 file explanations. |
-| `docs/STATUS.md` | Record verified M0–M6 capabilities, remaining bounds and the next M7 storage task. |
+| `docs/STATUS.md` | Record verified M0–M7 capabilities, exact storage bounds and the next M8 Linux ABI task. |
 | `docs/TOOLCHAINS.md` | Planned path to guest-hosted GCC/G++/Rust/Cargo and optional self-hosting. |
 | `docs/validation/M0-M1.md` | Historical local engineering/boot acceptance evidence and input hashes. |
 | `docs/validation/M2.md` | Historical local CPU/timer/trap validation evidence and limitations. |
@@ -123,3 +123,22 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `xtask/src/purposes.rs` | Check file-purpose inventory coverage and top-of-file comments for first-party code. Human review still verifies that each explanation describes its actual responsibility. |
 | `xtask/src/smoke.rs` | Require real CPU/memory/user/process evidence together with the QEMU exit result. |
 | `xtask/src/terminal.rs` | Drive real COM1 input in two ordinary boots, checking line editing, shell EOF and volatile tmpfs. Watchdogs kill only these disposable QEMU guests; a prompt alone is never success evidence. |
+
+## M7 storage and editor files
+
+| File | Purpose |
+| --- | --- |
+| `crates/platform/src/power.rs` | Validate the restricted reference-QEMU PM1a and constant ACPI S5 handoff, with corruption tests. |
+| `crates/storage/Cargo.toml` | Declare the no_std checked sector/ext2 crate and its native error dependency. |
+| `crates/storage/src/lib.rs` | Define owned synchronous sector devices, read-only/flush/stop contracts and checked ranges. |
+| `crates/storage/src/ext2.rs` | Implement the declared ext2 profile, checked allocation, ordered writes and clean shutdown. |
+| `crates/storage/tests/ext2.rs` | Verify on-disk ext2 bytes, indirection, sparse data, exhaustion, reboot and injected I/O failures. |
+| `docs/M7_STORAGE.md` | Define PCI/DMA/queue ownership, ext2 bounds, native durability ABI, disk images and source editor. |
+| `docs/validation/M7.md` | Record actual M7 host/guest/editor/reboot/error checks, integrity evidence and remaining limits. |
+| `kernel/src/drivers/mod.rs` | Hand off validated boot PCI mappings to the one BSP-owned persistent VFS device. |
+| `kernel/src/drivers/pci.rs` | Enumerate PCI bridges/functions and admit bounded modern virtio MMIO capabilities/BARs. |
+| `kernel/src/drivers/virtio.rs` | Own a coherent split block queue, checked transfers/FLUSH, timeout, reset and DMA quarantine. |
+| `user/editor/Cargo.toml` | Build the standalone native serial source editor with the no_std SDK. |
+| `user/editor/src/main.rs` | Open/edit bounded ASCII text, retain failed-save buffers and fsync successful saves. |
+| `user/fs-test/src/disk.rs` | Exercise real ext2 fd/indirect/sparse/unlink syscalls and verify persisted source/ELF data. |
+| `xtask/src/disk.rs` | Create safe regular ext2 images and drive independent reboot/integrity/device-error scenarios. |

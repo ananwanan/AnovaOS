@@ -10,7 +10,9 @@ and [AGENTS.md](../AGENTS.md). M4 adds isolated native Rust/C applications; read
 M5 adds saved CPU/FPU contexts, user preemption, blocking and process lifecycle;
 read [M5_PROCESSES.md](M5_PROCESSES.md). M6 adds VFS, init, an interactive shell,
 blocking pipes and polled canonical serial input; read [M6_FILESYSTEM.md](M6_FILESYSTEM.md).
-External device IRQ delivery remains pending.
+M7 adds PCI/modern virtio-blk, a supported ext2 data image, a serial editor and
+verified shutdown/reboot persistence; read [M7_STORAGE.md](M7_STORAGE.md).
+External device IRQ delivery remains pending; block completion is polled.
 
 ## Host setup
 
@@ -20,7 +22,7 @@ from its official distribution, then install host utilities:
 
 ```sh
 sudo apt-get update
-sudo apt-get install --no-install-recommends qemu-system-x86 xorriso curl dpkg-dev gcc
+sudo apt-get install --no-install-recommends qemu-system-x86 xorriso curl dpkg-dev gcc e2fsprogs
 rustup show active-toolchain
 cargo xtask fetch
 cargo xtask doctor
@@ -50,7 +52,7 @@ Run from the repository root:
 | `cargo xtask fetch` | Verified build/cache/ and build/firmware/ | Network, extraction or checksum error returns 1 |
 | `cargo xtask doctor` | Checks tools, versions, target and boot inputs | Reports all discovered problems; returns 1 |
 | `cargo xtask build` | target/x86_64-unknown-none/debug/anova-kernel and ELF checks | Build/link/ELF failure returns 1 |
-| `cargo xtask apps` | build/apps/: seven Rust/C ELFs, checked initramfs and ABI/SHA-256 manifest | Compiler/linker/ELF failure returns 1 |
+| `cargo xtask apps` | build/apps/: eight Rust/C ELFs, checked initramfs and ABI/SHA-256 manifest | Compiler/linker/ELF failure returns 1 |
 | `cargo xtask check-apps` | Rust user workspace Clippy with actual user target/linker flags | Warnings are errors |
 | `cargo xtask check-files` | Header and per-file inventory coverage required by DEV-001 | Missing explanation/inventory entry returns 1 |
 | `cargo xtask image` | build/images/anova-normal.iso | Missing/corrupt inputs stop image generation |
@@ -68,6 +70,9 @@ Run from the repository root:
 | `cargo xtask smoke --case oom` | Infallible allocation panic, QEMU 35 | Intentionally returns 1 |
 | `cargo xtask verify` | Boot passes; twelve reached failure injections are rejected | Wrong vector/error/IST/address, unexpected outcome or unreached injection fails |
 | `cargo xtask terminal-test` | Two normal boots: UART editing/CRLF/EOF, shell restart and volatile file loss | Missing actual output, guest failure or 30-second/session watchdog returns 1 |
+| `cargo xtask root-image build/disks/NAME.ext2` | New 16 MiB native-v1 ext2 data image | Existing files and unsafe paths are refused |
+| `cargo xtask run --disk build/disks/NAME.ext2` | Reuse an explicitly selected image; guest shutdown cleanly powers off | Does not format missing/existing images |
+| `cargo xtask persistence-test` | Editor/source/binary checks across shutdown/reboot, e2fsck and device error scenarios | Missing bytes/hash/mount/error/actual exit or 60-second/session watchdog fails |
 | `cargo xtask test-host` | Frame/buddy/table, VFS/pipe/FD, scheduler, archive/parser and transcript tests | Test failures propagate |
 
 smoke accepts --case boot/panic/timeout/invalid-opcode/general-protection/page-fault/
@@ -93,10 +98,12 @@ PT_INTERP/PT_DYNAMIC and RWX are rejected.
 
 The image is a UEFI-only El Torito ISO. There is no BIOS installation or physical
 block-device access. Fixed output paths reject symlinks and device files. QEMU
-uses q35/TCG, qemu64, 256 MiB, one vCPU, no network or data disk. CODE is read-only;
+uses q35/TCG, qemu64, 256 MiB, one vCPU, no network and a modern virtio data disk. CODE is read-only;
 VARS is copied into a unique build/tmp/ directory and removed on normal process
-completion. The watchdog kills and reaps its guest. This does not test disk
-persistence.
+completion. Default runs create a disposable ext2 data image in that same
+temporary directory; explicit images and persistence-test use build/disks/.
+The watchdog kills and reaps its guest. See M7_STORAGE for clean shutdown and
+non-journaled ext2 recovery limits.
 
 ## Validation
 
@@ -104,7 +111,7 @@ persistence.
 cargo fmt --all -- --check
 cargo fmt --manifest-path user/Cargo.toml --all -- --check
 cargo xtask check-files
-cargo clippy --locked -p xtask -p anova-platform -p anova-memory -p anova-abi -p anova-elf -p anova-sched -p anova-vfs --all-targets -- -D warnings
+cargo clippy --locked -p xtask -p anova-platform -p anova-memory -p anova-abi -p anova-elf -p anova-sched -p anova-vfs -p anova-storage --all-targets -- -D warnings
 cargo xtask check-apps
 cargo xtask apps
 cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features qemu-test -- -D warnings
@@ -116,6 +123,7 @@ cargo xtask fetch
 cargo xtask doctor
 cargo xtask verify
 cargo xtask terminal-test
+cargo xtask persistence-test
 ```
 
 Do not use cargo test --workspace for the hardware kernel or enable multiple fault
@@ -138,9 +146,10 @@ A banner alone never passes.
 ## CI and evidence
 
 [boot.yml](../.github/workflows/boot.yml) runs the above checks on Ubuntu 24.04,
-including all 13 QEMU cases and the two-boot terminal scenario, and uploads logs even on failure. Actions are
+including all 13 QEMU cases, the two-boot terminal scenario and persistence/error scenarios, and uploads logs even on failure. Actions are
 pinned to commits. Configured CI and remote CI execution are separate facts.
-Current local evidence is in [validation/M6.md](validation/M6.md);
+Current local evidence is in [validation/M7.md](validation/M7.md);
+[validation/M6.md](validation/M6.md),
 [validation/M5.md](validation/M5.md),
 [validation/M4.md](validation/M4.md),
 [validation/M3.md](validation/M3.md),

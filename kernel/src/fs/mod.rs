@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Bridge checked native user buffers to the shared VFS and polled canonical terminal.
+//! Bridge checked user buffers to memory/disk VFS, durability calls and the polled terminal.
 //! Calls run on the BSP at IF=0; blocking retains only a copied syscall frame, never a lock.
 use crate::{
     arch::x86_64::traps::TrapFrame,
@@ -168,7 +168,7 @@ pub fn syscall(
                     n as i64
                 }
             }
-            SYS_OPEN | SYS_MKDIR | SYS_CHDIR | SYS_UNLINK => {
+            SYS_OPEN | SYS_MKDIR | SYS_CHDIR | SYS_UNLINK | SYS_SET_EXECUTABLE => {
                 let mut bytes = [0; 128];
                 let n = path(space, frame.rdi, frame.rsi, &mut bytes)?;
                 let name = core::str::from_utf8(&bytes[..n]).unwrap();
@@ -180,6 +180,10 @@ pub fn syscall(
                     }
                     SYS_CHDIR => {
                         *cwd = vfs.chdir(*cwd, name)?;
+                        0
+                    }
+                    SYS_SET_EXECUTABLE => {
+                        vfs.set_executable(*cwd, name)?;
                         0
                     }
                     _ => {
@@ -199,6 +203,14 @@ pub fn syscall(
             }
             SYS_CLOSE => {
                 vfs.close(files, frame.rdi)?;
+                0
+            }
+            SYS_SYNC if frame.rdi == 0 && frame.rsi == 0 && frame.rdx == 0 => {
+                vfs.sync()?;
+                0
+            }
+            SYS_FSYNC => {
+                vfs.fsync(files, frame.rdi)?;
                 0
             }
             SYS_DUP2 => vfs.dup2(files, frame.rdi, frame.rsi)? as i64,
@@ -253,6 +265,9 @@ pub fn syscall(
             | SYS_SEEK
             | SYS_PIPE
             | SYS_READDIR
+            | SYS_SYNC
+            | SYS_FSYNC
+            | SYS_SET_EXECUTABLE
     ) {
         Some(value.unwrap_or_else(|e| e))
     } else {

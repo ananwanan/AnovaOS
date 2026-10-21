@@ -15,3 +15,4 @@ anova-abi = { path = "../crates/abi" }
 anova-elf = { path = "../crates/elf" }
 
 anova-vfs = { path = "../crates/vfs" }
+anova-storage = { path = "../crates/storage" }

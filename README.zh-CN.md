@@ -5,7 +5,7 @@
 
 用 Rust 从零开发的 x86_64 操作系统，目标是在自己的系统中编辑、编译、调试和运行应用，并逐步兼容部分现有 Linux 软件。
 
-**当前状态：M0–M6 已通过本地 QEMU q35/TCG 验证。原生进程具备独立内存、CPU/FPU 状态保存、抢占和阻塞调度；现已支持只读 initramfs、tmpfs/devfs、共享打开文件对象、管道、PID 1 init 和交互式原生 shell。`/tmp` 重启丢失。Linux 兼容与持久磁盘尚未实现，外设 IRQ 保持屏蔽。**
+**当前状态：M0–M7 已通过本地 QEMU q35/TCG 验证。原生进程、VFS、管道、init 和串口 shell 现已接入现代 virtio-blk、挂载于 `/persist` 的受限 ext2、文本编辑器、sync/fsync 与正常 ACPI 关机。同一个显式持久盘经过关机/重启后，源码和原生二进制校验一致。普通 `run` 使用临时盘，`/tmp` 仍然易失；Linux 兼容尚未实现，外设 IRQ 保持屏蔽。**
 
 项目仓库：[ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS)。
 
@@ -64,6 +64,8 @@
 | [docs/validation/M5.md](docs/validation/M5.md) | 多进程、CPU/FPU、OOM 与资源回收验证 |
 | [docs/M6_FILESYSTEM.md](docs/M6_FILESYSTEM.md) | VFS、文件/管道所有权、串口终端、init 与原生 shell |
 | [docs/validation/M6.md](docs/validation/M6.md) | 文件、shell、管道、终端与 tmpfs 重启丢失验证 |
+| [docs/M7_STORAGE.md](docs/M7_STORAGE.md) | PCI/virtio 所有权、ext2 范围、同步关机、磁盘镜像与编辑器 |
+| [docs/validation/M7.md](docs/validation/M7.md) | 重启后的源码/二进制校验、设备错误与回归证据 |
 | [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) | 强制开发需求，包括文件用途说明 |
 | [docs/FILE_PURPOSES.md](docs/FILE_PURPOSES.md) | 仓库中每个文件的用途 |
 | [docs/STATUS.md](docs/STATUS.md) | 当前已实现能力和下一步 |
@@ -100,7 +102,7 @@ cargo fmt --manifest-path user/Cargo.toml --all -- --check
 
 ## 构建与启动
 
-宿主使用 x86_64 Ubuntu 24.04 或 WSL2，安装 rustup、QEMU 8.2.2、xorriso、curl、dpkg-deb 和 GCC。仓库固定 Rust 1.90.0、rustfmt、Clippy 与裸机目标；依赖安装和固件路径见 [开发说明](docs/DEVELOPMENT.md)。
+宿主使用 x86_64 Ubuntu 24.04 或 WSL2，安装 rustup、QEMU 8.2.2、xorriso、curl、dpkg-deb、GCC 和 e2fsprogs。仓库固定 Rust 1.90.0、rustfmt、Clippy 与裸机目标；依赖安装和固件路径见 [开发说明](docs/DEVELOPMENT.md)。
 
 ```sh
 cargo xtask fetch       # 下载并校验固定的 Limine/OVMF 输入
@@ -113,13 +115,16 @@ cargo xtask run         # 启动原生工作负载、PID 1 init 和交互式 she
 cargo xtask smoke       # CPU/内存/进程与 VFS/管道/shell/OOM 验证，退出码 33
 cargo xtask verify      # 13 场景：启动通过，故障、panic、超时和 OOM 被拒绝
 cargo xtask terminal-test # 真实串口编辑/EOF 与两次启动的 tmpfs 丢失验证
+cargo xtask persistence-test # 源码/二进制重启校验、文件系统与 I/O 错误验证
+cargo xtask root-image build/disks/work.ext2 # 创建新的持久数据盘
+cargo xtask run --disk build/disks/work.ext2 # 复用此盘，在系统内 shutdown 正常关机
 ```
 
-以上命令已在宿主 `xtask` 包中实现。镜像、缓存、日志和临时固件变量副本均位于 `build/`；普通启动不连接数据盘和网络。GitHub Actions 已配置相同检查，其运行结果与 [本地验收](docs/validation/M6.md) 分开记录。
+以上命令已在宿主 `xtask` 包中实现。镜像、缓存、日志和临时固件变量副本均位于 `build/`；普通启动使用临时数据盘、不连接网络。GitHub Actions 已配置相同检查，其运行结果与 [本地验收](docs/validation/M7.md) 分开记录。
 
 ## 下一步
 
-M7 将加入 virtio-blk、受限 ext2 持久存储和可编辑环境。详见 [文件系统与 shell 设计](docs/M6_FILESYSTEM.md)、[当前状态](docs/STATUS.md) 和 [路线图](ROADMAP.md)。
+M8 将加入独立的 Linux syscall personality 和固定静态 CLI 程序兼容测试。当前磁盘和编辑器范围见 [M7 存储设计](docs/M7_STORAGE.md)，另见 [当前状态](docs/STATUS.md) 和 [路线图](ROADMAP.md)。
 
 ## 许可证
 

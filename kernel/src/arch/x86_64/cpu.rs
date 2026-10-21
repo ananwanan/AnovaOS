@@ -41,7 +41,7 @@ pub fn wait_for_interrupt() {
 
 pub fn in32(port: u16) -> u32 {
     let value;
-    // SAFETY: CPL0; callers use only the validated ACPI PM timer port range.
+    // SAFETY: CPL0; callers use validated ACPI PM timer or serialized PCI configuration ports.
     unsafe {
         asm!("in eax, dx", in("dx") port, out("eax") value, options(nomem, nostack, preserves_flags));
     }
