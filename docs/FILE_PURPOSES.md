@@ -38,6 +38,12 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `crates/platform/src/lib.rs` | Hardware-independent address types and bounded ACPI decoding. |
 | `crates/sched/Cargo.toml` | Shares bounded process state, parent/wait semantics and round-robin policy with host tests. |
 | `crates/sched/src/lib.rs` | Bounded BSP scheduling policy and parent/child lifecycle without hardware or allocation. The kernel owns contexts/resources; this policy never switches stacks or takes locks. |
+| `crates/storage/Cargo.toml` | Package checked no_std block-device, ext2 and virtio policy without a hardware driver. |
+| `crates/storage/src/lib.rs` | Export storage policies and typed I/O/format failures. |
+| `crates/storage/src/block.rs` | Bounds-check 512-byte sectors and read-modify-write unaligned metadata with an explicit flush contract. |
+| `crates/storage/src/ext2.rs` | Validate and access a strict one-group direct-block ext2 subset; overwrite only preallocated files. |
+| `crates/storage/src/pci.rs` | Discover modern virtio-blk PCI functions and validate vendor capability chains. |
+| `crates/storage/src/virtio.rs` | Model modern virtio-blk features and split-queue wire/completion boundaries. |
 | `crates/vfs/Cargo.toml` | Share bounded in-memory VFS, archive, open-file and pipe semantics with host tests. |
 | `crates/vfs/src/archive.rs` | Decode the project-owned ANOVAFS1 archive using checked byte ranges, never casts. Entries are parent-first absolute UTF-8 paths; payloads remain borrowed from boot RAM. |
 | `crates/vfs/src/fd.rs` | Store process-local descriptor indices; Vfs alone manages open-description references. Tables cannot be copied or cloned without incrementing the associated shared ownership. |
@@ -53,6 +59,8 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `docs/M3_MEMORY.md` | Frame/table/heap ownership, virtual layout, locks and original M3 limitations. |
 | `docs/M4_USERSPACE.md` | Historical M4 entry/loader/copy/SDK contracts, with M5 supersession and ownership notes. |
 | `docs/M5_PROCESSES.md` | Define BSP scheduling, CPU/FPU state, native process syscalls and ownership/locking boundaries. |
+| `docs/M7_STORAGE.md` | Specify partial M7 storage/editor policy, excluded driver functionality and acceptance steps. |
+| `docs/validation/M7.md` | Record honest unverified M7 progress and the outstanding two-boot persistence gate. |
 | `docs/M6_FILESYSTEM.md` | Define VFS/archive, fd/pipe ownership, native ABI, terminal, init and shell contracts. |
 | `docs/REFERENCES.md` | Primary architecture, protocol, ABI and toolchain reference links. |
 | `docs/REQUIREMENTS.md` | Owner-mandated development requirements, including DEV-001 file explanations. |
@@ -99,6 +107,9 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `user/c/anova.h` | Define native v1 console/process wire layouts and C syscall wrappers without libc/Linux. |
 | `user/c/crt.S` | Convert the native startup stack to C main arguments and exit through SYSCALL. |
 | `user/c/hello.c` | Demonstrate the C SDK, arguments, BSS/SSE2, scheduling and descriptor calls before exit 7. |
+| `user/editor/Cargo.toml` | Build the no_std native editor with the shared userspace linker script. |
+| `user/editor/src/lib.rs` | Provide host-testable fixed-capacity text operations and line-edit rollback. |
+| `user/editor/src/main.rs` | Drive serial line-edit, read, save and dirty-state commands through the native filesystem ABI. |
 | `user/fs-test/Cargo.toml` | Build the standalone native fs-test application with the shared no_std runtime. |
 | `user/fs-test/src/main.rs` | Exercise real VFS syscalls, inherited open offsets, exec/cwd, user buffers and blocking pipes. Child modes validate resources after fork/exec; shell-check reads files produced by its script. |
 | `user/hello/Cargo.toml` | Builds the Rust hello ELF that verifies startup arguments, zeroed BSS and SSE2. |

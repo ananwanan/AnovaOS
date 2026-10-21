@@ -1,5 +1,13 @@
 # Implementation status
 
+**M7 feature branch checkpoint (unverified):** `feat/m7-persistent-storage`
+now contains a separately packaged native line editor and a host-testable
+`anova-storage` crate for checked sector access, constrained ext2 direct-file
+I/O, PCI capability parsing and modern virtio protocol layouts. This is **not**
+a connected disk driver or an accepted persistent mount; the M6 boot status
+below remains unchanged. See [M7_STORAGE.md](M7_STORAGE.md) and
+[validation/M7.md](validation/M7.md) for outstanding work and test status.
+
 This document records verified capabilities, remaining boundaries and the next
 milestone. Recorded 2026-10-21 (Asia/Shanghai). M6 source baseline:
 `fdc852c906647cd58623d43c119e1c637d870fb1` on `dev` (merged M5).
@@ -67,7 +75,7 @@ and NX. Huge-leaf editing, SMP shootdown, DMA and DMA pools remain outside scope
 
 ## Next task
 
-Implement M7: PCI and modern virtio-blk, checked block/DMA/queue ownership,
+Continue M7: connect PCI BAR/DMA/modern virtio-blk and extend ext2 allocation and VFS mounting beyond the currently isolated storage policies; then validate. Original target: PCI and modern virtio-blk, checked block/DMA/queue ownership,
 a supported ext2 subset with explicit feature rejection, flush/fsync/controlled
 shutdown and a minimal text editor. Keep default temporary/overlay disks
 separate from persistence tests; verify saved sources and binaries after reboot.

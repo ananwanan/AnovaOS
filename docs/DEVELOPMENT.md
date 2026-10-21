@@ -50,7 +50,7 @@ Run from the repository root:
 | `cargo xtask fetch` | Verified build/cache/ and build/firmware/ | Network, extraction or checksum error returns 1 |
 | `cargo xtask doctor` | Checks tools, versions, target and boot inputs | Reports all discovered problems; returns 1 |
 | `cargo xtask build` | target/x86_64-unknown-none/debug/anova-kernel and ELF checks | Build/link/ELF failure returns 1 |
-| `cargo xtask apps` | build/apps/: seven Rust/C ELFs, checked initramfs and ABI/SHA-256 manifest | Compiler/linker/ELF failure returns 1 |
+| `cargo xtask apps` | build/apps/: eight Rust/C ELFs plus the native editor, checked initramfs and ABI/SHA-256 manifest | Compiler/linker/ELF failure returns 1 |
 | `cargo xtask check-apps` | Rust user workspace Clippy with actual user target/linker flags | Warnings are errors |
 | `cargo xtask check-files` | Header and per-file inventory coverage required by DEV-001 | Missing explanation/inventory entry returns 1 |
 | `cargo xtask image` | build/images/anova-normal.iso | Missing/corrupt inputs stop image generation |

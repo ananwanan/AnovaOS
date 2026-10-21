@@ -209,6 +209,8 @@ fn execute() -> Result<()> {
                 "anova-sched",
                 "-p",
                 "anova-vfs",
+                "-p",
+                "anova-storage",
             ]))?;
             command(Command::new("cargo").args([
                 "test",
@@ -217,6 +219,17 @@ fn execute() -> Result<()> {
                 "user/Cargo.toml",
                 "-p",
                 "shell",
+                "--lib",
+                "--target-dir",
+                "build/user-host-target",
+            ]))?;
+            command(Command::new("cargo").args([
+                "test",
+                "--locked",
+                "--manifest-path",
+                "user/Cargo.toml",
+                "-p",
+                "editor",
                 "--lib",
                 "--target-dir",
                 "build/user-host-target",

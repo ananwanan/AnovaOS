@@ -7,6 +7,8 @@
 
 **当前状态：M0–M6 已通过本地 QEMU q35/TCG 验证。原生进程具备独立内存、CPU/FPU 状态保存、抢占和阻塞调度；现已支持只读 initramfs、tmpfs/devfs、共享打开文件对象、管道、PID 1 init 和交互式原生 shell。`/tmp` 重启丢失。Linux 兼容与持久磁盘尚未实现，外设 IRQ 保持屏蔽。**
 
+**M7 正在开发，尚未验收：**功能分支已经加入原生行编辑器 `ed`，以及带边界检查的块设备、受限 ext2 和现代 virtio 协议基础模块；尚未接入真正的块设备驱动或可持久挂载的 VFS。参见 [M7 设计与边界](docs/M7_STORAGE.md)和[待验证记录](docs/validation/M7.md)。
+
 项目仓库：[ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS)。
 
 日常开发与 Pull Request 的目标分支为 **`dev`**；`main` 保留阶段验收后的稳定快照。分支约定见 [GitHub 协作说明](docs/GITHUB_SETUP.md)。

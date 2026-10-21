@@ -138,8 +138,12 @@ The M4 section above records the earlier sequential baseline, superseded by M5.
   up to four pipeline stages and file redirection. All tmpfs state is volatile.
 
 See [M6 design](docs/M6_FILESYSTEM.md) and [M6 evidence](docs/validation/M6.md).
-Persistent block storage, a general mount API, POSIX terminals and Linux binaries
-remain later work; these commands are project-owned native applications.
+M7 has an isolated, not yet wired `anova-storage` crate with checked block
+access, PCI discovery, strict ext2 direct-file policies and virtio descriptors.
+A no_std native `ed` editor has been added to the user build. Neither a real
+virtio queue/DMA driver nor a persistent VFS mount is implemented or validated;
+see [M7 design](docs/M7_STORAGE.md). Persistent block storage, a general mount
+API, POSIX terminals and Linux binaries remain later work; these commands are project-owned native applications.
 
 ## 3. 目录规划
 

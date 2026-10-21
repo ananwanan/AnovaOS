@@ -13,6 +13,11 @@ initramfs, tmpfs/devfs, shared open descriptions, pipes, PID 1 init and an
 interactive native shell now work. `/tmp` is lost on reboot. Linux compatibility
 and persistent disks remain pending; external device IRQs stay masked.**
 
+**M7 is in development, not accepted:** the feature branch adds a bounded native
+`ed` line editor and initial checked block/ext2/virtio policy. No live block
+driver or persisted VFS mount exists yet. See [M7 scope](docs/M7_STORAGE.md)
+and [unverified evidence](docs/validation/M7.md).
+
 Repository: [ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS).
 
 The default development branch and pull request target is **`dev`**. `main`
