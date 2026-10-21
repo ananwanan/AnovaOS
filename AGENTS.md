@@ -4,7 +4,7 @@
 
 这是 Rust 编写的 x86_64 自研操作系统。最终用户应能在系统自己的终端中编辑源码、使用 GCC/G++/Rust/Cargo 编译、链接并运行应用，同时逐步运行经过验证的现有 Linux 软件。
 
-当前 M0/M1 已实现并通过本地 QEMU TCG 验证：workspace、固定工具链、内核 ELF、UEFI 镜像、串口与失败可判定的测试入口均已存在。CI 工作流已配置，远端结果单独记录。**不能由启动成功推断已有中断、分配器、用户态或软件兼容。** 实施时先读 [docs/STATUS.md](docs/STATUS.md)，再检查真实文件和 git 状态，以代码与验证记录为准。
+当前 M0/M1 与 M2 BSP 异常/时钟基线已通过本地 QEMU TCG 验证：workspace、工具链、UEFI 镜像、串口、GDT/TSS/IDT、guard/IST、异常诊断和 LAPIC 定时 IRQ 均已存在。外设 IRQ 仍全部屏蔽，CI 远端结果单独记录。**不能由 BSP 定时中断推断已有分配器、用户态、SMP 或软件兼容。** 实施时先读 [docs/STATUS.md](docs/STATUS.md)，再检查真实文件和 git 状态，以代码与验证记录为准。
 
 本文件是后续 Codex 开发规范。用户明确指令优先；已有修改应保留。日常、可逆的实现选择可自主完成，不因普通阶段切换反复请求确认。
 
@@ -121,7 +121,7 @@ cargo xtask verify
 cargo xtask test-host
 ```
 
-`fetch` 下载并校验锁定输入；`doctor` 对缺少依赖明确报错。`verify` 要求正常启动通过、受控 panic/超时确实到达注入点并被拒绝。`test-host` 测试退出判定、校验和、ELF 和参数边界。将来 `cargo xtask test-compat` 等入口随能力落地再加入文档。
+`fetch` 下载并校验锁定输入；`doctor` 对缺少依赖明确报错。`verify` 要求正常启动、断点返回和至少 8 次定时 IRQ 通过；受控 panic/超时及 #UD/#GP/#PF/#DF 必须到达真实注入点、符合诊断和退出码并被拒绝。`test-host` 还覆盖 ACPI 解析、PM 计数器回绕及异常判定。CPU 上下文和早期映射规则见 [M2_CPU](docs/M2_CPU.md)。将来 `cargo xtask test-compat` 等入口随能力落地再加入文档。
 
 ## 11. 验证要求
 

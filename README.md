@@ -6,9 +6,10 @@ An x86_64 operating system built from scratch in Rust. The goal is to edit,
 compile, debug, and run applications inside AnovaOS itself, while gradually
 supporting selected existing Linux software.
 
-**Current status: M0/M1 implemented and locally verified. A bare-metal Rust kernel
-boots through OVMF/Limine in QEMU TCG, reports boot data over COM1, and passes
-success/panic/timeout validation. User space and Linux compatibility are pending.**
+**Current status: M0/M1 and the M2 BSP exception/timer baseline are locally
+verified on QEMU q35/TCG. The kernel has GDT/TSS/IDT, guarded exception stacks,
+fault diagnostics and a calibrated periodic LAPIC timer. User space and Linux
+compatibility are pending; external device IRQs remain masked.**
 
 Repository: [ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS).
 
@@ -71,6 +72,8 @@ development language and formatting guide is in English.
 | [docs/CODING_STYLE.md](docs/CODING_STYLE.md) | English development conventions and Rust formatting |
 | [docs/FIRST_TASK.md](docs/FIRST_TASK.md) | Ordered M0/M1 implementation steps and completion criteria |
 | [docs/validation/M0-M1.md](docs/validation/M0-M1.md) | Actual local build and boot validation evidence |
+| [docs/M2_CPU.md](docs/M2_CPU.md) | CPU tables, guarded stacks, ACPI/APIC, timing and context rules |
+| [docs/validation/M2.md](docs/validation/M2.md) | Actual M2 timer and exception validation evidence |
 | [docs/STATUS.md](docs/STATUS.md) | Current implementation status and next steps |
 | [docs/GITHUB_SETUP.md](docs/GITHUB_SETUP.md) | Cloning, documentation maintenance, and contribution conventions |
 | [docs/LICENSING.md](docs/LICENSING.md) | Apache-2.0 usage and third-party licensing boundaries |
@@ -127,20 +130,21 @@ cargo xtask doctor      # Report all missing or mismatched prerequisites
 cargo xtask build       # Build and inspect the bare-metal kernel ELF
 cargo xtask image       # Build build/images/anova-normal.iso
 cargo xtask run         # Serial console; the normal kernel stays idle
-cargo xtask smoke       # Ordered boot markers AND QEMU exit 33 are required
-cargo xtask verify      # Boot passes; controlled panic and timeout are rejected
+cargo xtask smoke       # Boot, returning breakpoints, 8+ timer IRQs AND QEMU exit 33
+cargo xtask verify      # Boot passes; panic, timeout and four CPU faults are rejected
 ```
 
 These commands now exist in the host `xtask` package. Images, caches, logs, and
 disposable firmware variable copies stay in `build/`. Normal runs attach no data
 disk or network. GitHub Actions is configured to run the same checks; its status
-is reported separately from [local validation](docs/validation/M0-M1.md).
+is reported separately from [local validation](docs/validation/M2.md).
 
 ## Next steps
 
-M2 adds GDT/TSS/IDT, diagnostic exceptions, and a timer interrupt. Memory
-allocation, user applications, filesystems, and compiler ports retain their
-[roadmap dependencies](ROADMAP.md).
+M3 adds explicit memory ownership, a physical page allocator, managed page
+tables and a heap. External IRQ routing will be enabled and tested with its
+first device driver. See the [CPU baseline](docs/M2_CPU.md),
+[current status](docs/STATUS.md) and [roadmap](ROADMAP.md).
 
 ## License
 

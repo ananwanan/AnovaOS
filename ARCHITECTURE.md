@@ -1,6 +1,6 @@
 # 架构设计
 
-本文描述目标架构；仅以下 M0/M1 启动子集已实现，其余部分仍为规划。当前能力见 [STATUS](docs/STATUS.md)。
+本文描述目标架构；仅以下启动与 M2 BSP 异常/时钟子集已实现，其余部分仍为规划。当前能力见 [STATUS](docs/STATUS.md)。
 
 ## 1. 总体结构
 
@@ -24,20 +24,44 @@ native 和 Linux 的 ABI 分派共享内部资源模型。接口差异在适配�
 
 UEFI 固件启动 Limine；Limine 装载内核 ELF 和 initramfs，并按锁定协议传递内存图、RSDP、HHDM 与 framebuffer 等响应。内核立即建立清楚的数据所有权与初始化次序。
 
-早期序列：串口尽力日志 → 校验启动响应 → 固定必需信息与保留区域 → CPU 异常基础 → 页管理/堆 → ACPI/APIC/时钟 → 任务/VFS → init。
+早期序列：串口尽力日志 → 校验启动响应 → 固定必需信息与保留区域 → 受限早期映射与 CPU 异常基础 → ACPI/APIC/时钟 → M3 页管理/堆 → 任务/VFS → init。
 
 引导器可能已建立页表，接管前不能假定所有映射都由自己拥有。UEFI Boot Services 退出后的可用接口受固件约束；正常内核运行不依赖已经结束的固件服务。Rust 的 UEFI target 用于 UEFI 程序，内核使用独立裸机 target。
 
 最初平台：q35、OVMF、COM1、现代 virtio PCI block/net/rng。设备按阶段加入；M1 不依赖 virtio。PS/2 可用于模拟器早期输入，不能据此宣称支持实机 USB 键盘。
 
-### 当前 M1 实现
+### Current boot and M2 BSP implementation
 
-- `kernel/src/boot.rs` 使用 Limine 9.5.0 + `limine = 0.5.0`，显式请求并校验 base revision 3、UEFI64、4 级分页、HHDM、内存图和内核基址；请求由 linker `KEEP` 保留在可写专用段。
-- `kernel/src/serial.rs` 以 115200/8N1 输出 COM1；单 BSP、IRQ 关闭，没有日志锁或分配。panic 独立构造 writer，UART 轮询有次数上限。
-- 所有响应和 memory map 在整个 M1 生命周期内借用，全部内存保留。尚无 allocator，不回收 bootloader-reclaimable 区域，不接管引导器栈或页表；M3 必须先建立显式所有权才能回收。
-- base revision 3 的 RSDP 是物理地址，M1 只检查非零/范围溢出并报告，ACPI 表映射和校验留给 M2；UEFI 地址不要求 legacy 扫描用的 16 字节对齐。framebuffer 只检查元数据，不写显存，缺失时降级；不加载 initramfs。
-- `xtask` 使用宿主 `std`；内核使用独立裸机目标和 linker script。镜像为 UEFI El Torito ISO，仅由固定路径的普通文件生成。默认 q35/TCG、256 MiB、1 vCPU，无网卡和数据盘；变量固件从校验过的模板复制到 `build/tmp/`，代码固件只读。
-- 普通镜像输出 `[BOOT:OK]` 后 `cli; hlt`。测试特性才访问 QEMU `isa-debug-exit`：成功写 `0x10`（宿主 33），panic 写 `0x11`（宿主 35）；测试器同时验证阶段顺序、最终标记和退出状态，并对挂起执行 kill/wait。
+- Limine 9.5.0 + `limine = 0.5.0` validate base revision 3, UEFI64, four-level
+  paging, HHDM, the memory map and kernel reservation. Writable requests remain
+  protected by linker `KEEP`. Boot responses and all original memory stay live.
+- `arch/x86_64/` installs GDT/TSS/256 IDT gates through stable assembly entries.
+  Three static 16 KiB IST stacks have removed 4 KiB guard mappings. Breakpoints
+  return through `iretq`; fatal exceptions report the full GPR frame, CR2 and
+  decoded #PF/#GP error fields. A real stack failure reaches #DF on IST1.
+- A bounded 32-page pool clones the active root and only the modified table
+  paths. It preserves all other Limine mappings. Guard pages and explicit
+  read-only NX ACPI / UC NX APIC windows do not require a frame allocator.
+  This is partial early ownership: M3 must take over before any reclamation.
+- The shared `anova-platform` crate decodes bounded ACPI bytes with checksum and
+  length checks. Required tables are RSDP, XSDT/RSDT, MADT and FADT. The APIC CPU
+  feature, MSR base, MADT identity, NX and PAT assumptions are checked.
+- Both PICs and every discovered I/O APIC redirection remain masked. Only local
+  APIC vector 64 is enabled; spurious vector 255 returns without EOI. A 20 ms
+  ACPI PM-counter sample calibrates the 100 Hz periodic timer. Its handler
+  increments an atomic count, sends one EOI, and never logs or allocates.
+- COM1 output preserves IF while serializing normal BSP calls. Panic and fatal
+  exception paths use independent bounded, lock-free emergency output. There is
+  no AP startup or scheduler. Normal idle uses `sti; hlt` after timer validation.
+- `xtask` still builds a UEFI El Torito ISO for q35/TCG, 256 MiB and one CPU, with
+  disposable firmware variables, no data disk and no network. Smoke passes only
+  with ordered CPU/timer markers, 8+ IRQs, returning breakpoints and exit 33.
+  Panic exits 35 and real exceptions exit 37; all are failures. The gate checks
+  that each negative case reached its expected injection and diagnosis.
+
+See [M2 CPU details](docs/M2_CPU.md) for exact bounds, contexts and limitations,
+[M0/M1 evidence](docs/validation/M0-M1.md) for the historical boot gate, and
+[M2 evidence](docs/validation/M2.md) for the current validation.
 
 ## 3. 目录规划
 

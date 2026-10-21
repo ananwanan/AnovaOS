@@ -14,9 +14,14 @@ bench = false
 
 [dependencies]
 limine = "=0.5.0"
+anova-platform = { path = "../crates/platform" }
 
 [features]
 qemu-test = []
 test-panic = ["qemu-test"]
 test-timeout = ["qemu-test"]
+test-invalid-opcode = ["qemu-test"]
+test-general-protection = ["qemu-test"]
+test-page-fault = ["qemu-test"]
+test-double-fault = ["qemu-test"]
 

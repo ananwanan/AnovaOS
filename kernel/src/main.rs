@@ -2,8 +2,10 @@
 #![no_std]
 #![no_main]
 
+mod arch;
 mod boot;
 mod serial;
+use arch::x86_64::{acpi, apic, cpu, paging::EarlyMapper, traps};
 
 use core::{
     arch::asm,
@@ -11,15 +13,23 @@ use core::{
     sync::atomic::{AtomicU8, Ordering},
 };
 
-#[cfg(all(feature = "test-panic", feature = "test-timeout"))]
-compile_error!("Select only one fault injection feature");
+const _: () = assert!(
+    cfg!(feature = "test-panic") as u8
+        + cfg!(feature = "test-timeout") as u8
+        + cfg!(feature = "test-invalid-opcode") as u8
+        + cfg!(feature = "test-general-protection") as u8
+        + cfg!(feature = "test-page-fault") as u8
+        + cfg!(feature = "test-double-fault") as u8
+        <= 1,
+    "Select only one fault injection feature"
+);
 
 static PHASE: AtomicU8 = AtomicU8::new(0);
 
 #[unsafe(no_mangle)]
 pub extern "C" fn _start() -> ! {
     // SAFETY: Limine enters the single BSP at CPL0 with interrupts disabled.
-    // Keep them disabled until M2 installs an IDT and interrupt controllers.
+    // Keep them disabled until our IDT and interrupt controllers are ready.
     unsafe {
         asm!("cli", options(nomem, nostack));
     }
@@ -32,6 +42,11 @@ pub extern "C" fn _start() -> ! {
     let info = boot::validate();
     PHASE.store(2, Ordering::Relaxed);
     info.report();
+    let mut mapper = EarlyMapper::new(&info);
+    traps::init(&mut mapper);
+    PHASE.store(3, Ordering::Relaxed);
+    traps::breakpoint_test();
+    traps::inject_fault();
 
     if cfg!(feature = "test-panic") {
         panic!("Controlled M1 panic injection");
@@ -43,19 +58,33 @@ pub extern "C" fn _start() -> ! {
         halt();
     }
 
-    PHASE.store(3, Ordering::Relaxed);
+    let platform = acpi::discover(&info, &mut mapper);
+    apic::init(&platform, &mut mapper);
+    PHASE.store(4, Ordering::Relaxed);
+    apic::verify_ticks(platform.pm_timer);
+    // Check that an exception also returns with IF restored when interrupted
+    // code has IRQs enabled. The timer handler itself never logs or allocates.
+    // SAFETY: GDT/TSS/IDT/APIC are installed and all external IRQs stay masked.
+    unsafe {
+        asm!("sti", options(nomem, nostack));
+    }
+    traps::breakpoint_test();
+    assert!(cpu::flags() & (1 << 9) != 0, "IRET failed to restore IF");
+    PHASE.store(5, Ordering::Relaxed);
     serial::write(format_args!(
-        "[BOOT:OK] M1 complete; BSP idle, interrupts disabled\n"
+        "[BOOT:OK] M2 CPU exceptions and periodic timer ready; BSP idle, interrupts enabled\n"
     ));
     #[cfg(feature = "qemu-test")]
     {
         serial::write(format_args!("[TEST:PASS]\n"));
         serial::out8(0xf4, 0x10);
     }
-    halt()
+    loop {
+        cpu::wait_for_interrupt();
+    }
 }
 
-fn halt() -> ! {
+pub(crate) fn halt() -> ! {
     loop {
         // SAFETY: CPL0; no interrupts, allocation, or boot memory reclamation
         // occurs. A test timeout is ended by the host watchdog.
@@ -67,9 +96,9 @@ fn halt() -> ! {
 
 #[panic_handler]
 fn panic(info: &PanicInfo<'_>) -> ! {
-    // This path creates its own lock-free writer and never waits for another
-    // logger. M1 has one BSP and no interrupt or AP logging.
-    serial::write(format_args!(
+    cpu::disable_interrupts();
+    // The fatal path bypasses normal output and never waits for a logging lock.
+    serial::emergency(format_args!(
         "\n[PANIC] phase={} {info}\n",
         PHASE.load(Ordering::Relaxed)
     ));

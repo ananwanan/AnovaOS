@@ -26,9 +26,11 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Check host tools
-        run: cargo clippy --locked -p xtask --all-targets -- -D warnings
+        run: cargo clippy --locked -p xtask -p anova-platform --all-targets -- -D warnings
       - name: Check the bare-metal kernel
-        run: cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features qemu-test -- -D warnings
+        run: |
+          cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features qemu-test -- -D warnings
+          cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features test-double-fault -- -D warnings
       - name: Test host logic
         run: cargo xtask test-host
       - name: Build the kernel
@@ -37,7 +39,7 @@ jobs:
         run: cargo xtask fetch
       - name: Check prerequisites
         run: cargo xtask doctor
-      - name: Verify boot, panic and timeout
+      - name: Verify timer, traps, panic and timeout
         run: cargo xtask verify
       - name: Upload boot evidence
         if: always()
