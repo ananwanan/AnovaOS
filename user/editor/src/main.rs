@@ -144,7 +144,9 @@ unsafe extern "C" fn anova_main(argc: usize, argv: *const *const u8) -> u32 {
     // SAFETY: The native ELF loader provides initialized, bounded argument strings.
     let mut args = unsafe { rt::Args::from_raw(argc, argv) };
     let _name = args.next();
-    let path = args.next().and_then(|value| core::str::from_utf8(value).ok());
+    let path = args
+        .next()
+        .and_then(|value| core::str::from_utf8(value).ok());
     match path {
         Some(path) if !path.is_empty() => edit(path),
         _ => {

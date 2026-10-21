@@ -22,7 +22,10 @@ impl<const N: usize> Default for Text<N> {
 
 impl<const N: usize> Text<N> {
     pub const fn new() -> Self {
-        Self { bytes: [0; N], len: 0 }
+        Self {
+            bytes: [0; N],
+            len: 0,
+        }
     }
 
     pub fn bytes(&self) -> &[u8] {
@@ -30,7 +33,10 @@ impl<const N: usize> Text<N> {
     }
 
     pub fn append(&mut self, bytes: &[u8]) -> Result<(), EditError> {
-        let end = self.len.checked_add(bytes.len()).filter(|end| *end <= N)
+        let end = self
+            .len
+            .checked_add(bytes.len())
+            .filter(|end| *end <= N)
             .ok_or(EditError::Full)?;
         self.bytes[self.len..end].copy_from_slice(bytes);
         self.len = end;
@@ -38,8 +44,12 @@ impl<const N: usize> Text<N> {
     }
 
     pub fn append_line(&mut self, text: &[u8]) -> Result<(), EditError> {
-        if self.len.checked_add(text.len()).and_then(|n| n.checked_add(1))
-            .is_none_or(|n| n > N) {
+        if self
+            .len
+            .checked_add(text.len())
+            .and_then(|n| n.checked_add(1))
+            .is_none_or(|n| n > N)
+        {
             return Err(EditError::Full);
         }
         self.append(text)?;
@@ -57,7 +67,8 @@ impl<const N: usize> Text<N> {
                 return Err(EditError::NoLine);
             }
             let end = self.bytes[first..self.len]
-                .iter().position(|byte| *byte == b'\n')
+                .iter()
+                .position(|byte| *byte == b'\n')
                 .map_or(self.len, |i| first + i + 1);
             if index == number {
                 return Ok((first, end));
@@ -78,8 +89,12 @@ impl<const N: usize> Text<N> {
         let (start, end) = self.line(number)?;
         let old = end - start;
         let new = text.len().checked_add(1).ok_or(EditError::Full)?;
-        let size = self.len.checked_sub(old).and_then(|n| n.checked_add(new))
-            .filter(|size| *size <= N).ok_or(EditError::Full)?;
+        let size = self
+            .len
+            .checked_sub(old)
+            .and_then(|n| n.checked_add(new))
+            .filter(|size| *size <= N)
+            .ok_or(EditError::Full)?;
         if new > old {
             self.bytes.copy_within(end..self.len, end + new - old);
         } else {
