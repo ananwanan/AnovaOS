@@ -14,7 +14,8 @@ initramfs is immutable and /tmp does not survive a reboot.
 - `anova-storage::block` checks sector capacity/overflow before touching the
   device, supports checked unaligned 512-byte sector reads and read-modify-write,
   and requires an explicit device-provided flush result.
-- `kernel/src/drivers/pci.rs` performs a read-only BSP q35 PCI configuration-space probe after memory startup. It reports whether a modern virtio-blk function with structurally valid vendor capabilities exists. No BAR is mapped or DMA enabled.\n- `anova-storage::pci` scans bus/device/function for modern virtio-blk
+- `kernel/src/drivers/pci.rs` performs a read-only BSP q35 PCI configuration-space probe after memory startup. It reports whether a modern virtio-blk function with structurally valid vendor capabilities exists. No BAR is mapped or DMA enabled.
+- `anova-storage::pci` scans bus/device/function for modern virtio-blk
   (vendor 1af4, device 1042), parses bounded PCI vendor-capability chains and
   rejects malformed/duplicate common, notify, ISR or device structures.
 - `anova-storage::virtio` defines modern-only feature negotiation and split-ring
