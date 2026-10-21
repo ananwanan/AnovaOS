@@ -34,14 +34,20 @@ pub fn probe() {
         match pci::capabilities(&mut io, location) {
             Ok(caps) => serial::write(format_args!(
                 "[M7:PCI] modern-virtio-blk={:02x}:{:02x}.{} common-bar={} notify-bar={} device-bar={} dma=disabled\n",
-                location.bus, location.device, location.function,
-                caps.common.bar, caps.notify.bar, caps.device.bar
+                location.bus,
+                location.device,
+                location.function,
+                caps.common.bar,
+                caps.notify.bar,
+                caps.device.bar
             )),
             Err(error) => serial::write(format_args!(
                 "[M7:PCI] virtio-blk rejected: {error:?}; dma=disabled\n"
             )),
         }
     } else {
-        serial::write(format_args!("[M7:PCI] no modern virtio-blk; dma=disabled\n"));
+        serial::write(format_args!(
+            "[M7:PCI] no modern virtio-blk; dma=disabled\n"
+        ));
     }
 }
