@@ -239,6 +239,73 @@ native SDK 从 M4 的 `no_std` 应用与最小 runtime 开始。开发者可先�
 
 系统软件包安装在约定根目录；编译器有独立 sysroot；`/tmp`、`/dev`、必要的 `/proc` 接口和动态解释器路径按实测需要提供。包内容和内核不是同一种发布单元。
 
+## 9. Planned M14 graphical userland and SDK architecture
+
+The GUI is **planned, not implemented**. The authoritative design and the
+independently accepted M14.1–M14.5 stages are in
+[M14_GUI](docs/M14_GUI.md), with stage status in [ROADMAP](ROADMAP.md)
+and [STATUS](docs/STATUS.md).
+
+AnovaOS will develop its GUI engine in Rust and expose equivalent **Rust,
+C++, and C application SDKs**. A Rust GUI runtime supplies rendering, text,
+layout, widgets and events. Its stable inter-language FFI is a **versioned
+C ABI implemented in Rust** (C headers; C++ move-safe RAII; safe Rust crate),
+not a direct wrapper around privileged kernel calls. All language clients
+use a single documented semantic contract; the Rust SDK may optimize its
+internal call path without changing observable behavior.
+
+\`\`\`text
+Rust app / C++ app / C app
+     |       |       |
+Rust SDK / C++ SDK / C SDK
+            |
+   Rust GUI runtime + C ABI
+            |
+   versioned IPC / shared surfaces
+            |
+   Rust compositor (user process)
+       |            |
+  CPU renderer   optional GPU renderer
+       \           /
+kernel IPC, mappings, display and input drivers
+            |
+       QEMU / hardware
+\`\`\`
+
+The kernel retains buffer/memory permissions, IPC isolation, display and input
+device access; windows, focus, text rendering, widgets and the desktop shell
+belong to user-space components. The compositor authenticates clients and
+owns presentation, stacking, input routing, buffer lifetime and quotas.
+Clients do not receive unrestricted framebuffer mappings. All display
+formats/strides, damage regions, memory lengths, object handles, concurrency,
+events and crash/restart paths must be bounded, versioned and verified.
+
+GUI ABI rules: \`extern "C"\` exports; \`#[repr(C)]\` and explicit-width fields;
+no Rust-owned collection layouts, implicit shared allocators or unwinding
+across FFI; opaque handles and precise release ownership; explicit errors
+and version/capability checks; documented thread/callback semantics. Keep
+the native syscall ABI, GUI library ABI and Linux compatibility personality
+distinct. Build and execute independently validated Rust, C and C++ GUI apps,
+with incompatible-version and malformed-input tests.
+
+M14.1 establishes validated framebuffer + software drawing. M14.2 delivers
+keyboard/pointer event routing. M14.3 introduces an isolated user-space
+compositor and two-window behavior. M14.4 adds GUI runtime, graphical terminal,
+C/C++/Rust SDKs and separately tested demo applications. M14.5 optionally
+adds actual GPU-accelerated rendering with software fallback. A bootloader
+framebuffer or virtio-gpu display scanout does not prove GPU rendering support;
+Vulkan/OpenGL, Wayland/X11, SDL/Qt and Linux GUI application compatibility
+remain separate, version-specific ports. SMP and real-hardware expansion are
+independent future workstreams, not implicit M14 GUI completion criteria.
+
+Planned source boundaries (do not create empty skeletons): \`crates/gui-protocol/\`
+for wire types, \`user/compositor/\` for the window server,
+\`user/gui-runtime/\` for drawing/widgets, \`user/desktop/\` for shell UI, and
+\`user/gui-sdk/{ffi,rust,c,cpp}/\` for the library ABI and language SDKs.
+Evaluate \`embedded-graphics\`, \`tiny-skia\`, \`fontdue\` and \`cbindgen\`
+only against tested guest targets, license, dependency and safety constraints
+before selecting them as actual dependencies.
+
 ## Implemented M8 Linux boundary
 
 The explicit initramfs Linux executable kind selects a separate syscall personality.
