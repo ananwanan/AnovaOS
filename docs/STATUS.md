@@ -109,3 +109,26 @@ and dependency-free/vendor Cargo stages. Preserve every M9/M10 test and
 clean shutdown and exact resource reclamation. General projects, dynamic
 application toolchains, LTO/OpenMP/sanitizers and compiler self-bootstrap remain
 outside the accepted M11 profile.
+
+## M14 graphics planning — not implemented (2026-10-22)
+
+The project owner approved [DEV-002](REQUIREMENTS.md): a Rust-native GUI
+runtime, user-space window compositor/desktop and stable versioned C ABI
+with C, C++ and Rust application SDKs. The detailed architecture, security
+constraints, candidate dependency policy and five independent gates are in
+[M14_GUI](M14_GUI.md) and [ROADMAP](../ROADMAP.md):
+
+| Planned stage | Intended observable result | Current status |
+| --- | --- | --- |
+| M14.1 | Validated framebuffer with bounded CPU/software graphics | Not started |
+| M14.2 | Keyboard/pointer events and visible cursor | Not started |
+| M14.3 | Isolated user-space compositor; two windows and correct focus | Not started |
+| M14.4 | GUI runtime and C/C++/Rust SDK demos compiled/run in guest | Not started |
+| M14.5 | Verified GPU-rendered path with CPU fallback | Not started |
+
+This documentation change delivers **no GUI implementation, no graphics
+test, no new SDK binaries, no GPU acceleration and no additional hardware
+support**. The Limine framebuffer response is an early boot input, not a
+window system. M12 Rust/Cargo and M13 SDK packaging are still required
+before M14.4's in-system developer-experience acceptance. SMP, physical
+devices and Linux GUI compatibility remain separately scoped workstreams.
