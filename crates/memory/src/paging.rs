@@ -248,6 +248,24 @@ impl PageTables {
         Ok(())
     }
 
+    /// Preserve owned backing while denying all CPL3 access to a user leaf (PROT_NONE).
+    pub fn deny_user(
+        &mut self,
+        address: VirtAddr,
+        store: &mut impl TableStore,
+    ) -> Result<(), Error> {
+        self.check_virtual(address, Some(true))?;
+        let table = self.leaf_table(address, PRESENT | USER, store)?;
+        let slot = index(address, 1);
+        let entry = store.read(table, slot);
+        if entry & PRESENT == 0 {
+            return Err(Error::NotMapped);
+        }
+        store.write(table, slot, (entry | NX) & !(USER | WRITABLE));
+        store.invalidate();
+        Ok(())
+    }
+
     fn leaf_table(
         &self,
         address: VirtAddr,
@@ -507,6 +525,30 @@ mod tests {
     }
 
     const VA: VirtAddr = VirtAddr(0xffff_d000_0000_0000);
+
+    #[test]
+    fn prot_none_denies_user_access_without_releasing_backing_and_can_be_restored() {
+        let mut store = Store::new();
+        let kernel = empty(&mut store);
+        let mut user = kernel.new_user(&mut store).unwrap();
+        let address = VirtAddr(0x50000000);
+        let frame = PhysAddr(0x90000);
+        let permissions = Permissions {
+            user: true,
+            ..Permissions::DATA
+        };
+        user.map(address, frame, permissions, &mut store).unwrap();
+        let before = store.pages.len();
+        user.deny_user(address, &mut store).unwrap();
+        let denied = user.query(address, &store).unwrap();
+        assert!(!denied.user && !denied.writable && !denied.executable);
+        assert_eq!(store.pages.len(), before);
+        user.protect(address, permissions, &mut store).unwrap();
+        assert!(user.query(address, &store).unwrap().user);
+        assert_eq!(user.unmap(address, &mut store), Ok(frame));
+        user.destroy_user(&mut store);
+        assert_eq!(store.pages.len(), 1);
+    }
 
     #[test]
     fn private_user_roots_enforce_all_ancestors_and_preserve_kernel_ownership() {

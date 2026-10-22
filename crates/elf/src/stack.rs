@@ -97,6 +97,18 @@ pub fn build_linux_env(
     image: &crate::Image,
     random: [u8; 16],
 ) -> Result<u64, Error> {
+    build_linux_interpreter(args, env, page, top, image, random, 0)
+}
+
+pub fn build_linux_interpreter(
+    args: &[&str],
+    env: &[&str],
+    page: &mut [u8; PAGE_BYTES],
+    top: u64,
+    image: &crate::Image,
+    random: [u8; 16],
+    interpreter_base: u64,
+) -> Result<u64, Error> {
     if args.is_empty() {
         return Err(Error::Arguments);
     }
@@ -109,7 +121,7 @@ pub fn build_linux_env(
         (4, 56),
         (5, image.phnum),
         (6, PAGE_BYTES as u64),
-        (7, 0),
+        (7, interpreter_base),
         (8, 0),
         (9, image.entry),
         (11, 0),

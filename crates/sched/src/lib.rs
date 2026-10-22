@@ -72,6 +72,19 @@ impl Scheduler {
         self.entries[index].state = State::Empty;
     }
 
+    /// Commit exec from a nonleader after the kernel has removed all sibling entries.
+    pub fn exec_identity(&mut self, index: usize, pid: u64, parent: u64) {
+        assert!(
+            !self
+                .entries
+                .iter()
+                .enumerate()
+                .any(|(k, e)| k != index && e.state != State::Empty && e.pid == pid)
+        );
+        self.entries[index].pid = pid;
+        self.entries[index].parent = parent;
+    }
+
     pub fn ready(&mut self, index: usize) {
         self.entries[index].state = State::Ready;
     }

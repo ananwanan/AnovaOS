@@ -2,6 +2,48 @@
 //! Test VFS path/mount boundaries, descriptor ownership, pipe shutdown and capacity rollback.
 use super::*;
 use alloc::vec;
+#[test]
+fn shared_thread_table_publishes_close_and_releases_only_on_last_owner() {
+    let image = image();
+    let mut fs = Vfs::new(&image).unwrap();
+    let mut parent = fs.standard().unwrap();
+    let mut thread = parent.share().unwrap();
+    let fd = fs.open(&mut thread, ROOT, "/etc/text", OPEN_READ).unwrap();
+    assert!(parent.contains(fd));
+    fs.close(&mut parent, fd).unwrap();
+    assert!(!thread.contains(fd));
+    fs.clear(&mut parent);
+    assert_eq!(thread.count(), 3);
+    fs.clear(&mut thread);
+    assert_eq!(fs.live_objects(), (0, 0));
+}
+#[test]
+fn pty_allocation_lock_and_final_open_lifetime_are_bounded() {
+    let image = image();
+    let mut fs = Vfs::new(&image).unwrap();
+    let mut fds = Descriptors::default();
+    let master = fs
+        .open(&mut fds, ROOT, "/dev/ptmx", OPEN_READ | OPEN_WRITE)
+        .unwrap();
+    assert_eq!(
+        fs.device(&fds, master, false),
+        Ok(Some(Device::PtyMaster(0)))
+    );
+    assert_eq!(
+        fs.open(&mut fds, ROOT, "/dev/pts/0", OPEN_READ),
+        Err(IO_ERROR)
+    );
+    fs.pty_lock(0, false);
+    let slave = fs.open(&mut fds, ROOT, "/dev/pts/0", OPEN_READ).unwrap();
+    let duplicate = fs.dup2(&mut fds, master, 12).unwrap();
+    fs.close(&mut fds, master).unwrap();
+    assert!(fs.pty_present(0, true));
+    fs.close(&mut fds, duplicate).unwrap();
+    assert!(!fs.pty_present(0, true));
+    fs.close(&mut fds, slave).unwrap();
+    fs.clear(&mut fds);
+    assert_eq!(fs.live_objects(), (0, 0));
+}
 fn image() -> Vec<u8> {
     let entries: &[(u8, &str, &[u8])] = &[
         (2, "/bin", b""),
@@ -54,7 +96,7 @@ fn independent_opens_dup_and_fork_have_precise_shared_offsets_and_lifetimes() {
     let a = fs.open(&mut p, ROOT, "/etc/text", OPEN_READ).unwrap();
     let b = fs.open(&mut p, ROOT, "/etc/text", OPEN_READ).unwrap();
     fs.dup2(&mut p, a, 10).unwrap();
-    let mut c = fs.inherit(&p);
+    let mut c = fs.inherit(&p).unwrap();
     let mut out = [0; 2];
     fs.read(&p, a, &mut out).unwrap();
     assert_eq!(&out, b"ab");
@@ -125,7 +167,7 @@ fn pipes_block_wrap_drain_eof_and_report_broken_reader_after_final_reference() {
     let mut fs = Vfs::new(&image).unwrap();
     let mut p = Descriptors::default();
     let [r, w] = fs.pipe(&mut p).unwrap();
-    let mut c = fs.inherit(&p);
+    let mut c = fs.inherit(&p).unwrap();
     fs.dup2(&mut c, w, 9).unwrap();
     let mut out = [0; PIPE_BYTES];
     assert_eq!(fs.read(&p, r, &mut out), Err(WOULD_BLOCK));
@@ -246,7 +288,7 @@ fn descriptor_exec_flags_are_per_slot_and_inherited_without_losing_shared_offset
     parent.set_close_on_exec(fd, true).unwrap();
     fs.dup2(&mut parent, fd, 9).unwrap();
     assert!(!parent.close_on_exec(9).unwrap());
-    let mut child = fs.inherit(&parent);
+    let mut child = fs.inherit(&parent).unwrap();
     fs.close_exec(&mut child);
     assert!(!child.contains(fd));
     assert!(child.contains(9) && parent.contains(fd));

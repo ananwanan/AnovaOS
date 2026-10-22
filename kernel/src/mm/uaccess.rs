@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Copy bounded user bytes after page-wise checks, recovering only at REP MOVSB.
 //! IF=0 and scheduler-only map ownership pin the address space on the sole BSP.
-//! No thread shares an address space and no copy spans a scheduling/blocking boundary.
+//! Shared threads cannot run or unmap pages during a copy; no copy spans a scheduling boundary.
 use super::user::UserSpace;
 use crate::arch::x86_64::{cpu, traps::TrapFrame, user};
 use anova_abi::{BAD_ADDRESS, UserAddr};

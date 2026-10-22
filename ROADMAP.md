@@ -1,7 +1,7 @@
 <!-- Track milestone dependencies, implementation checklists and acceptance criteria. -->
 # 开发路线与阶段验收
 
-日期：2026-10-21。**M0–M8 已通过本地 q35/TCG 验收；M9–M15 尚未实现，外设 IRQ 路由启用待对应驱动。** 证据见 [M7 验证记录](docs/validation/M7.md) 与 [STATUS](docs/STATUS.md)。[FIRST_TASK](docs/FIRST_TASK.md) 记录 M0/M1 原始实现顺序；当前 M2 边界见 [CPU 基线](docs/M2_CPU.md)。
+日期：2026-10-22。**M0–M9 已通过本地 q35/TCG 验收；M10–M15 尚未实现，外设 IRQ 路由启用待对应驱动。** 证据见 [M9 验证记录](docs/validation/M9.md) 与 [STATUS](docs/STATUS.md)。[FIRST_TASK](docs/FIRST_TASK.md) 记录 M0/M1 原始实现顺序；当前 M2 边界见 [CPU 基线](docs/M2_CPU.md)。
 
 ## 阶段总览
 
@@ -16,7 +16,7 @@
 | M6 | VFS、init、基础 shell | M5 | 本地验收通过；tmpfs 重启丢失 |
 | M7 | 源码和应用可持久保存 | M6 | 本地验收通过；单块组 ext2、正常关机保证 |
 | M8 | 首批静态 Linux CLI 程序 | M6、M7 | 本地验收通过；受限静态 CLI profile |
-| M9 | 线程、信号、动态 musl | M8 | 未开始 |
+| M9 | 线程、信号、动态 musl | M8 | 本地验收通过；受限运行时与 PTY profile |
 | M10 | 网络和受控包安装 | M7、M9 | 未开始 |
 | M11 | 系统内 GCC/G++ 应用开发 | M7–M9；可先离线 | 未开始 |
 | M12 | 系统内 Rust/Cargo 应用开发 | M11、M9；联网可后补 | 未开始 |
@@ -143,18 +143,26 @@
 
 退出条件：固定的静态 hello、文件操作工具、BusyBox `echo/ls/cat` 通过，`sh` 的受测管道与重定向用例通过；未知 syscall 返回真实错误。未验证的 applet 保持“未验证”。
 
-实现范围和限制见 [M8 Linux ABI](docs/M8_LINUX.md)，证据见 [M8 验证](docs/validation/M8.md)。仅固定 BusyBox 1.36.1 applet/profile 和所列脚本通过；自定义信号处理器明确返回 ENOSYS，完整信号/termios/动态链接仍属于 M9。
+实现范围和限制见 [M8 Linux ABI](docs/M8_LINUX.md)，证据见 [M8 验证](docs/validation/M8.md)。M8 的记录是历史快照；M9 已增加受测信号、termios/PTY 和动态 musl，通用 BusyBox applet 与完整交互作业控制仍未验证。
 
 ## M9：线程、信号、终端与动态 musl
 
-- [ ] clone/线程、TLS、futex、退出清理、阻塞唤醒与超时语义。
-- [ ] sigaction、sigprocmask、信号递送/返回、SA_RESTART 相关范围。
-- [ ] poll/ppoll 或等效所需接口、非阻塞 I/O、PTY、termios 与作业控制基础。
-- [ ] ELF PT_INTERP、受测动态解释器、共享映射、mprotect、动态 TLS。
-- [ ] 静态 PIE 的所需装载/重定位策略，按构建实测处理。
-- [ ] 按实际软件需求加入最小 `/proc`/`/dev` 等接口，不提供假数据掩盖缺失。
+- [x] clone/线程、TLS、futex、退出清理、阻塞唤醒与超时语义。
+- [x] sigaction、sigprocmask、信号递送/返回、SA_RESTART 相关范围。
+- [x] poll/ppoll 或等效所需接口、非阻塞 I/O、PTY、termios 与作业控制基础。
+- [x] ELF PT_INTERP、受测动态解释器、共享映射、mprotect、动态 TLS。
+- [x] 静态 PIE 的所需装载/重定位策略，按构建实测处理。
+- [x] 按实测需求增加 `/dev/ptmx`、四组 `/dev/pts`；受测程序不需要 `/proc`，不提供假数据掩盖缺失。
 
 退出条件：动态 musl 小程序与 pthread/futex 测试通过；信号中断阻塞调用和终端 Ctrl+C 等已声明行为通过；共享库缺失时有清楚诊断。不会因此宣称 glibc 可用。
+
+Implemented profile and evidence: [M9_RUNTIME](docs/M9_RUNTIME.md) and
+[validation/M9](docs/validation/M9.md). There are 32 total tasks, shared anonymous
+fork mappings, actual requeue/deadlines and fallible reference-counted metadata.
+Static PIE, PT_INTERP, startup libraries, dlopen after thread creation, dynamic
+TLS, signal interruption/restart, PTY Ctrl+C and complete reclamation are tested.
+Alternate stacks, robust/PI futexes, realtime queues, full terminal job control,
+persistent-file mmap and glibc remain outside this accepted profile.
 
 ## M10：网络与包环境
 

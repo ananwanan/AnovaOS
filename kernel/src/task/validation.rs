@@ -115,6 +115,7 @@ pub fn run(rust: &[u8]) {
         "[USER:TEST] cases=11 repeated=8 pointers=rejected syscalls=checked faults=contained frames_restored=true user_irqs={ticks}\n"
     ));
     lifecycle_oom(rust);
+    shared_metadata_oom(rust);
 }
 
 fn lifecycle_oom(rust: &[u8]) {
@@ -170,5 +171,57 @@ fn lifecycle_oom(rust: &[u8]) {
     assert_eq!(mm::heap_used(), heap);
     serial::write(format_args!(
         "[PROC:OOM] spawn=rolled_back fork=rolled_back exec=retained frames_restored=true heap_restored=true\n"
+    ));
+}
+
+/// Exhaust the actual heap to prove shared ownership metadata fails without an allocation panic.
+fn shared_metadata_oom(rust: &[u8]) {
+    let frames = mm::user::free_frames();
+    let heap = mm::heap_used();
+    {
+        let mut kernel = Kernel::new(100).unwrap();
+        let parent = kernel
+            .add(rust, &["hello-rust", "AnovaOS", "ring3"], 0)
+            .unwrap();
+        let root = kernel.process(parent).image.as_ref().unwrap().space.root();
+        let before = mm::user::free_frames();
+        let mut blocks = alloc::vec::Vec::new();
+        blocks.try_reserve_exact(1024).unwrap();
+        let allocated = mm::heap_used();
+        for size in [4096, 1024, 256, 64] {
+            let layout = core::alloc::Layout::from_size_align(size, 16).unwrap();
+            loop {
+                // SAFETY: Test-only allocation retains its exact pointer/layout until teardown.
+                let pointer = unsafe { alloc::alloc::alloc(layout) };
+                if pointer.is_null() {
+                    break;
+                }
+                assert!(
+                    blocks.len() < blocks.capacity(),
+                    "Pressure pointer storage exhausted"
+                );
+                blocks.push((pointer, layout));
+            }
+        }
+        assert_eq!(kernel.fork(parent), Err(NO_MEMORY));
+        assert_eq!(kernel.exec(parent, rust, &["replacement"]), Err(NO_MEMORY));
+        assert_eq!(kernel.add(rust, &["child"], 100), Err(NO_MEMORY));
+        assert_eq!(
+            kernel.process(parent).image.as_ref().unwrap().space.root(),
+            root
+        );
+        assert_eq!(mm::user::free_frames(), before);
+        for (pointer, layout) in blocks.drain(..) {
+            // SAFETY: Every pointer is a distinct live block allocated above with this layout.
+            unsafe {
+                alloc::alloc::dealloc(pointer, layout);
+            }
+        }
+        assert_eq!(mm::heap_used(), allocated);
+    }
+    assert_eq!(mm::user::free_frames(), frames);
+    assert_eq!(mm::heap_used(), heap);
+    serial::write(format_args!(
+        "[M9:OOM] shared_metadata=true fork=rolled_back exec=retained spawn=rolled_back frames_restored=true heap_restored=true\n"
     ));
 }

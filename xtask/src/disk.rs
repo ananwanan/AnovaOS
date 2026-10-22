@@ -376,17 +376,25 @@ fn session(
     let mut cmd = qemu_disk(root, iso, &vars.0, false, Some(disk), readonly)?;
     cmd.args(["-serial", "stdio"])
         .stdin(Stdio::piped())
-        .stdout(File::create(&serial)?)
+        .stdout(Stdio::piped())
         .stderr(File::create(&diagnostic)?);
     println!("Running {name}: {cmd:?}");
     let mut guest = Guest(cmd.spawn()?);
+    let mut output = transcript::Transcript::capture(
+        guest.0.stdout.take().ok_or("Missing UART output pipe")?,
+        File::create(&serial)?,
+    )?;
     let mut input = guest.0.stdin.take().ok_or("Missing UART pipe")?;
     let start = Instant::now();
     let mut step = 0;
     let mut cursor = 0;
     let transcript = loop {
-        let bytes = fs::read(&serial)?;
-        let text = String::from_utf8_lossy(&bytes);
+        output.poll()?;
+        let exited = guest.0.try_wait()?;
+        if exited.is_some() {
+            output.finish()?;
+        }
+        let text = output.text();
         if [
             "[PANIC]",
             "[EXCEPTION]",
@@ -402,14 +410,14 @@ fn session(
             return Err(format!("{name}: guest failure; see {}", serial.display()).into());
         }
         if step < exchanges.len()
-            && let Some(at) = text[cursor..].find(exchanges[step].0)
+            && let Some(at) = output.find_from(cursor, exchanges[step].0)
         {
-            cursor += at + exchanges[step].0.len();
+            cursor = at + exchanges[step].0.len();
             input.write_all(exchanges[step].1)?;
             input.flush()?;
             step += 1;
         }
-        if let Some(status) = guest.0.try_wait()? {
+        if let Some(status) = exited {
             if !poweroff
                 || !status.success()
                 || step != exchanges.len()
@@ -426,7 +434,8 @@ fn session(
         if !poweroff && step == exchanges.len() {
             guest.0.kill()?;
             guest.0.wait()?;
-            break text.into_owned();
+            output.finish()?;
+            break output.text().into_owned();
         }
         if start.elapsed() > Duration::from_secs(60) {
             return Err(

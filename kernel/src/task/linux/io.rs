@@ -22,7 +22,7 @@ pub fn io_frame(mut frame: TrapFrame, linux: bool) -> TrapFrame {
     frame
 }
 
-pub(super) fn writev(
+pub(in crate::task) fn writev(
     frame: &TrapFrame,
     space: &UserSpace,
     files: &mut Descriptors,
