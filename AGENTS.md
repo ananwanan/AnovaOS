@@ -5,23 +5,36 @@
 
 这是 Rust 编写的 x86_64 自研操作系统。最终用户应能在系统自己的终端中编辑源码、使用 GCC/G++/Rust/Cargo 编译、链接并运行应用，同时逐步运行经过验证的现有 Linux 软件。
 
-当前 M0–M11 已通过本地 QEMU TCG 验证。原生进程、VFS、init/shell、virtio-blk、受限 ext2 `/persist`、文本编辑、sync/fsync 和正常关机/重启已实现。M9 还验证 musl 1.2.4 静态、静态 PIE、动态 ELF、pthread/TLS/futex、信号栈帧/返回、中断/重启、poll、非阻塞 I/O 和四组 PTY。**单核，共 32 个进程/线程槽；内核不可抢占；tmpfs 易失；ext2 无日志和断电恢复、单文件最多 1 MiB；无 SMP、通用 Linux/glibc 或 guest Rust/Cargo 编译器；引导保留区未回收，堆固定 16 MiB。** 外设 IRQ 仍屏蔽，CI 远端结果单独记录。先读 [M9_RUNTIME](docs/M9_RUNTIME.md)、[STATUS](docs/STATUS.md)、[M8_LINUX](docs/M8_LINUX.md)、[M7_STORAGE](docs/M7_STORAGE.md) 和 [开发需求](docs/REQUIREMENTS.md)，再检查真实代码与 git 状态。
+当前 M0–M12（离线范围）已通过本地 QEMU TCG 验证。原生进程、VFS、init/shell、virtio-blk、受限 ext2 `/persist`、文本编辑、sync/fsync 和正常关机/重启已实现。M9 还验证 musl 1.2.4 静态、静态 PIE、动态 ELF、pthread/TLS/futex、信号栈帧/返回、中断/重启、poll、非阻塞 I/O 和四组 PTY。**单核，共 32 个进程/线程槽；内核不可抢占；tmpfs 易失；ext2 无日志和断电恢复、单文件最多 1 MiB；无 SMP 或通用 Linux/glibc；引导保留区未回收，堆固定 16 MiB。** 外设 IRQ 仍屏蔽，CI 远端结果单独记录。先读 [M9_RUNTIME](docs/M9_RUNTIME.md)、[STATUS](docs/STATUS.md)、[M8_LINUX](docs/M8_LINUX.md)、[M7_STORAGE](docs/M7_STORAGE.md) 和 [开发需求](docs/REQUIREMENTS.md)，再检查真实代码与 git 状态。
 
 M10 adds opt-in, polled virtio-net IPv4 TCP/UDP sockets, bounded user-space DNS,
 strict user-space TLS and checksum-locked native package install/upgrade/rollback/
 remove with user data retained. Read [M10 profile](docs/M10_NETWORK_PACKAGES.md)
 and [validation](docs/validation/M10.md). Public Internet package repositories,
 TCP servers, general Linux networking and package dependency solvers remain outside
-this accepted controlled profile. M12 is next. Preserve both new commands
+this accepted controlled profile. Preserve both commands
 `cargo xtask network-test` and `cargo xtask package-test` alongside every M9 gate.
 
 M11 adds the optional source-built GCC/G++ 11.2.0, binutils/make and musl/CRT/
 C++ sysroot development image. Read [M11_TOOLCHAIN](docs/M11_TOOLCHAIN.md) and
 [validation/M11](docs/validation/M11.md). Preserve `cargo xtask toolchain-test`
 with all previous gates. Current bounds are a 16 MiB heap, 256 KiB scheduler
-stack, 1 MiB Linux user stack and tmpfs files, 2,048 VFS nodes, 64 argv/env
-entries with checked 16 KiB startup storage. Native ELF bounds remain separate.
-Development builds use opt-level 1 with debug information. M12 is next.
+stack, 1 MiB Linux user stack and tmpfs files, 2,048 VFS nodes. M12 expands only Linux startup/ELF/mmap bounds; native ELF
+and 64-entry native startup limits remain separate.
+Development builds use opt-level 1 with debug information.
+
+M12 adds the optional checksum-locked official Rust 1.90.0 musl binary tools,
+matching std/rust-lld and offline vendor profile at `/rs`. Read
+[M12_RUST](docs/M12_RUST.md) and [validation/M12](docs/validation/M12.md).
+Preserve `rust-cross-test`, `rust-runtime-test` and `rust-test` alongside all
+previous gates. Actual guest compilation covers std, worker-thread child wait,
+build.rs, C FFI and a procedural macro. It does not establish Rust source
+construction, online registry/Git, native AnovaOS std or compiler bootstrap.
+Linux accepts 256 argv/env entries, a checked 32 KiB startup block, 256 MiB ELF
+and per-mmap bounds, the `[0x50000000, 0xc0000000)` mapping window and bounded
+512-byte paths/255-byte components. Native v1 directory records remain fixed;
+Linux getdents uses extended internal entries. Heap,
+writable-file, thread-slot and single-BSP bounds remain. M13 is next.
 
 本文件是后续 Codex 开发规范。用户明确指令优先；已有修改应保留。日常、可逆的实现选择可自主完成，不因普通阶段切换反复请求确认。
 
@@ -178,7 +191,7 @@ with first-class **C, C++ and Rust application SDKs**, and five separate GUI
 submilestones. See [M14_GUI](docs/M14_GUI.md), [ROADMAP](ROADMAP.md)
 and owner requirement [DEV-002](docs/REQUIREMENTS.md). This section is a
 future-development contract: no M14 GUI code or verified GUI behavior is
-claimed by the M0–M11 baseline.
+claimed by the M0–M12 offline baseline.
 
 - Write the window compositor, desktop shell and GUI runtime in Rust. Keep
   the compositor in a **user process**; the kernel supplies safe display/input

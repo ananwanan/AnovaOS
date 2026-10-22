@@ -54,6 +54,7 @@ pub fn set_test_budget(value: usize) {
 struct OwnedSpace {
     tables: Option<PageTables>,
     pages: Vec<(VirtAddr, Shared<UserFrame>)>,
+    next_mapping: u64,
 }
 
 struct UserFrame {
@@ -114,6 +115,49 @@ impl UserSpace {
     }
     pub fn mapped(&self, address: u64) -> bool {
         self.0.borrow().mapped(address)
+    }
+    /// Search after the last successful mapping, then wrap over the entire window.
+    /// PROT_NONE pages remain occupied. No reservation is published before allocation succeeds.
+    pub fn find_gap(&self, start: u64, end: u64, size: u64) -> Option<u64> {
+        if size == 0 || start >= end || (start | end | size) & 4095 != 0 || size > end - start {
+            return None;
+        }
+        let space = self.0.borrow();
+        let cursor = if (start..end).contains(&space.next_mapping) {
+            space.next_mapping
+        } else {
+            start
+        };
+        MEMORY.with(|slot| {
+            let manager = slot.as_mut().expect("Memory not initialized");
+            let store = manager.store();
+            let search = |from| {
+                let mut base = from;
+                let mut length = 0;
+                for page in (from..end).step_by(4096) {
+                    if space
+                        .tables
+                        .as_ref()
+                        .unwrap()
+                        .query(VirtAddr(page), &store)
+                        .is_ok()
+                    {
+                        base = page + 4096;
+                        length = 0;
+                    } else {
+                        length += 4096;
+                        if length == size {
+                            return Some(base);
+                        }
+                    }
+                }
+                None
+            };
+            search(cursor).or_else(|| if cursor != start { search(start) } else { None })
+        })
+    }
+    pub fn commit_mapping_hint(&mut self, end: u64) {
+        self.0.borrow_mut().next_mapping = end;
     }
     pub fn share_mapping(&mut self, start: u64, end: u64) {
         for (address, frame) in &mut self.0.borrow_mut().pages {
@@ -211,6 +255,7 @@ impl OwnedSpace {
             Ok(Self {
                 tables: Some(manager.tables.new_user(&mut store)?),
                 pages: Vec::new(),
+                next_mapping: 0,
             })
         })
     }

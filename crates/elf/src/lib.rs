@@ -10,8 +10,8 @@ pub const PAGE: u64 = 4096;
 pub const IMAGE_LIMIT: u64 = 0x4000_0000;
 pub const MAX_SEGMENTS: usize = 16;
 pub const MAX_MEMORY: u64 = 4 * 1024 * 1024;
-pub const LINUX_MAX_MEMORY: u64 = 128 * 1024 * 1024;
-pub const LINUX_MAX_FILE: usize = 64 * 1024 * 1024;
+pub const LINUX_MAX_MEMORY: u64 = 256 * 1024 * 1024;
+pub const LINUX_MAX_FILE: usize = 256 * 1024 * 1024;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Error {

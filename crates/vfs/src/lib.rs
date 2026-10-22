@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #![no_std]
-//! Bounded memory/ext2 mounts, shared descriptors, pipes, PTYs and private file snapshots.
+//! Bounded memory/ext2 mounts, shared descriptors, packet pairs, pipes, PTYs and file snapshots.
 //! One non-preemptible owner serializes all mutations; no hardware, locks or user pointers.
 extern crate alloc;
 pub mod archive;
@@ -19,6 +19,10 @@ pub const NODE_LIMIT: usize = 2048;
 pub const OPEN_LIMIT: usize = 128;
 pub const PIPE_LIMIT: usize = 16;
 pub const PIPE_BYTES: usize = 1024;
+pub const PACKET_BYTES: usize = PIPE_BYTES - 2;
+// Internal/Linux bounds; native path and directory-record adapters retain their v1 capacities.
+pub const PATH_BYTES: usize = 512;
+pub const NAME_BYTES: usize = 255;
 pub const FILE_BYTES: usize = 1024 * 1024;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mount {
@@ -45,7 +49,7 @@ enum Data<'a> {
 }
 struct Node<'a> {
     parent: usize,
-    name: [u8; 64],
+    name: [u8; NAME_BYTES + 1],
     len: usize,
     mount: Mount,
     linked: bool,
@@ -54,11 +58,19 @@ struct Node<'a> {
     permissions: u16,
     modified: u64,
 }
+/// Internal directory names are independent of the fixed-size native v1 wire record.
+pub struct DirectoryEntry {
+    pub inode: u64,
+    pub kind: u32,
+    pub name_len: u32,
+    pub name: [u8; NAME_BYTES + 1],
+}
 #[derive(Clone, Copy)]
 enum Target {
     Node(usize),
     ReadPipe(usize),
     WritePipe(usize),
+    Packet { input: usize, output: usize },
     Socket(usize),
 }
 #[derive(Clone, Copy)]
@@ -67,6 +79,7 @@ struct Open {
     offset: usize,
     flags: u64,
     refs: usize,
+    lock: u8,
 }
 struct Pipe {
     bytes: [u8; PIPE_BYTES],
@@ -96,7 +109,7 @@ impl<'a> Vfs<'a> {
         nodes.try_reserve_exact(NODE_LIMIT).map_err(|_| NO_MEMORY)?;
         nodes.push(Node {
             parent: ROOT,
-            name: [0; 64],
+            name: [0; NAME_BYTES + 1],
             len: 0,
             mount: Mount::Initramfs,
             linked: true,
@@ -129,7 +142,7 @@ impl<'a> Vfs<'a> {
             let (parent, name) = fs.parent(ROOT, entry.path)?;
             // Archive paths may never traverse a symlink supplied by an earlier entry.
             let lexical = entry.path.rsplit_once('/').unwrap().0;
-            let mut canonical = [0; 128];
+            let mut canonical = [0; PATH_BYTES];
             let length = fs.canonical(parent, &mut canonical)?;
             if !lexical.is_empty() && &canonical[..length] != lexical.as_bytes() {
                 return Err(INVALID_ARGUMENT);
@@ -378,7 +391,7 @@ impl<'a> Vfs<'a> {
         mount: Mount,
     ) -> Result<usize, i64> {
         if name.is_empty()
-            || name.len() > 63
+            || name.len() > NAME_BYTES
             || name == "."
             || name == ".."
             || name.contains(['/', '\0'])
@@ -388,7 +401,7 @@ impl<'a> Vfs<'a> {
         if self.child(parent, name).is_some() {
             return Err(ALREADY_EXISTS);
         }
-        let mut label = [0; 64];
+        let mut label = [0; NAME_BYTES + 1];
         label[..name.len()].copy_from_slice(name.as_bytes());
         let permissions = match &data {
             Data::Directory => 0o755,
@@ -443,7 +456,10 @@ impl<'a> Vfs<'a> {
         self.walk(cwd, path, 0)
     }
     fn walk(&self, cwd: usize, path: &str, depth: usize) -> Result<usize, i64> {
-        if path.is_empty() || path.len() > 128 || path.contains('\0') {
+        if path.len() > PATH_BYTES {
+            return Err(TOO_LONG);
+        }
+        if path.is_empty() || path.contains('\0') {
             return Err(INVALID_ARGUMENT);
         }
         if depth > 8 {
@@ -462,6 +478,9 @@ impl<'a> Vfs<'a> {
                 "." => {}
                 ".." => at = self.nodes[at].parent,
                 name => {
+                    if name.len() > NAME_BYTES {
+                        return Err(TOO_LONG);
+                    }
                     let next = self.child(at, name).ok_or(NOT_FOUND)?;
                     if let Data::Link(target) = self.nodes[next].data {
                         at = self.walk(at, target, depth + 1)?;
@@ -477,7 +496,10 @@ impl<'a> Vfs<'a> {
         Ok(at)
     }
     fn parent<'p>(&self, cwd: usize, path: &'p str) -> Result<(usize, &'p str), i64> {
-        if path.is_empty() || path.len() > 128 || path.contains('\0') || path.ends_with('/') {
+        if path.len() > PATH_BYTES {
+            return Err(TOO_LONG);
+        }
+        if path.is_empty() || path.contains('\0') || path.ends_with('/') {
             return Err(INVALID_ARGUMENT);
         }
         let (base, name) = path.rsplit_once('/').unwrap_or((".", path));
@@ -485,13 +507,19 @@ impl<'a> Vfs<'a> {
         if !matches!(self.nodes[parent].data, Data::Directory) {
             return Err(NOT_DIRECTORY);
         }
-        if name == "." || name == ".." || name.len() > 63 {
+        if !self.nodes[parent].linked {
+            return Err(NOT_FOUND);
+        }
+        if name.len() > NAME_BYTES {
+            return Err(TOO_LONG);
+        }
+        if name == "." || name == ".." {
             return Err(INVALID_ARGUMENT);
         }
         Ok((parent, name))
     }
     pub fn canonical(&self, mut node: usize, output: &mut [u8]) -> Result<usize, i64> {
-        let mut reversed = [0; 128];
+        let mut reversed = [0; PATH_BYTES];
         let mut count = 0;
         while node != ROOT {
             let n = &self.nodes[node];
@@ -545,6 +573,70 @@ impl<'a> Vfs<'a> {
         self.insert(parent, name, Data::Directory, Mount::Tmpfs)
             .map(|_| ())
     }
+    pub fn directory(&self, fds: &Descriptors, fd: u64) -> Result<usize, i64> {
+        let Target::Node(node) = self.opens[fds.handle(fd)?].unwrap().target else {
+            return Err(NOT_DIRECTORY);
+        };
+        if !matches!(self.nodes[node].data, Data::Directory) {
+            return Err(NOT_DIRECTORY);
+        }
+        Ok(node)
+    }
+    /// Remove an empty directory, retaining an open inode until final close.
+    /// Callers supply live cwd references; this bounded profile rejects those removals as busy.
+    pub fn rmdir(&mut self, cwd: usize, path: &str, cwd_references: &[usize]) -> Result<(), i64> {
+        let (parent, name) = self.parent(cwd, path)?;
+        let node = self.child(parent, name).ok_or(NOT_FOUND)?;
+        if !matches!(self.nodes[node].data, Data::Directory) {
+            return Err(NOT_DIRECTORY);
+        }
+        if !matches!(self.nodes[node].mount, Mount::Tmpfs | Mount::Ext2) {
+            return Err(READ_ONLY);
+        }
+        if self.nodes[node].mount != self.nodes[parent].mount {
+            return Err(BUSY);
+        }
+        if cwd_references.contains(&node) {
+            return Err(BUSY);
+        }
+        if self.nodes.iter().any(|n| n.linked && n.parent == node) {
+            return Err(NOT_EMPTY);
+        }
+        // Keep the parent identity stable while an already removed child directory is open.
+        if self.nodes.iter().enumerate().any(|(child, n)| {
+            n.parent == node
+                && matches!(n.data, Data::Directory)
+                && self
+                    .opens
+                    .iter()
+                    .flatten()
+                    .any(|o| matches!(o.target, Target::Node(k) if k == child))
+        }) {
+            return Err(BUSY);
+        }
+        if self.nodes[node].mount == Mount::Ext2 {
+            self.disk
+                .as_mut()
+                .ok_or(IO_ERROR)?
+                .rmdir(self.nodes[parent].inode.unwrap(), name)?;
+        }
+        self.nodes[node].linked = false;
+        if !self
+            .opens
+            .iter()
+            .flatten()
+            .any(|o| matches!(o.target, Target::Node(n) if n == node))
+        {
+            if let Some(number) = self.nodes[node].inode.take() {
+                self.disk
+                    .as_mut()
+                    .ok_or(IO_ERROR)?
+                    .release_unlinked(number)?;
+            }
+            self.nodes[node].data = Data::Mutable(Vec::new());
+        }
+        Ok(())
+    }
     pub fn unlink(&mut self, cwd: usize, path: &str) -> Result<(), i64> {
         let (parent, name) = self.parent(cwd, path)?;
         let node = self.child(parent, name).ok_or(NOT_FOUND)?;
@@ -575,6 +667,190 @@ impl<'a> Vfs<'a> {
             }
             self.nodes[node].data = Data::Mutable(Vec::new());
         }
+        Ok(())
+    }
+    /// Rename regular files with open-inode retention, or directories within one parent to a new name.
+    /// The directory subset preserves dot-dot and parent links without permitting cycles/replacement.
+    pub fn rename(&mut self, cwd: usize, from: &str, to: &str) -> Result<(), i64> {
+        let (old_parent, old_name) = self.parent(cwd, from)?;
+        let (parent, name) = self.parent(cwd, to)?;
+        let node = self.child(old_parent, old_name).ok_or(NOT_FOUND)?;
+        let mount = self.nodes[node].mount;
+        if !matches!(mount, Mount::Tmpfs | Mount::Ext2) || self.nodes[parent].mount != mount {
+            return Err(READ_ONLY);
+        }
+        let target = self.child(parent, name);
+        if target == Some(node) {
+            return Ok(());
+        }
+        if matches!(self.nodes[node].data, Data::Directory)
+            && (parent != old_parent || target.is_some())
+        {
+            return Err(UNSUPPORTED);
+        }
+        if target.is_some_and(|n| matches!(self.nodes[n].data, Data::Directory)) {
+            return Err(IS_DIRECTORY);
+        }
+        if mount == Mount::Ext2 {
+            self.disk.as_mut().ok_or(IO_ERROR)?.rename(
+                self.nodes[old_parent].inode.unwrap(),
+                old_name,
+                self.nodes[parent].inode.unwrap(),
+                name,
+            )?;
+        }
+        if let Some(target) = target {
+            self.nodes[target].linked = false;
+            if !self
+                .opens
+                .iter()
+                .flatten()
+                .any(|o| matches!(o.target, Target::Node(n) if n == target))
+            {
+                if let Some(inode) = self.nodes[target].inode.take() {
+                    self.disk
+                        .as_mut()
+                        .ok_or(IO_ERROR)?
+                        .release_unlinked(inode)?;
+                }
+                self.nodes[target].data = Data::Mutable(Vec::new());
+            }
+        }
+        let n = &mut self.nodes[node];
+        n.parent = parent;
+        n.name.fill(0);
+        n.name[..name.len()].copy_from_slice(name.as_bytes());
+        n.len = name.len();
+        Ok(())
+    }
+    /// Advisory locks belong to open descriptions, survive dup/fork and disappear on final close.
+    pub fn try_lock(&mut self, fds: &Descriptors, fd: u64, mode: u8) -> Result<(), i64> {
+        if mode > 2 {
+            return Err(INVALID_ARGUMENT);
+        }
+        let handle = fds.handle(fd)?;
+        let open = self.opens[handle].ok_or(BAD_DESCRIPTOR)?;
+        let Target::Node(node) = open.target else {
+            return Err(UNSUPPORTED);
+        };
+        if matches!(self.nodes[node].data, Data::Directory | Data::Device(_)) {
+            return Err(UNSUPPORTED);
+        }
+        // Converting flock modes releases the previous mode before testing contention.
+        if open.lock == mode {
+            return Ok(());
+        }
+        self.opens[handle].as_mut().unwrap().lock = 0;
+        if mode != 0
+            && self.opens.iter().enumerate().any(|(k, o)| {
+                k != handle
+                    && o.is_some_and(|o| {
+                        matches!(o.target, Target::Node(n) if n == node)
+                            && o.lock != 0
+                            && (mode == 2 || o.lock == 2)
+                    })
+            })
+        {
+            return Err(WOULD_BLOCK);
+        }
+        self.opens[handle].as_mut().unwrap().lock = mode;
+        Ok(())
+    }
+    /// Report queued pipe bytes or remaining regular-file bytes without consuming the open offset.
+    pub fn available_bytes(&self, fds: &Descriptors, fd: u64) -> Result<usize, i64> {
+        let open = self.opens[fds.handle(fd)?].ok_or(BAD_DESCRIPTOR)?;
+        match open.target {
+            Target::ReadPipe(n) | Target::WritePipe(n) => {
+                Ok(self.pipes[n].as_ref().ok_or(BAD_DESCRIPTOR)?.len)
+            }
+            Target::Packet { input, .. } => {
+                let p = self.pipes[input].as_ref().unwrap();
+                Ok(if p.len == 0 {
+                    0
+                } else {
+                    Self::packet_length(p)
+                })
+            }
+            Target::Node(n) => match &self.nodes[n].data {
+                Data::Borrowed(b, _) => Ok(b.len().saturating_sub(open.offset)),
+                Data::Mutable(b) => Ok(b.len().saturating_sub(open.offset)),
+                Data::Persistent { size, .. } => Ok(size.saturating_sub(open.offset)),
+                _ => Err(UNSUPPORTED),
+            },
+            _ => Err(UNSUPPORTED),
+        }
+    }
+    /// Positioned regular-file I/O never publishes a changed shared open-description offset.
+    /// The single BSP owner cannot yield while the temporary internal cursor is installed.
+    pub fn read_at(
+        &mut self,
+        fds: &Descriptors,
+        fd: u64,
+        offset: u64,
+        output: &mut [u8],
+    ) -> Result<usize, i64> {
+        let handle = fds.handle(fd)?;
+        let old = self.opens[handle].ok_or(BAD_DESCRIPTOR)?;
+        if !matches!(old.target, Target::Node(n) if matches!(self.nodes[n].data, Data::Borrowed(..) | Data::Mutable(_) | Data::Persistent {..}))
+        {
+            return Err(NOT_SEEKABLE);
+        }
+        self.opens[handle].as_mut().unwrap().offset =
+            usize::try_from(offset).map_err(|_| INVALID_ARGUMENT)?;
+        let result = self.read(fds, fd, output);
+        self.opens[handle].as_mut().unwrap().offset = old.offset;
+        result
+    }
+    pub fn write_at(
+        &mut self,
+        fds: &Descriptors,
+        fd: u64,
+        offset: u64,
+        input: &[u8],
+    ) -> Result<usize, i64> {
+        let handle = fds.handle(fd)?;
+        let old = self.opens[handle].ok_or(BAD_DESCRIPTOR)?;
+        if !matches!(old.target, Target::Node(n) if matches!(self.nodes[n].data, Data::Borrowed(..) | Data::Mutable(_) | Data::Persistent {..}))
+        {
+            return Err(NOT_SEEKABLE);
+        }
+        self.opens[handle].as_mut().unwrap().offset =
+            usize::try_from(offset).map_err(|_| INVALID_ARGUMENT)?;
+        let result = self.write(fds, fd, input);
+        self.opens[handle].as_mut().unwrap().offset = old.offset;
+        result
+    }
+    /// Set regular-file length without modifying any shared open-description offset.
+    pub fn set_len(&mut self, fds: &Descriptors, fd: u64, length: usize) -> Result<(), i64> {
+        self.device(fds, fd, true)?;
+        let open = self.opens[fds.handle(fd)?].ok_or(BAD_DESCRIPTOR)?;
+        let Target::Node(node) = open.target else {
+            return Err(INVALID_ARGUMENT);
+        };
+        let inode = self.nodes[node].inode;
+        match &mut self.nodes[node].data {
+            Data::Mutable(bytes) => {
+                if length > FILE_BYTES {
+                    return Err(NO_SPACE);
+                }
+                if length > bytes.len() {
+                    bytes
+                        .try_reserve(length - bytes.len())
+                        .map_err(|_| NO_MEMORY)?;
+                }
+                bytes.resize(length, 0);
+            }
+            Data::Persistent { size, .. } => {
+                self.disk
+                    .as_mut()
+                    .ok_or(IO_ERROR)?
+                    .resize(inode.unwrap(), length)?;
+                *size = length;
+            }
+            Data::Directory => return Err(IS_DIRECTORY),
+            _ => return Err(READ_ONLY),
+        }
+        self.nodes[node].modified = self.clock;
         Ok(())
     }
     pub fn executable(&self, cwd: usize, path: &str) -> Result<&'a [u8], i64> {
@@ -633,6 +909,7 @@ impl<'a> Vfs<'a> {
         match self.opens[fds.handle(fd)?].unwrap().target {
             Target::Node(n) => self.node_metadata(n),
             Target::Socket(id) => Ok(((NODE_LIMIT + PIPE_LIMIT + id) as u64, 6, 0, false)),
+            Target::Packet { input, .. } => Ok(((NODE_LIMIT + input) as u64, 6, 0, false)),
             Target::ReadPipe(p) | Target::WritePipe(p) => {
                 Ok(((NODE_LIMIT + p) as u64, 5, 0, false))
             }
@@ -707,6 +984,7 @@ impl<'a> Vfs<'a> {
             offset: 0,
             flags: OPEN_READ | OPEN_WRITE,
             refs: 1,
+            lock: 0,
         })?;
         fds.table.as_ref().unwrap().borrow_mut().slots[fd] = Some(id);
         Ok(fd as u64)
@@ -723,6 +1001,61 @@ impl<'a> Vfs<'a> {
             .flatten()
             .any(|o| matches!(o.target, Target::Socket(id) if id == socket))
     }
+    /// A bounded full-duplex sequenced-packet pair owns two queues from the ordinary pipe pool.
+    /// Headers preserve message boundaries; a short receive discards the rest of that message.
+    pub fn packet_pair(&mut self, fds: &mut Descriptors) -> Result<[u64; 2], i64> {
+        fds.ensure()?;
+        let slots = fds.slots();
+        let mut free = slots
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| s.is_none())
+            .map(|(i, _)| i);
+        let descriptors = [
+            free.next().ok_or(FILE_LIMIT)?,
+            free.next().ok_or(FILE_LIMIT)?,
+        ];
+        if self.opens.iter().filter(|s| s.is_none()).count() < 2 {
+            return Err(FILE_LIMIT);
+        }
+        let mut free = self
+            .pipes
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| p.is_none())
+            .map(|(i, _)| i);
+        let a = free.next().ok_or(FILE_LIMIT)?;
+        let b = free.next().ok_or(FILE_LIMIT)?;
+        // All capacity checks precede publication; the BSP cannot interleave another allocator.
+        for p in [a, b] {
+            self.pipes[p] = Some(Pipe {
+                bytes: [0; PIPE_BYTES],
+                head: 0,
+                len: 0,
+                readers: 1,
+                writers: 1,
+            });
+        }
+        for (fd, input, output) in [(descriptors[0], a, b), (descriptors[1], b, a)] {
+            let id = self.allocate(Open {
+                target: Target::Packet { input, output },
+                offset: 0,
+                flags: OPEN_READ | OPEN_WRITE,
+                refs: 1,
+                lock: 0,
+            })?;
+            fds.table.as_ref().unwrap().borrow_mut().slots[fd] = Some(id);
+        }
+        Ok([descriptors[0] as u64, descriptors[1] as u64])
+    }
+    pub fn is_packet(&self, fds: &Descriptors, fd: u64) -> bool {
+        fds.handle(fd)
+            .ok()
+            .is_some_and(|id| matches!(self.opens[id].unwrap().target, Target::Packet { .. }))
+    }
+    fn packet_length(p: &Pipe) -> usize {
+        u16::from_le_bytes([p.bytes[p.head], p.bytes[(p.head + 1) % PIPE_BYTES]]) as usize
+    }
     pub fn readiness(&self, fds: &Descriptors, fd: u64) -> Result<(bool, bool, bool, bool), i64> {
         let open = self.opens[fds.handle(fd)?].unwrap();
         Ok(match open.target {
@@ -733,6 +1066,16 @@ impl<'a> Vfs<'a> {
             Target::WritePipe(p) => {
                 let p = self.pipes[p].as_ref().unwrap();
                 (false, p.len < PIPE_BYTES, false, p.readers == 0)
+            }
+            Target::Packet { input, output } => {
+                let a = self.pipes[input].as_ref().unwrap();
+                let b = self.pipes[output].as_ref().unwrap();
+                (
+                    a.len != 0 || a.writers == 0,
+                    b.len <= PACKET_BYTES,
+                    a.writers == 0,
+                    b.readers == 0,
+                )
             }
             _ => (
                 open.flags & OPEN_READ != 0,
@@ -877,6 +1220,7 @@ impl<'a> Vfs<'a> {
             offset: 0,
             flags,
             refs: 1,
+            lock: 0,
         })?;
         fds.table.as_ref().unwrap().borrow_mut().slots[fd] = Some(id);
         Ok(fd as u64)
@@ -910,6 +1254,16 @@ impl<'a> Vfs<'a> {
                     }
                     if pipe.readers == 0 && pipe.writers == 0 {
                         self.pipes[p] = None;
+                    }
+                }
+                Target::Packet { input, output } => {
+                    self.pipes[input].as_mut().unwrap().readers -= 1;
+                    self.pipes[output].as_mut().unwrap().writers -= 1;
+                    for p in [input, output] {
+                        let pipe = self.pipes[p].as_ref().unwrap();
+                        if pipe.readers == 0 && pipe.writers == 0 {
+                            self.pipes[p] = None;
+                        }
                     }
                 }
                 Target::Node(n) if !self.nodes[n].linked => {
@@ -997,12 +1351,14 @@ impl<'a> Vfs<'a> {
             offset: 0,
             flags: OPEN_READ,
             refs: 1,
+            lock: 0,
         })?;
         let b = self.allocate(Open {
             target: Target::WritePipe(p),
             offset: 0,
             flags: OPEN_WRITE,
             refs: 1,
+            lock: 0,
         })?;
         self.pipes[p] = Some(Pipe {
             bytes: [0; PIPE_BYTES],
@@ -1041,6 +1397,16 @@ impl<'a> Vfs<'a> {
                 let p = self.pipes[p].as_ref().unwrap();
                 p.len < PIPE_BYTES || p.readers == 0
             }
+            Target::Packet { input, output } => {
+                let p = self.pipes[if writing { output } else { input }]
+                    .as_ref()
+                    .unwrap();
+                if writing {
+                    p.len == 0 || p.readers == 0
+                } else {
+                    p.len != 0 || p.writers == 0
+                }
+            }
             _ => true,
         }
     }
@@ -1048,6 +1414,24 @@ impl<'a> Vfs<'a> {
         self.device(fds, fd, false)?;
         let id = fds.handle(fd)?;
         let open = self.opens[id].unwrap();
+        if let Target::Packet { input, .. } = open.target {
+            let p = self.pipes[input].as_mut().unwrap();
+            if p.len == 0 {
+                return if p.writers == 0 {
+                    Ok(0)
+                } else {
+                    Err(WOULD_BLOCK)
+                };
+            }
+            let length = Self::packet_length(p);
+            let count = length.min(output.len());
+            for (i, byte) in output[..count].iter_mut().enumerate() {
+                *byte = p.bytes[(p.head + 2 + i) % PIPE_BYTES];
+            }
+            p.head = (p.head + length + 2) % PIPE_BYTES;
+            p.len -= length + 2;
+            return Ok(count);
+        }
         if output.is_empty() {
             return Ok(0);
         }
@@ -1098,6 +1482,23 @@ impl<'a> Vfs<'a> {
         self.device(fds, fd, true)?;
         let id = fds.handle(fd)?;
         let open = self.opens[id].unwrap();
+        if let Target::Packet { output, .. } = open.target {
+            let p = self.pipes[output].as_mut().unwrap();
+            if input.len() > PACKET_BYTES {
+                return Err(NO_SPACE);
+            }
+            if p.readers == 0 {
+                return Err(BROKEN_PIPE);
+            }
+            if input.len() + 2 > PIPE_BYTES - p.len {
+                return Err(WOULD_BLOCK);
+            }
+            for byte in (input.len() as u16).to_le_bytes().iter().chain(input) {
+                p.bytes[(p.head + p.len) % PIPE_BYTES] = *byte;
+                p.len += 1;
+            }
+            return Ok(input.len());
+        }
         if input.is_empty() {
             return Ok(0);
         }
@@ -1206,13 +1607,29 @@ impl<'a> Vfs<'a> {
     }
     pub fn readdir(&mut self, fds: &Descriptors, fd: u64) -> Result<Option<DirEntry>, i64> {
         let entry = self.peek_readdir(fds, fd)?;
-        if let Some(entry) = entry {
+        let Some(entry) = entry else {
+            return Ok(None);
+        };
+        let mut native = DirEntry::default();
+        let n = entry.name_len as usize;
+        if n >= native.name.len() {
+            return Err(TOO_LONG);
+        }
+        native.inode = entry.inode;
+        native.kind = entry.kind;
+        native.name_len = entry.name_len;
+        native.name[..n].copy_from_slice(&entry.name[..n]);
+        self.advance_readdir(fds, fd)?;
+        Ok(Some(native))
+    }
+    pub fn advance_readdir(&mut self, fds: &Descriptors, fd: u64) -> Result<(), i64> {
+        if let Some(entry) = self.peek_readdir(fds, fd)? {
             self.opens[fds.handle(fd)?].as_mut().unwrap().offset = entry.inode as usize + 1;
         }
-        Ok(entry)
+        Ok(())
     }
     /// Inspect the next record without consuming it before an ABI buffer has been validated.
-    pub fn peek_readdir(&self, fds: &Descriptors, fd: u64) -> Result<Option<DirEntry>, i64> {
+    pub fn peek_readdir(&self, fds: &Descriptors, fd: u64) -> Result<Option<DirectoryEntry>, i64> {
         let id = fds.handle(fd)?;
         let open = self.opens[id].unwrap();
         if open.flags & OPEN_READ == 0 {
@@ -1239,7 +1656,7 @@ impl<'a> Vfs<'a> {
             Data::Device(_) => 4,
             _ => 1,
         };
-        Ok(Some(DirEntry {
+        Ok(Some(DirectoryEntry {
             inode: i as u64,
             kind,
             name_len: node.len as u32,

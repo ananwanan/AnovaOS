@@ -53,6 +53,8 @@ pub const PERMISSION_DENIED: i64 = -20;
 pub const IO_ERROR: i64 = -21;
 pub const INVALID_FILESYSTEM: i64 = -22;
 pub const DEVICE_TIMEOUT: i64 = -23;
+pub const BUSY: i64 = -24;
+pub const NOT_EMPTY: i64 = -25;
 
 /// Fixed little-endian directory record, with all 80 bytes initialized.
 #[repr(C)]

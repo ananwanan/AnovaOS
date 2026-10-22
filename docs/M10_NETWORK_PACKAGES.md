@@ -155,3 +155,8 @@ and refusal. package-test checks offline install/upgrade/rollback/remove, actual
 installed ELF execution, user data and version retention across boots, e2fsck,
 strict TLS positives/negatives and HTTPS package acquisition. Existing CPU,
 memory, M8/M9 runtime, terminal and persistence gates remain required.
+
+
+M12 subsequently adds bounded anonymous AF_UNIX SOCK_SEQPACKET pairs for Rust
+process error channels. Filesystem Unix sockets and other pair types remain
+unsupported; see [M12_RUST](M12_RUST.md) for that independent local IPC profile.

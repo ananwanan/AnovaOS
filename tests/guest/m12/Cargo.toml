@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: Apache-2.0
+# Define the offline Rust acceptance project independently of the bare-metal kernel workspace.
+[package]
+name = "m12-app"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+
+[dependencies]
+itoa = "=1.0.15"
+
+[profile.dev]
+opt-level = 1
+debug = 0
+strip = "symbols"
+codegen-units = 1
+incremental = false
+
+[workspace]

@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Translate checked Linux IPv4 socket layouts, shared fd flags and interruptible I/O to smoltcp.
+//! Translate Linux IPv4 networking and bounded AF_UNIX packet pairs with checked interruptible I/O.
 //! Validate destination buffers before dequeuing data; retain only syscall frames while blocked.
 use super::*;
 use smoltcp::wire::{IpAddress, IpEndpoint, IpListenEndpoint};
 impl Kernel {
     pub(in crate::task) fn socket_ready(&self, i: usize, f: &TrapFrame) -> bool {
         let p = self.process(i);
+        if self.fs.is_packet(&p.files, f.rdi) {
+            return self.fs.ready(&p.files, f.rdi, matches!(f.rax, 1 | 44));
+        }
         if p.network_deadline.is_some_and(|d| apic::ticks() >= d) {
             return true;
         }
@@ -49,7 +52,50 @@ impl Kernel {
         }
     }
     fn socket_call(&mut self, i: usize, f: &TrapFrame) -> Result<i64, i64> {
-        if matches!(f.rax, 43 | 46 | 47 | 50 | 53) {
+        if f.rax == 53 {
+            if f.rdi != 1 {
+                return Err(-97);
+            }
+            if f.rsi & !(0xf | 0x800 | 0x80000) != 0 {
+                return Err(-22);
+            }
+            if f.rsi & 0xf != 5 {
+                return Err(-94);
+            }
+            if f.rdx != 0 {
+                return Err(-93);
+            }
+            let p = self.processes[i].as_mut().unwrap();
+            let space = &p.image.as_ref().unwrap().space;
+            if !space.accessible(UserAddr(f.r10), 8, true, false) {
+                return Err(-14);
+            }
+            let pair = self.fs.packet_pair(&mut p.files).map_err(errno)?;
+            let result = space.with_active(|| -> Result<(), i64> {
+                let mut bytes = [0; 8];
+                for (k, fd) in pair.iter().enumerate() {
+                    self.fs
+                        .set_nonblocking(&p.files, *fd, f.rsi & 0x800 != 0)
+                        .map_err(errno)?;
+                    p.files
+                        .set_close_on_exec(*fd, f.rsi & 0x80000 != 0)
+                        .map_err(errno)?;
+                    bytes[k * 4..k * 4 + 4].copy_from_slice(&(*fd as u32).to_le_bytes());
+                }
+                uaccess::to_user(space, UserAddr(f.r10), &bytes).map_err(errno)
+            });
+            if let Err(error) = result {
+                for fd in pair {
+                    let _ = self.fs.close(&mut p.files, fd);
+                }
+                return Err(error);
+            }
+            return Ok(0);
+        }
+        if self.fs.is_packet(&self.process(i).files, f.rdi) {
+            return self.packet_call(i, f);
+        }
+        if matches!(f.rax, 43 | 46 | 47 | 50) {
             return Err(-38);
         }
         if f.rax == 41 {
@@ -224,6 +270,41 @@ impl Kernel {
                     Ok(0)
                 }
                 _ => Err(-95),
+            }
+        })
+    }
+    fn packet_call(&mut self, i: usize, f: &TrapFrame) -> Result<i64, i64> {
+        if !matches!(f.rax, 0 | 1 | 44 | 45) {
+            return Err(-95);
+        }
+        let writing = matches!(f.rax, 1 | 44);
+        if matches!(f.rax, 44 | 45) && (f.r10 & !(0x40 | 0x4000) != 0 || f.r8 != 0) {
+            return Err(-95);
+        }
+        if writing && f.rdx > anova_vfs::PACKET_BYTES as u64 {
+            return Err(-90);
+        }
+        let length = f.rdx.min(anova_vfs::PACKET_BYTES as u64) as usize;
+        let p = self.processes[i].as_ref().unwrap();
+        let space = &p.image.as_ref().unwrap().space;
+        space.with_active(|| {
+            if !space.accessible(UserAddr(f.rsi), length, !writing, false) {
+                return Err(-14);
+            }
+            let mut bytes = [0; anova_vfs::PACKET_BYTES];
+            if writing {
+                uaccess::from_user(space, UserAddr(f.rsi), &mut bytes[..length]).map_err(errno)?;
+                self.fs
+                    .write(&p.files, f.rdi, &bytes[..length])
+                    .map(|n| n as i64)
+                    .map_err(errno)
+            } else {
+                let n = self
+                    .fs
+                    .read(&p.files, f.rdi, &mut bytes[..length])
+                    .map_err(errno)?;
+                uaccess::to_user(space, UserAddr(f.rsi), &bytes[..n]).map_err(errno)?;
+                Ok(n as i64)
             }
         })
     }

@@ -7,7 +7,7 @@ pub fn build(root: &Path) -> Result<()> {
     command(Command::new("sh").arg(root.join("ports/gcc/build.sh")))
 }
 
-fn append(bytes: &mut Vec<u8>, kind: u8, path: &str, data: &[u8]) {
+pub(super) fn append(bytes: &mut Vec<u8>, kind: u8, path: &str, data: &[u8]) {
     bytes.extend_from_slice(&[kind, 0]);
     bytes.extend_from_slice(&(path.len() as u16).to_le_bytes());
     bytes.extend_from_slice(&(data.len() as u64).to_le_bytes());
@@ -16,7 +16,7 @@ fn append(bytes: &mut Vec<u8>, kind: u8, path: &str, data: &[u8]) {
     let count = u32::from_le_bytes(bytes[8..12].try_into().unwrap()) + 1;
     bytes[8..12].copy_from_slice(&count.to_le_bytes());
 }
-fn pack(root: &Path) -> Result<PathBuf> {
+pub(super) fn pack(root: &Path) -> Result<PathBuf> {
     command(
         Command::new("python3")
             .arg(root.join("ports/gcc/build.py"))

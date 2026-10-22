@@ -7,6 +7,7 @@ mod linux;
 mod network;
 mod packages;
 mod purposes;
+mod rust;
 mod smoke;
 mod terminal;
 mod toolchain;
@@ -166,11 +167,13 @@ fn execute() -> Result<()> {
             let mut disk = None;
             let mut network = false;
             let mut toolchain = false;
+            let mut rust = false;
             let mut options = args.iter().skip(1);
             while let Some(option) = options.next() {
                 match option.as_str() {
                     "--network" if !network => network = true,
-                    "--toolchain" if !toolchain => toolchain = true,
+                    "--toolchain" if !toolchain && !rust => toolchain = true,
+                    "--rust" if !rust && !toolchain => rust = true,
                     "--disk" if disk.is_none() => {
                         disk = Some(disk::user_path(
                             &root,
@@ -179,13 +182,13 @@ fn execute() -> Result<()> {
                     }
                     _ => {
                         return Err(
-                            "Usage: cargo xtask run [--network] [--toolchain] [--disk build/disks/NAME.ext2]"
+                            "Usage: cargo xtask run [--network] [--toolchain | --rust] [--disk build/disks/NAME.ext2]"
                                 .into(),
                         );
                     }
                 }
             }
-            run(&root, disk.as_deref(), network, toolchain)
+            run(&root, disk.as_deref(), network, toolchain, rust)
         }
         "root-image" => {
             let (linux, name) = match &args[1..] {
@@ -205,6 +208,11 @@ fn execute() -> Result<()> {
         "toolchain-build" => toolchain::build(&root),
         "toolchain-image" => toolchain::image(&root).map(|_| ()),
         "toolchain-test" => toolchain::verify(&root),
+        "rust-build" => rust::build(&root),
+        "rust-cross-test" => rust::cross(&root),
+        "rust-runtime-test" => rust::runtime(&root),
+        "rust-image" => rust::image(&root).map(|_| ()),
+        "rust-test" => rust::verify(&root),
         "network-test" => network::verify(&root),
         "terminal-test" => terminal::verify(&root),
         "persistence-test" => disk::verify(&root),
@@ -280,7 +288,7 @@ fn execute() -> Result<()> {
         }
         "help" | "--help" | "-h" => {
             println!(
-                "AnovaOS host tools\n\n  cargo xtask doctor\n  cargo xtask fetch\n  cargo xtask build\n  cargo xtask image\n  cargo xtask run [--network] [--toolchain] [--disk build/disks/NAME.ext2]\n  cargo xtask smoke [--case CASE] [--timeout-secs 1..300]\n  cargo xtask verify\n  cargo xtask test-host\n  cargo xtask test-compat\n  cargo xtask trace-compat\n  cargo xtask apps\n  cargo xtask check-apps\n  cargo xtask check-files\n  cargo xtask network-test\n  cargo xtask package-test\n  cargo xtask toolchain-build\n  cargo xtask toolchain-image\n  cargo xtask toolchain-test\n  cargo xtask terminal-test\n  cargo xtask root-image [--linux] build/disks/NAME.ext2\n  cargo xtask persistence-test\n\nCASE: boot, panic, timeout, invalid-opcode, general-protection, page-fault, double-fault, stack-guard, read-only, no-execute, direct-no-execute, unmapped, oom.\nOutputs stay in build/; run uses disposable OVMF variables and a temporary data disk unless --disk is explicit. Use guest shutdown for persistent images. TCG is mandatory."
+                "AnovaOS host tools\n\n  cargo xtask doctor\n  cargo xtask fetch\n  cargo xtask build\n  cargo xtask image\n  cargo xtask run [--network] [--toolchain | --rust] [--disk build/disks/NAME.ext2]\n  cargo xtask smoke [--case CASE] [--timeout-secs 1..300]\n  cargo xtask verify\n  cargo xtask test-host\n  cargo xtask test-compat\n  cargo xtask trace-compat\n  cargo xtask apps\n  cargo xtask check-apps\n  cargo xtask check-files\n  cargo xtask network-test\n  cargo xtask package-test\n  cargo xtask toolchain-build\n  cargo xtask toolchain-image\n  cargo xtask toolchain-test\n  cargo xtask rust-build\n  cargo xtask rust-image\n  cargo xtask rust-cross-test\n  cargo xtask rust-runtime-test\n  cargo xtask rust-test\n  cargo xtask terminal-test\n  cargo xtask root-image [--linux] build/disks/NAME.ext2\n  cargo xtask persistence-test\n\nCASE: boot, panic, timeout, invalid-opcode, general-protection, page-fault, double-fault, stack-guard, read-only, no-execute, direct-no-execute, unmapped, oom.\nOutputs stay in build/; run uses disposable OVMF variables and a temporary data disk unless --disk is explicit. Use guest shutdown for persistent images. TCG is mandatory."
             );
             Ok(())
         }
@@ -640,7 +648,9 @@ fn qemu_disk(
         "-cpu",
         "qemu64,+rdrand",
         "-m",
-        if iso
+        if iso.file_name().is_some_and(|name| name == "anova-rust.iso") {
+            "3G"
+        } else if iso
             .file_name()
             .is_some_and(|name| name == "anova-devel.iso")
         {
@@ -678,15 +688,17 @@ fn qemu_disk(
     Ok(cmd)
 }
 
-fn run(root: &Path, disk: Option<&Path>, network: bool, devel: bool) -> Result<()> {
-    let iso = if devel {
+fn run(root: &Path, disk: Option<&Path>, network: bool, devel: bool, rust: bool) -> Result<()> {
+    let iso = if rust {
+        rust::image(root)?
+    } else if devel {
         toolchain::image(root)?
     } else {
         image(root, Mode::Normal)?
     };
     let vars = Temporary::new(root, "run")?;
     let temporary;
-    let disk = if devel && disk.is_none() {
+    let disk = if (devel || rust) && disk.is_none() {
         temporary = vars.0.join("devel.ext2");
         disk::create_profile(root, &temporary, true)?;
         Some(temporary.as_path())

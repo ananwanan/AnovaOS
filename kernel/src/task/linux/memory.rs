@@ -4,7 +4,7 @@
 use super::*;
 use anova_memory::paging::Permissions;
 const START: u64 = 0x5000_0000;
-const END: u64 = 0x7000_0000;
+const END: u64 = 0xc000_0000;
 fn permissions(prot: u64) -> Result<Option<Permissions>, i64> {
     if prot & !7 != 0 || prot & 6 == 6 {
         return Err(-13);
@@ -51,7 +51,7 @@ impl Kernel {
             .rsi
             .checked_add(4095)
             .map(|n| n & !4095)
-            .filter(|n| *n > 0 && *n <= 128 * 1024 * 1024)
+            .filter(|n| *n > 0 && *n <= 256 * 1024 * 1024)
             .ok_or(-22)?;
         let end = f.rdi.checked_add(size).ok_or(-22)?;
         if f.rax == 10 {
@@ -87,7 +87,8 @@ impl Kernel {
         let anonymous = f.r10 & 0x20 != 0;
         let fixed = f.r10 & 0x10 != 0;
         let shared = f.r10 & 3 == 1;
-        if f.r10 & !0x1033 != 0
+        // Linux MAP_STACK is a hint; the same eager mapping and guard protections apply.
+        if f.r10 & !0x21033 != 0
             || !matches!(f.r10 & 3, 1 | 2)
             || (shared && (!anonymous || fixed))
             || f.r9 & 4095 != 0
@@ -129,22 +130,7 @@ impl Kernel {
             }
             f.rdi
         } else {
-            let mut start = START;
-            let mut run = 0;
-            let mut found = None;
-            for page in (START..END).step_by(4096) {
-                if image.space.mapped(page) {
-                    start = page + 4096;
-                    run = 0;
-                } else {
-                    run += 4096;
-                    if run == size {
-                        found = Some(start);
-                        break;
-                    }
-                }
-            }
-            found.ok_or(-12)?
+            image.space.find_gap(START, END, size).ok_or(-12)?
         };
         if fixed
             && (start..start + size)
@@ -183,6 +169,9 @@ impl Kernel {
             .space
             .protect(start, start + size, perms)
             .map_err(|_| -13)?;
+        if !fixed {
+            image.space.commit_mapping_hint(start + size);
+        }
         Ok(start as i64)
     }
 }

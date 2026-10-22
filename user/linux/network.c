@@ -36,7 +36,7 @@ static volatile sig_atomic_t caught;
 static void handler(int n) { caught = n; }
 int main(int argc, char **argv) {
     CHECK(socket(AF_UNIX, SOCK_STREAM, 0) == -1 && errno == EAFNOSUPPORT);
-    CHECK(syscall(SYS_socketpair, AF_UNIX, SOCK_STREAM, 0, 0) == -1 && errno == ENOSYS);
+    CHECK(syscall(SYS_socketpair, AF_UNIX, SOCK_STREAM, 0, 0) == -1 && errno == ESOCKTNOSUPPORT);
     unsigned base = argc > 1 ? (unsigned)strtoul(argv[1], 0, 10) : 18080;
     int fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
     CHECK(fd >= 0);

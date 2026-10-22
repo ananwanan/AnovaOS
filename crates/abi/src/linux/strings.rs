@@ -4,7 +4,7 @@
 use super::{E2BIG, EFAULT, EINVAL, ENAMETOOLONG};
 
 pub const STRING_BYTES: usize = 129;
-pub const VECTOR_LIMIT: usize = 64;
+pub const VECTOR_LIMIT: usize = 256;
 const PAGE_BYTES: u64 = 4096;
 
 /// The caller pins the address space and recovers access faults inside `copy`.
@@ -189,11 +189,11 @@ mod tests {
 
     #[test]
     fn vectors_accept_the_full_capacity_and_reject_bad_pointers_or_excess_arguments() {
-        let mut memory = vec![0; 4096];
+        let mut memory = vec![0; 8192];
         for index in 0..VECTOR_LIMIT {
-            memory[index * 8..index * 8 + 8].copy_from_slice(&0x10400_u64.to_le_bytes());
+            memory[index * 8..index * 8 + 8].copy_from_slice(&0x11000_u64.to_le_bytes());
         }
-        memory[1024..1030].copy_from_slice(b"value\0");
+        memory[4096..4102].copy_from_slice(b"value\0");
         let mut copy = |address: u64, bytes: &mut [u8]| {
             let offset = address.checked_sub(0x10000).ok_or(EFAULT)? as usize;
             let input = memory.get(offset..offset + bytes.len()).ok_or(EFAULT)?;
@@ -206,7 +206,7 @@ mod tests {
         assert!(!vector.is_empty());
         assert_eq!(vector.strings(), ["value"; VECTOR_LIMIT]);
         assert!(vector.read(1, &mut copy).is_err());
-        memory[VECTOR_LIMIT * 8..VECTOR_LIMIT * 8 + 8].copy_from_slice(&0x10400_u64.to_le_bytes());
+        memory[VECTOR_LIMIT * 8..VECTOR_LIMIT * 8 + 8].copy_from_slice(&0x11000_u64.to_le_bytes());
         let result = vector.read(0x10000, &mut |address, bytes| {
             let offset = (address - 0x10000) as usize;
             bytes.copy_from_slice(&memory[offset..offset + bytes.len()]);
@@ -214,7 +214,7 @@ mod tests {
         });
         assert!(matches!(result, Err(E2BIG)));
         memory[VECTOR_LIMIT * 8..VECTOR_LIMIT * 8 + 8].fill(0);
-        memory[1024..2048].fill(b'x');
+        memory[4096..5120].fill(b'x');
         let result = vector.read(0x10000, &mut |address, bytes| {
             let offset = (address - 0x10000) as usize;
             bytes.copy_from_slice(&memory[offset..offset + bytes.len()]);

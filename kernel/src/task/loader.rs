@@ -91,7 +91,7 @@ pub fn load_interpreter(
     let entry = interpreter
         .as_ref()
         .map_or(image.entry, |(_, elf)| elf.entry);
-    let mut stack_page = [0; 16384];
+    let mut stack_page = [0; 32768];
     let stack = if linux {
         let mut random = [0; 16];
         super::linux::random(&mut random).map_err(LoadError::Entropy)?;

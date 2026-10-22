@@ -1,9 +1,9 @@
 <!-- Record locally verified subsystem capabilities, runtime limits and the next development task. -->
 # Implementation status
 
-Recorded 2026-10-22 (Asia/Shanghai). M11 baseline: `42cb018` on dev, after
-the M10 merge. Task branch: feat/m11-guest-toolchain. See
-[M11 profile](M11_TOOLCHAIN.md) and [validation/M11.md](validation/M11.md).
+Recorded 2026-10-22 (Asia/Shanghai). Baseline `7ce53fe` on dev.
+Task branch: `feat/m12-rust-cargo`. See [M12 profile](M12_RUST.md) and
+[validation/M12.md](validation/M12.md).
 Remote CI and publication are separate from local acceptance.
 
 ## Implemented and locally verified
@@ -54,8 +54,8 @@ Remote CI and publication are separate from local acceptance.
   retention, installed ELF execution and preserved user data. Online acquisition
   is restricted to the controlled host peer and generated test CA.
 - DEV-001 remains mandatory: English purpose headers plus the checked
-  [file inventory](FILE_PURPOSES.md). Current command results are in validation/M11.
-- 77 host tests, host/kernel/user Clippy, formatting and all 13 QEMU scenarios
+  [file inventory](FILE_PURPOSES.md). Current command results are in validation/M12.
+- 81 host tests, host/kernel/user Clippy, formatting and all 13 QEMU scenarios
   pass. Ordinary UART and persistence/error sessions consume ordered stdout
   directly; diagnostic-log snapshots cannot invalidate their matching cursors.
 
@@ -67,11 +67,13 @@ Remote CI and publication are separate from local acceptance.
 | Stacks and heap | 64 KiB guarded trap stacks; 256 KiB guarded scheduler stack; fixed 16 MiB heap |
 | VFS namespace | 2,048 nodes; 32 fds per task/table; 128 open descriptions; four PTY pairs |
 | ext2 | Normal shutdown persistence; no journal, atomic save or power-loss guarantee |
-| Full terminal jobs, alternate signal stacks, realtime queues, robust/PI futexes | Not implemented or verified |
+| Per-thread alternate signal stacks and SA_ONSTACK | Locally accepted in the bounded M12 runtime |
+| Full terminal jobs, realtime queues, robust/PI futexes | Not implemented or verified |
 | COW, shared persistent mmap/writeback, ASLR, SMP, GUI and physical hardware | Not implemented or verified |
 | M10 IPv4 client networking and controlled native packages/TLS | Locally accepted within M10_NETWORK_PACKAGES |
 | M11 offline GCC/G++ 11.2.0, binutils, make and matching musl/C++ sysroot | Locally accepted within M11_TOOLCHAIN |
-| General Linux networking/glibc, public package repositories and guest rustc/Cargo | Not implemented or verified |
+| M12 guest Rust 1.90.0/std, offline Cargo/vendor, build.rs/C FFI and a procedural macro | Locally accepted within M12_RUST |
+| General Linux networking/glibc, public package repositories and online Cargo registry/Git | Not implemented or verified |
 | External IRQs, asynchronous block I/O, hotplug and boot-memory reclamation | Not implemented |
 
 The BSP polls block I/O with a two-second deadline; long kernel I/O delays tasks
@@ -80,6 +82,9 @@ throwaway disk. Persistent files need an explicit image and clean guest shutdown
 The editor's truncate/write save is not atomic. M9 does not change these limits.
 
 ## M11 implemented and locally verified
+
+The following construction is retained; M12 supersedes the Linux size/startup
+bounds recorded here. Native limits remain separate.
 
 - Optional development ISO with source-built GCC/G++ 11.2.0, binutils 2.37,
   make 4.4.1 and musl 1.2.4/CRT/libgcc/libstdc++ 11.2.0 at `/tc`.
@@ -101,14 +106,46 @@ The editor's truncate/write save is not atomic. M9 does not change these limits.
   membership checks use owned lower-root page-table queries without relaxing
   user bounds, guard pages or W^X. All prior ownership/OOM gates remain required.
 
+## M12 implemented and locally verified
+
+- Optional `/rs` image with checksum-locked official Rust 1.90.0 musl rustc,
+  embedded LLVM, rust-lld, Cargo, std and vendored itoa 1.0.15. These upstream
+  binaries are distinct from the source-built M11 C tools; Rust/LLVM source
+  construction and self-bootstrap are not established.
+- Guest UART source editing, std allocation/argv/files, real threads and child
+  output/wait from a worker thread; a guest-built procedural macro shared object.
+- Dependency-free Cargo and frozen builds with locked vendor checksums, build.rs generated
+  input/environment, real guest GCC/ar and C FFI, no-op and source-change builds,
+  real syntax failure, exact persisted source/ELF hashes and clean reboot.
+- Actual per-thread sigaltstack/SA_ONSTACK delivery/return and rejected changes,
+  musl posix_spawn's shared-root vfork variant, thread-group child waits,
+  detached-thread self-unmap exit and forced invalid-return fault handling.
+- Bounded AF_UNIX sequenced-packet pairs for Rust pre-exec error channels, with
+  duplex message boundaries, backpressure, truncation, checked copies and EOF.
+- Positioned file I/O, bounded ftruncate, regular-file rename with open replaced
+  inode lifetime, OFD flock and pipe FIONREAD/FIONBIO. Directory rename is
+  limited to an absent destination in the same parent. Empty-directory removal
+  retains open identities and reclaims on final close; live cwd/removed-child
+  references return EBUSY. Relative dirfd open/stat/unlink and O_NOFOLLOW are
+  checked independently. Persistent shared mmap/
+  writeback remains unsupported.
+- Linux ELF/loaded image and per-mmap bounds are 256 MiB; the mapping window is
+  `[0x50000000, 0xc0000000)`. A committed per-root gap hint avoids rescanning large
+  immutable compiler mappings. Linux startup uses 256 argv/env entries and a
+  checked 32 KiB block; native startup remains 64 entries. Linux/VFS paths and
+  names support 512/255 bytes; native v1 path/directory wire capacities stay
+  separate and reject unrepresentable names without consuming them.
+- The Rust QEMU profile uses 3 GiB RAM. One BSP, 32 task slots, 16 MiB kernel
+  heap, 1 MiB writable files and Linux stacks, 256 KiB scheduler stack and
+  retained boot memory remain bounded. See M12_RUST for exact scope.
+
 ## Next task
 
-M12: guest-hosted rustc and Cargo, beginning with the offline single-file std
-and dependency-free/vendor Cargo stages. Preserve every M9/M10 test and
-`cargo xtask toolchain-test`, file-purpose coverage, actual fault/OOM boundaries,
-clean shutdown and exact resource reclamation. General projects, dynamic
-application toolchains, LTO/OpenMP/sanitizers and compiler self-bootstrap remain
-outside the accepted M11 profile.
+M13: version the application SDK, manifest, package and developer experience
+around the verified C/C++/Rust toolchains. Preserve every previous runtime,
+storage, network, toolchain and Rust acceptance gate. Online Cargo registry/Git,
+general Cargo projects, native AnovaOS std, LTO/OpenMP/sanitizers and compiler
+self-bootstrap remain independently scoped.
 
 ## M14 graphics planning — not implemented (2026-10-22)
 
@@ -129,6 +166,6 @@ constraints, candidate dependency policy and five independent gates are in
 This documentation change delivers **no GUI implementation, no graphics
 test, no new SDK binaries, no GPU acceleration and no additional hardware
 support**. The Limine framebuffer response is an early boot input, not a
-window system. M12 Rust/Cargo and M13 SDK packaging are still required
-before M14.4's in-system developer-experience acceptance. SMP, physical
+window system. M12 supplies the bounded offline Rust/Cargo prerequisite; M13
+SDK packaging is still required before M14.4's developer-experience acceptance. SMP, physical
 devices and Linux GUI compatibility remain separately scoped workstreams.

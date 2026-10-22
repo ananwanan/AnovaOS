@@ -41,6 +41,7 @@ fn vector_io(
         .ok()
         .flatten()
         .is_some()
+        || vfs.is_packet(files, frame.rdi)
     {
         return -95;
     }

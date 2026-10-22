@@ -38,7 +38,11 @@ pub fn random(bytes: &mut [u8]) -> Result<(), i64> {
     }
     Ok(())
 }
-fn string(space: &mm::user::UserSpace, address: u64, bytes: &mut [u8; 129]) -> Result<usize, i64> {
+fn string(
+    space: &mm::user::UserSpace,
+    address: u64,
+    bytes: &mut [u8; anova_vfs::PATH_BYTES + 1],
+) -> Result<usize, i64> {
     strings::read_c_string(address, bytes, &mut |at, output| {
         uaccess::from_user(space, UserAddr(at), output).map_err(errno)
     })
@@ -72,6 +76,19 @@ fn stat_bytes(meta: (u64, u32, usize, bool), permissions: u16, modified: u64) ->
     b[56..64].copy_from_slice(&4096u64.to_le_bytes());
     b[64..72].copy_from_slice(&(size as u64).div_ceil(512).to_le_bytes());
     b
+}
+fn at_directory(
+    vfs: &anova_vfs::Vfs<'_>,
+    files: &anova_vfs::Descriptors,
+    cwd: usize,
+    fd: u64,
+    path: &str,
+) -> Result<usize, i64> {
+    if path.starts_with('/') || fd as i64 == -100 {
+        Ok(cwd)
+    } else {
+        vfs.directory(files, fd).map_err(errno)
+    }
 }
 pub(super) fn wait_bytes(status: ExitStatus) -> [u8; 4] {
     let value = match status.reason {
@@ -114,7 +131,7 @@ impl Kernel {
         if name.contains('/') {
             return self.fs.linux_executable(self.process(i).cwd, name);
         }
-        let mut bytes = [0; 128];
+        let mut bytes = [0; anova_vfs::PATH_BYTES];
         if name.len() + 5 > bytes.len() {
             return Err(TOO_LONG);
         }
@@ -135,6 +152,7 @@ impl Kernel {
                     .ok()
                     .flatten()
                     .is_some()
+            || matches!(f.rax, 0 | 1) && self.fs.is_packet(&self.process(i).files, f.rdi)
         {
             let result = self.socket_syscall(i, &f);
             if result != WOULD_BLOCK {
@@ -169,6 +187,33 @@ impl Kernel {
         }
         if matches!(f.rax, 7 | 271) {
             let result = self.linux_poll(i, &f).unwrap_or_else(|e| e);
+            self.process_mut(i).context.frame.rax = result as u64;
+            return;
+        }
+        if f.rax == 73 {
+            let result = if f.rsi & !15 != 0 || !matches!(f.rsi & !4, 1 | 2 | 8) {
+                -22
+            } else {
+                let mode = match f.rsi & !4 {
+                    1 => 1,
+                    2 => 2,
+                    _ => 0,
+                };
+                match self
+                    .fs
+                    .try_lock(&self.processes[i].as_ref().unwrap().files, f.rdi, mode)
+                {
+                    Ok(()) => 0,
+                    Err(WOULD_BLOCK) if f.rsi & 4 != 0 => -11,
+                    Err(WOULD_BLOCK) => {
+                        self.process_mut(i).thread.blocked =
+                            Some(threads::Blocked::FileLock { frame: f });
+                        self.policy.block(i);
+                        0
+                    }
+                    Err(e) => errno(e),
+                }
+            };
             self.process_mut(i).context.frame.rax = result as u64;
             return;
         }
@@ -251,7 +296,7 @@ impl Kernel {
                     Some(-14)
                 } else {
                     let pid = if f.rdi == u64::MAX { 0 } else { f.rdi };
-                    let parent = self.policy.entry(i).pid;
+                    let parent = self.process(i).thread.tgid;
                     let eligible = (0..CAPACITY).filter(|&k| {
                         let e = self.policy.entry(k);
                         e.parent == parent && e.state != State::Empty && (pid == 0 || e.pid == pid)
@@ -311,7 +356,7 @@ impl Kernel {
     }
     fn linux_exec(&mut self, i: usize, f: &TrapFrame) -> Result<(), i64> {
         let space = &self.process(i).image.as_ref().unwrap().space;
-        let mut name = [0; 129];
+        let mut name = [0; anova_vfs::PATH_BYTES + 1];
         let mut arguments = StringVector::empty();
         let mut environment = StringVector::empty();
         // Keep large argument buffers in this frame; the active-root closure returns only a length.
@@ -397,6 +442,7 @@ impl Kernel {
         p.image = Some(image);
         p.thread.blocked = None;
         p.thread.saved_mask = None;
+        p.thread.altstack = signals::AltStack::default();
         p.io = None;
         p.network_deadline = None;
         p.wait = None;
@@ -441,6 +487,11 @@ impl Kernel {
         }
         let pid = self.policy.entry(i).pid;
         let parent = self.policy.entry(i).parent;
+        let cwd_references: [usize; CAPACITY] = if matches!(f.rax, 84 | 263) {
+            core::array::from_fn(|k| self.processes[k].as_ref().map_or(usize::MAX, |p| p.cwd))
+        } else {
+            [usize::MAX; CAPACITY]
+        };
         let p = self.processes[i].as_mut().unwrap();
         let image = p.image.as_ref().unwrap();
         let space = &image.space;
@@ -481,6 +532,66 @@ impl Kernel {
                     });
                 }
                 Ok(match f.rax {
+                    77 => {
+                        if f.rsi > i64::MAX as u64 {
+                            return Err(-22);
+                        }
+                        if f.rsi > anova_vfs::FILE_BYTES as u64 {
+                            return Err(-27);
+                        }
+                        self.fs
+                            .set_len(&p.files, f.rdi, f.rsi as usize)
+                            .map_err(errno)?;
+                        0
+                    }
+                    17 | 18 => {
+                        if f.r10 > i64::MAX as u64 {
+                            return Err(-22);
+                        }
+                        let count = f.rdx.min(MAX_WRITE as u64) as usize;
+                        let mut bytes = [0; MAX_WRITE];
+                        if f.rax == 17 {
+                            let n = self
+                                .fs
+                                .read_at(&p.files, f.rdi, f.r10, &mut bytes[..count])
+                                .map_err(errno)?;
+                            if n != 0 {
+                                uaccess::to_user(space, UserAddr(f.rsi), &bytes[..n])
+                                    .map_err(errno)?;
+                            }
+                            n as i64
+                        } else {
+                            if count != 0 {
+                                uaccess::from_user(space, UserAddr(f.rsi), &mut bytes[..count])
+                                    .map_err(errno)?;
+                            }
+                            self.fs
+                                .write_at(&p.files, f.rdi, f.r10, &bytes[..count])
+                                .map_err(errno)? as i64
+                        }
+                    }
+                    82 | 264 => {
+                        let (from, to) = if f.rax == 82 {
+                            (f.rdi, f.rsi)
+                        } else {
+                            if f.rdi as i64 != -100 || f.rdx as i64 != -100 {
+                                return Err(-9);
+                            }
+                            (f.rsi, f.r10)
+                        };
+                        let mut a = [0; anova_vfs::PATH_BYTES + 1];
+                        let mut b = [0; anova_vfs::PATH_BYTES + 1];
+                        let n = string(space, from, &mut a)?;
+                        let m = string(space, to, &mut b)?;
+                        self.fs
+                            .rename(
+                                p.cwd,
+                                core::str::from_utf8(&a[..n]).unwrap(),
+                                core::str::from_utf8(&b[..m]).unwrap(),
+                            )
+                            .map_err(errno)?;
+                        0
+                    }
                     97 | 302 => {
                         let (resource, output) = if f.rax == 97 {
                             (f.rdi, f.rsi)
@@ -516,7 +627,7 @@ impl Kernel {
                         if f.rdx == 0 {
                             return Err(-22);
                         }
-                        let mut bytes = [0; 129];
+                        let mut bytes = [0; anova_vfs::PATH_BYTES + 1];
                         let n = string(space, f.rdi, &mut bytes)?;
                         let target = self
                             .fs
@@ -535,33 +646,41 @@ impl Kernel {
                         let (address, flags) = if f.rax == 2 {
                             (f.rdi, f.rsi)
                         } else {
-                            if f.rdi as i64 != -100 {
-                                return Err(-9);
-                            }
                             (f.rsi, f.rdx)
                         };
-                        let mut bytes = [0; 129];
+                        let mut bytes = [0; anova_vfs::PATH_BYTES + 1];
                         let n = string(space, address, &mut bytes)?;
-                        let flags = open_flags(flags & !(0x800 | 0x100))?;
+                        let nofollow = flags & 0x20000 != 0;
+                        let flags = open_flags(flags & !(0x800 | 0x100 | 0x20000))?;
                         let path = core::str::from_utf8(&bytes[..n]).unwrap();
+                        let cwd = if f.rax == 257 {
+                            at_directory(&self.fs, &p.files, p.cwd, f.rdi, path)?
+                        } else {
+                            p.cwd
+                        };
+                        if nofollow && self.fs.metadata_nofollow(cwd, path).is_ok_and(|m| m.1 == 3)
+                        {
+                            return Err(-40);
+                        }
                         let created = flags & OPEN_CREATE != 0
-                            && self.fs.metadata(p.cwd, path) == Err(NOT_FOUND);
+                            && self.fs.metadata(cwd, path) == Err(NOT_FOUND);
                         let mode = if f.rax == 2 { f.rdx } else { f.r10 };
-                        if created && mode & !0o777 != 0 {
+                        if created && mode & 0o7000 != 0 {
                             return Err(-95);
                         }
                         let fd = self
                             .fs
                             .open(
                                 &mut p.files,
-                                p.cwd,
+                                cwd,
                                 core::str::from_utf8(&bytes[..n]).unwrap(),
                                 flags,
                             )
                             .map_err(errno)?;
                         if created
                             && let Err(e) =
-                                self.fs.fchmod(&p.files, fd, mode as u16 & !p.thread.umask)
+                                self.fs
+                                    .fchmod(&p.files, fd, mode as u16 & 0o777 & !p.thread.umask)
                         {
                             self.fs.close(&mut p.files, fd).map_err(errno)?;
                             return Err(errno(e));
@@ -601,24 +720,30 @@ impl Kernel {
                             let (address, output) = if matches!(f.rax, 4 | 6) {
                                 (f.rdi, f.rsi)
                             } else {
-                                if f.rdi as i64 != -100 || f.r10 != 0 {
+                                if f.r10 & !0x100 != 0 {
                                     return Err(-22);
                                 }
                                 (f.rsi, f.rdx)
                             };
-                            let mut bytes = [0; 129];
+                            let mut bytes = [0; anova_vfs::PATH_BYTES + 1];
                             let n = string(space, address, &mut bytes)?;
+                            let path = core::str::from_utf8(&bytes[..n]).unwrap();
+                            let cwd = if f.rax == 262 {
+                                at_directory(&self.fs, &p.files, p.cwd, f.rdi, path)?
+                            } else {
+                                p.cwd
+                            };
                             (
-                                if f.rax == 6 {
+                                if f.rax == 6 || f.rax == 262 && f.r10 & 0x100 != 0 {
                                     self.fs
                                         .metadata_nofollow(
-                                            p.cwd,
+                                            cwd,
                                             core::str::from_utf8(&bytes[..n]).unwrap(),
                                         )
                                         .map_err(errno)?
                                 } else {
                                     self.fs
-                                        .metadata(p.cwd, core::str::from_utf8(&bytes[..n]).unwrap())
+                                        .metadata(cwd, core::str::from_utf8(&bytes[..n]).unwrap())
                                         .map_err(errno)?
                                 },
                                 output,
@@ -660,7 +785,7 @@ impl Kernel {
                         if f.rsi & !7 != 0 {
                             return Err(-22);
                         }
-                        let mut bytes = [0; 129];
+                        let mut bytes = [0; anova_vfs::PATH_BYTES + 1];
                         let n = string(space, f.rdi, &mut bytes)?;
                         let meta = self
                             .fs
@@ -680,13 +805,23 @@ impl Kernel {
                         0
                     }
                     22 | 293 => {
-                        if f.rax == 293 && f.rsi != 0 {
+                        if f.rax == 293 && f.rsi & !0x80800 != 0 {
                             return Err(-22);
                         }
                         if !space.accessible(UserAddr(f.rdi), 8, true, false) {
                             return Err(-14);
                         }
                         let pair = self.fs.pipe(&mut p.files).map_err(errno)?;
+                        if f.rax == 293 {
+                            for fd in pair {
+                                p.files
+                                    .set_close_on_exec(fd, f.rsi & 0x80000 != 0)
+                                    .map_err(errno)?;
+                                self.fs
+                                    .set_nonblocking(&p.files, fd, f.rsi & 0x800 != 0)
+                                    .map_err(errno)?;
+                            }
+                        }
                         let mut bytes = [0; 8];
                         bytes[..4].copy_from_slice(&(pair[0] as u32).to_le_bytes());
                         bytes[4..].copy_from_slice(&(pair[1] as u32).to_le_bytes());
@@ -770,8 +905,8 @@ impl Kernel {
                         }
                     }
                     79 => {
-                        let mut bytes = [0; 129];
-                        let mut path = [0; 128];
+                        let mut bytes = [0; anova_vfs::PATH_BYTES + 1];
+                        let mut path = [0; anova_vfs::PATH_BYTES];
                         let n = self.fs.canonical(p.cwd, &mut path).map_err(errno)?;
                         bytes[..n].copy_from_slice(&path[..n]);
                         if f.rsi < n as u64 + 1 {
@@ -781,28 +916,54 @@ impl Kernel {
                         n as i64 + 1
                     }
                     90 | 91 => {
-                        if f.rsi & !0o777 != 0 {
+                        // Linux ignores file-type/upper bits in mode_t; special permission bits
+                        // remain explicitly unsupported by this single-identity profile.
+                        if f.rsi & 0o7000 != 0 {
                             return Err(-95);
                         }
                         if f.rax == 91 {
                             self.fs
-                                .fchmod(&p.files, f.rdi, f.rsi as u16)
+                                .fchmod(&p.files, f.rdi, f.rsi as u16 & 0o777)
                                 .map_err(errno)?;
                         } else {
-                            let mut bytes = [0; 129];
+                            let mut bytes = [0; anova_vfs::PATH_BYTES + 1];
                             let n = string(space, f.rdi, &mut bytes)?;
                             self.fs
                                 .chmod(
                                     p.cwd,
                                     core::str::from_utf8(&bytes[..n]).unwrap(),
-                                    f.rsi as u16,
+                                    f.rsi as u16 & 0o777,
                                 )
                                 .map_err(errno)?;
                         }
                         0
                     }
+                    84 | 263 => {
+                        let (address, flags) = if f.rax == 84 {
+                            (f.rdi, 0x200)
+                        } else {
+                            (f.rsi, f.rdx)
+                        };
+                        if flags & !0x200 != 0 {
+                            return Err(-22);
+                        }
+                        let mut bytes = [0; anova_vfs::PATH_BYTES + 1];
+                        let n = string(space, address, &mut bytes)?;
+                        let path = core::str::from_utf8(&bytes[..n]).unwrap();
+                        let cwd = if f.rax == 263 {
+                            at_directory(&self.fs, &p.files, p.cwd, f.rdi, path)?
+                        } else {
+                            p.cwd
+                        };
+                        if flags & 0x200 != 0 {
+                            self.fs.rmdir(cwd, path, &cwd_references).map_err(errno)?;
+                        } else {
+                            self.fs.unlink(cwd, path).map_err(errno)?;
+                        }
+                        0
+                    }
                     80 | 83 | 87 => {
-                        let mut bytes = [0; 129];
+                        let mut bytes = [0; anova_vfs::PATH_BYTES + 1];
                         let n = string(space, f.rdi, &mut bytes)?;
                         let path = core::str::from_utf8(&bytes[..n]).unwrap();
                         match f.rax {
@@ -828,7 +989,7 @@ impl Kernel {
                                 if f.rdx < n as u64 {
                                     return Err(-22);
                                 }
-                                let mut bytes = [0; 88];
+                                let mut bytes = [0; 280];
                                 bytes[..8].copy_from_slice(&entry.inode.to_le_bytes());
                                 bytes[8..16].copy_from_slice(&(entry.inode + 1).to_le_bytes());
                                 bytes[16..18].copy_from_slice(&(n as u16).to_le_bytes());
@@ -842,7 +1003,7 @@ impl Kernel {
                                     .copy_from_slice(&entry.name[..entry.name_len as usize]);
                                 uaccess::to_user(space, UserAddr(f.rsi), &bytes[..n])
                                     .map_err(errno)?;
-                                self.fs.readdir(&p.files, f.rdi).map_err(errno)?;
+                                self.fs.advance_readdir(&p.files, f.rdi).map_err(errno)?;
                                 n as i64
                             }
                         }

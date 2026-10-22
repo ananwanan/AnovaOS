@@ -217,3 +217,29 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `docs/M11_TOOLCHAIN.md` | Define the offline source-built GCC profile, resource/ownership boundaries and acceptance workflow. |
 | `docs/validation/M11.md` | Record actual M11 source-build inputs, guest outputs, negative cases and complete regression evidence. |
 | `docs/third-party/m11.md` | Record pinned compiler licenses, source obligations and the local-validation distribution boundary. |
+
+## M12 Rust development files
+
+| File | Responsibility |
+| --- | --- |
+| `docs/third-party/m12.md` | Record official Rust/Cargo/LLVM distribution provenance, licenses and unwinder boundaries. |
+| `ports/rust/build.py` | Verify archives, serialize construction and atomically publish the inventoried guest Rust sysroot. |
+| `ports/rust/inputs.json` | Lock official Rust musl binary archives and the vendored itoa registry checksum. |
+| `tests/guest/m12/Cargo.lock` | Generated lockfile for the fixed offline guest registry dependency; do not hand-edit. |
+| `tests/guest/m12/Cargo.toml` | Define the M12 offline Rust/Cargo acceptance fixture and its declared behavior. |
+| `tests/guest/m12/bad.rs` | Deliberately fail guest Rust parsing and verify nonzero status and retained earlier outputs. |
+| `tests/guest/m12/build.rs` | Run guest GCC/ar, generate OUT_DIR input and configure Rust FFI linkage. |
+| `tests/guest/m12/cargo.rs` | Define the M12 offline Rust/Cargo acceptance fixture and its declared behavior. |
+| `tests/guest/m12/config.toml` | Define the M12 offline Rust/Cargo acceptance fixture and its declared behavior. |
+| `tests/guest/m12/main.rs` | Define the M12 offline Rust/Cargo acceptance fixture and its declared behavior. |
+| `tests/guest/m12/runtime.c` | Exercise invalid return/detached exit, alternate signals, positioned/resized files and OFD locks in a real guest. |
+| `user/linux/rust.c` | Configure offline Rust/Cargo execution and the isolated guest sysroot and linker. |
+| `xtask/src/rust.rs` | Build Rust images, exercise real guest compilation and independently inspect rebooted source and ELF files. |
+| `docs/M12_RUST.md` | Specify the optional Rust/Cargo profile, construction commands, ownership and separate acceptance gates. |
+| `docs/validation/M12.md` | Record actual M12 guest compilation, feature-specific evidence and inherited regression results. |
+| `tests/guest/m12/helper.c` | Provide the C function compiled by guest build.rs and statically linked through Rust FFI. |
+| `tests/guest/m12/macro.rs` | Export a real procedural macro compiled into a guest shared library. |
+| `tests/guest/m12/use_macro.rs` | Require actual loading/expansion of the guest-built macro and validate its result. |
+| `tests/guest/m12/plain/Cargo.toml` | Define an independent dependency-free offline Cargo acceptance project. |
+| `tests/guest/m12/plain/Cargo.lock` | Cargo-generated lock for the dependency-free guest project; do not hand-edit. |
+| `tests/guest/m12/plain/src/main.rs` | Run an actual guest-built dependency-free Cargo executable and check its output. |

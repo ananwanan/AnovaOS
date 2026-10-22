@@ -34,7 +34,7 @@ pub struct Inode {
 }
 pub struct Entry {
     pub inode: u32,
-    pub name: [u8; 64],
+    pub name: [u8; 256],
     pub length: usize,
 }
 pub struct Ext2 {
@@ -77,6 +77,45 @@ impl Ext2 {
     pub fn truncate(&mut self, number: u32) -> Result<(), i64> {
         self.mutate(|s| s.truncate_inner(number))
     }
+    /// Resize a bounded regular file, preserving its prefix and zeroing every introduced byte.
+    /// Snapshot allocation and block-capacity checks precede mutation; I/O failure poisons writes.
+    pub fn resize(&mut self, number: u32, length: usize) -> Result<(), i64> {
+        self.mutate(|s| {
+            let inode = s.inode(number)?;
+            if inode.directory {
+                return Err(IS_DIRECTORY);
+            }
+            if length > MAX_FILE {
+                return Err(NO_SPACE);
+            }
+            if length == inode.size {
+                return Ok(());
+            }
+            if length == 0 {
+                return s.truncate_inner(number);
+            }
+            let blocks = length.div_ceil(BLOCK) + usize::from(length > 12 * BLOCK);
+            let available =
+                u32_at(&s.superblock, 12) as usize + u32_at(&inode.raw, 28) as usize / 8;
+            if blocks > available {
+                return Err(NO_SPACE);
+            }
+            let mut bytes = Vec::new();
+            bytes.try_reserve_exact(length).map_err(|_| NO_MEMORY)?;
+            bytes.resize(length, 0);
+            let keep = length.min(inode.size);
+            if s.read(number, 0, &mut bytes[..keep])? != keep {
+                return Err(IO_ERROR);
+            }
+            if inode.size != 0 {
+                s.truncate_inner(number)?;
+            }
+            if s.write_inner(number, 0, &bytes)? != length {
+                return Err(IO_ERROR);
+            }
+            Ok(())
+        })
+    }
     pub fn set_executable(&mut self, number: u32) -> Result<(), i64> {
         self.mutate(|s| s.set_executable_inner(number))
     }
@@ -96,7 +135,20 @@ impl Ext2 {
         self.mutate(|s| s.create_inner(parent, name, directory))
     }
     pub fn unlink(&mut self, parent: u32, name: &str) -> Result<u32, i64> {
-        self.mutate(|s| s.unlink_inner(parent, name))
+        self.mutate(|s| s.unlink_inner(parent, name, false))
+    }
+    pub fn rmdir(&mut self, parent: u32, name: &str) -> Result<u32, i64> {
+        self.mutate(|s| s.unlink_inner(parent, name, true))
+    }
+    /// Rename regular files or a same-parent directory to a new name; no crash-atomic guarantee.
+    pub fn rename(
+        &mut self,
+        parent: u32,
+        name: &str,
+        destination: u32,
+        new: &str,
+    ) -> Result<(), i64> {
+        self.mutate(|s| s.rename_inner(parent, name, destination, new))
     }
     pub fn release_unlinked(&mut self, number: u32) -> Result<(), i64> {
         self.mutate(|s| s.release_unlinked_inner(number))
@@ -395,14 +447,14 @@ impl Ext2 {
                         return Err(INVALID_FILESYSTEM);
                     }
                     if name != b"." && name != b".." {
-                        if name_len > 63 {
+                        if name_len > 255 {
                             return Err(TOO_LONG);
                         }
                         if entries.iter().any(|e: &Entry| &e.name[..e.length] == name) {
                             return Err(INVALID_FILESYSTEM);
                         }
                         entries.try_reserve(1).map_err(|_| NO_MEMORY)?;
-                        let mut label = [0; 64];
+                        let mut label = [0; 256];
                         label[..name_len].copy_from_slice(name);
                         entries.push(Entry {
                             inode: child,
@@ -544,7 +596,7 @@ impl Ext2 {
     }
     fn create_inner(&mut self, parent: u32, name: &str, directory: bool) -> Result<u32, i64> {
         if name.is_empty()
-            || name.len() > 63
+            || name.len() > 255
             || name == "."
             || name == ".."
             || name.contains(['/', '\0'])
@@ -651,7 +703,7 @@ impl Ext2 {
         self.write_block(address, &block)?;
         Ok(number)
     }
-    fn unlink_inner(&mut self, parent: u32, name: &str) -> Result<u32, i64> {
+    fn unlink_inner(&mut self, parent: u32, name: &str, directory: bool) -> Result<u32, i64> {
         let p = self.inode(parent)?;
         for index in 0..p.size / BLOCK {
             let address = self.data_pointer(&p, index)?;
@@ -662,15 +714,37 @@ impl Ext2 {
                 let (child, length, n) = directory_record(&block, at)?;
                 if child != 0 && &block[at + 8..at + 8 + n] == name.as_bytes() {
                     let mut inode = self.inode(child)?;
-                    if inode.directory {
-                        return Err(IS_DIRECTORY);
+                    if inode.directory != directory {
+                        return Err(if inode.directory {
+                            IS_DIRECTORY
+                        } else {
+                            NOT_DIRECTORY
+                        });
                     }
+                    let parent_links = if directory {
+                        if !self.entries(child)?.is_empty() {
+                            return Err(NOT_EMPTY);
+                        }
+                        Some(
+                            u16_at(&p.raw, 26)
+                                .checked_sub(1)
+                                .filter(|n| *n >= 2)
+                                .ok_or(INVALID_FILESYSTEM)?,
+                        )
+                    } else {
+                        None
+                    };
                     self.begin()?;
                     put32(&mut *block, at, 0);
                     self.write_block(address, &block)?;
                     self.sync()?;
                     put16(&mut inode.raw, 26, 0);
                     self.store_inode(&inode)?;
+                    if let Some(links) = parent_links {
+                        let mut parent_inode = p;
+                        put16(&mut parent_inode.raw, 26, links);
+                        self.store_inode(&parent_inode)?;
+                    }
                     return Ok(child);
                 }
                 at += length;
@@ -678,20 +752,154 @@ impl Ext2 {
         }
         Err(NOT_FOUND)
     }
+    fn rename_inner(
+        &mut self,
+        parent: u32,
+        name: &str,
+        destination: u32,
+        new: &str,
+    ) -> Result<(), i64> {
+        if new.is_empty()
+            || new.len() > 255
+            || new == "."
+            || new == ".."
+            || new.contains(['/', '\0'])
+        {
+            return Err(INVALID_ARGUMENT);
+        }
+        let entries = self.entries(parent)?;
+        let source = entries
+            .iter()
+            .find(|e| &e.name[..e.length] == name.as_bytes())
+            .ok_or(NOT_FOUND)?
+            .inode;
+        let source_directory = self.inode(source)?.directory;
+        if parent == destination && name == new {
+            return Ok(());
+        }
+        let target = self
+            .entries(destination)?
+            .iter()
+            .find(|e| &e.name[..e.length] == new.as_bytes())
+            .map(|e| e.inode);
+        // Same-parent, absent-destination directory moves retain dot-dot and parent link counts.
+        if source_directory && (parent != destination || target.is_some()) {
+            return Err(UNSUPPORTED);
+        }
+        if target.is_some_and(|n| self.inode(n).is_ok_and(|x| x.directory)) {
+            return Err(IS_DIRECTORY);
+        }
+        let directory = self.inode(destination)?;
+        let needed = (8 + new.len()).next_multiple_of(4);
+        let mut slot = None;
+        for index in 0..directory.size / BLOCK {
+            let address = self.data_pointer(&directory, index)?;
+            let mut bytes = buffer()?;
+            self.read_block(address, &mut bytes)?;
+            let mut at = 0;
+            while at < BLOCK {
+                let (child, length, n) = directory_record(&bytes, at)?;
+                if child != 0 && &bytes[at + 8..at + 8 + n] == new.as_bytes() {
+                    slot = Some((address, at, 0, length));
+                    break;
+                }
+                let used = if child == 0 {
+                    0
+                } else {
+                    (8 + n).next_multiple_of(4)
+                };
+                if target.is_none() && length - used >= needed {
+                    slot = Some((address, at, used, length));
+                    break;
+                }
+                at += length;
+            }
+            if slot.is_some() {
+                break;
+            }
+        }
+        let (address, at, used, length) = slot.ok_or(NO_SPACE)?;
+        self.begin()?;
+        let mut bytes = buffer()?;
+        self.read_block(address, &mut bytes)?;
+        if used != 0 {
+            put16(&mut *bytes, at + 4, used as u16);
+        }
+        record(
+            &mut bytes,
+            at + used,
+            length - used,
+            source,
+            new,
+            if source_directory { 2 } else { 1 },
+        );
+        self.write_block(address, &bytes)?;
+        // Re-read the source block after destination publication, including same-block renames.
+        let directory = self.inode(parent)?;
+        let mut removed = false;
+        for index in 0..directory.size / BLOCK {
+            let block = self.data_pointer(&directory, index)?;
+            self.read_block(block, &mut bytes)?;
+            let mut at = 0;
+            while at < BLOCK {
+                let (child, length, n) = directory_record(&bytes, at)?;
+                if child == source && &bytes[at + 8..at + 8 + n] == name.as_bytes() {
+                    put32(&mut *bytes, at, 0);
+                    self.write_block(block, &bytes)?;
+                    removed = true;
+                    break;
+                }
+                at += length;
+            }
+            if removed {
+                break;
+            }
+        }
+        if !removed {
+            return Err(INVALID_FILESYSTEM);
+        }
+        if let Some(target) = target {
+            let mut inode = self.inode(target)?;
+            put16(&mut inode.raw, 26, 0);
+            self.store_inode(&inode)?;
+        }
+        Ok(())
+    }
     fn release_unlinked_inner(&mut self, number: u32) -> Result<(), i64> {
         let mut inode = self.inode(number)?;
         if u16_at(&inode.raw, 26) != 0 {
             return Err(INVALID_ARGUMENT);
         }
-        self.truncate(number)?;
-        self.sync()?;
-        inode.raw.fill(0);
-        self.store_inode(&inode)?;
+        let directory = inode.directory;
+        if directory {
+            if !self.entries(number)?.is_empty() {
+                return Err(NOT_EMPTY);
+            }
+            let old = inode;
+            inode.raw.fill(0);
+            self.store_inode(&inode)?;
+            self.sync()?;
+            for index in 0..old.size.div_ceil(BLOCK) {
+                let block = self.data_pointer(&old, index)?;
+                if block != 0 {
+                    self.free_block(block)?;
+                }
+            }
+            let indirect = u32_at(&old.raw, 88);
+            if indirect != 0 {
+                self.free_block(indirect)?;
+            }
+        } else {
+            self.truncate(number)?;
+            self.sync()?;
+            inode.raw.fill(0);
+            self.store_inode(&inode)?;
+        }
         let mut bitmap = buffer()?;
         self.read_block(self.inode_bitmap, &mut bitmap)?;
         set_bit(&mut *bitmap, number - 1, false);
         self.write_block(self.inode_bitmap, &bitmap)?;
-        self.counters(0, 1, 0)
+        self.counters(0, 1, -i32::from(directory))
     }
     fn validate_allocation(&mut self) -> Result<(), i64> {
         let mut blocks = buffer()?;

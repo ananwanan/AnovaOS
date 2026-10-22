@@ -51,7 +51,15 @@ for name, url, expected, directory in inputs:
         raise RuntimeError('Input checksum mismatch: '+name)
     if not (work/directory).exists():
         with tarfile.open(archive) as source:
-            source.extractall(work, filter='data')
+            def safe_member(member, destination):
+                # The locked bootstrap has one guest-absolute loader link. Relocate
+                # that exact link into its sysroot; retain data_filter for all paths.
+                if (name == 'bootstrap.tgz' and member.issym()
+                        and member.name == directory+'/lib/ld-musl-x86_64.so.1'
+                        and member.linkname == '/lib/libc.so'):
+                    member = member.replace(linkname='libc.so')
+                return tarfile.data_filter(member, destination)
+            source.extractall(work, filter=safe_member)
 
 if stamp.exists() and stamp.read_text().strip() == recipe.hexdigest():
     if (work/'stage.sha256').read_text() != stage_manifest():

@@ -1,0 +1,28 @@
+{
+  "purpose": "Pin official Rust 1.90.0 musl host tools and matching standard libraries; preserve upstream binary provenance.",
+  "version": "1.90.0",
+  "target": "x86_64-unknown-linux-musl",
+  "sources": [
+    {
+      "name": "rustc-1.90.0-x86_64-unknown-linux-musl.tar.xz",
+      "url": "https://static.rust-lang.org/dist/2025-09-18/rustc-1.90.0-x86_64-unknown-linux-musl.tar.xz",
+      "sha256": "993cb26cee9525b1553d82b8fc2b6ddffd50a0a561cd896e3daa3a9f8ae65949"
+    },
+    {
+      "name": "cargo-1.90.0-x86_64-unknown-linux-musl.tar.xz",
+      "url": "https://static.rust-lang.org/dist/2025-09-18/cargo-1.90.0-x86_64-unknown-linux-musl.tar.xz",
+      "sha256": "dddd1ee3da59440d5aa4d149ebb5fbbe0d7252dd94e171d5f2b071d7354f9b3a"
+    },
+    {
+      "name": "rust-std-1.90.0-x86_64-unknown-linux-musl.tar.xz",
+      "url": "https://static.rust-lang.org/dist/2025-09-18/rust-std-1.90.0-x86_64-unknown-linux-musl.tar.xz",
+      "sha256": "38490d575786f4688e83b357baeb022d8dde0ace2cb8c1357e060c76644fc56a"
+    }
+  ],
+  "vendor": {
+    "name": "itoa",
+    "version": "1.0.15",
+    "sha256": "4a5f13b858c8d314ee3e8f639011f7ccefe71f97f96e50151fb991f267928e2c",
+    "url": "https://static.crates.io/crates/itoa/itoa-1.0.15.crate"
+  }
+}
