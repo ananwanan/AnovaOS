@@ -7,6 +7,7 @@ mod linux;
 mod purposes;
 mod smoke;
 mod terminal;
+mod transcript;
 
 use std::{
     boxed::Box,
@@ -193,7 +194,7 @@ fn execute() -> Result<()> {
             for (mode, timeout, expected) in [
                 (Mode::Boot, 30, Ok(())),
                 (Mode::Panic, 30, Err(smoke::Failure::Panic)),
-                (Mode::Timeout, 8, Err(smoke::Failure::Timeout)),
+                (Mode::Timeout, 30, Err(smoke::Failure::Timeout)),
                 (Mode::InvalidOpcode, 30, Err(smoke::Failure::Exception)),
                 (Mode::GeneralProtection, 30, Err(smoke::Failure::Exception)),
                 (Mode::PageFault, 30, Err(smoke::Failure::Exception)),

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Gate purpose coverage, native/Linux CLI, storage/editor and complete QEMU/terminal regressions.
+# Gate purpose coverage, native/Linux runtime, storage/editor and complete QEMU/terminal regressions.
 name: Bare-metal boot
 
 on:
@@ -51,7 +51,7 @@ jobs:
         run: cargo xtask fetch
       - name: Check prerequisites
         run: cargo xtask doctor
-      - name: Verify VFS, shell, scheduling, user isolation, memory and traps
+      - name: Verify M9 pthread/signals/dynamic musl, VFS, isolation, memory and traps
         run: cargo xtask verify
       - name: Verify real serial input and volatile tmpfs across boots
         run: cargo xtask terminal-test

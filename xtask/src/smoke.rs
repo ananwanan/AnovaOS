@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Require CPU/memory/native/Linux/process/filesystem/storage proof and the real QEMU exit result.
+//! Require CPU/memory/native/Linux runtime, process, filesystem and storage proof plus QEMU exits.
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Failure {
@@ -81,6 +81,25 @@ pub fn assess(log: &str, code: Option<i32>, timed_out: bool) -> Result<(), Failu
         remaining = &remaining[index + marker.len()..];
     }
     for marker in [
+        "[M9:THREADS] pthread=true TLS=true mutex=true cond=true join=true shared_fd=true futex_timeout=true",
+        "[M9:SHARED] fork_mapping=true futex_cross_process=true",
+        "[M9:SIGNALS] frame=true sigreturn=true SSE=true EINTR=true SA_RESTART=true ppoll_mask=true",
+        "[M9:POLL] nonblocking=true readiness=true timeout=true EOF=true HUP=true NVAL=true",
+        "[M9:LIFECYCLE] exec_thread=true identity=true missing_interpreter=true fault_group=true exit_group=true bad_sigreturn=true",
+        "[M9:TTY] PTY=true lock=true canonical=true raw=true poll=true foreground=true CtrlC=true hangup=true",
+    ] {
+        if log.matches(marker).count() < 3 {
+            return Err(Failure::Markers);
+        }
+    }
+    for marker in [
+        "[M9:DYNAMIC] interpreter=true shared_library=true dlopen=true dynamic_TLS=true missing_library=true",
+        "[M9:MISSING-LIB] Error loading shared library /lib/missing-m9.so: No such file or directory",
+        "[LINUX:INTERPRETER] path=/lib/missing-m9-loader.so errno=-2",
+        "[M9:OOM] shared_metadata=true fork=rolled_back exec=retained spawn=rolled_back frames_restored=true heap_restored=true",
+        "[M9:RECLAIM] image=/bin/linux-threads frames_restored=true heap_restored=true tasks=0 descriptors=0",
+        "[M9:RECLAIM] image=/bin/linux-dynamic frames_restored=true heap_restored=true tasks=0 descriptors=0",
+        "[M9:RECLAIM] image=/bin/linux-pie frames_restored=true heap_restored=true tasks=0 descriptors=0",
         "[LINUX:BOUNDARY] page_end=true vector_fault=true writev_partial=true empty_random=true",
         "[LINUX:MEMORY] partial_oom=rolled_back overlap=retained frames_restored=true heap_restored=true",
         "[LINUX:PROBE] errno=true mmap=true TLS=true fork=true wait=true exec=true env=true CLOEXEC=true SIGPIPE=true random=true sleep=true",
@@ -338,13 +357,35 @@ pub fn reached_oom(log: &str, code: Option<i32>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    macro_rules! runtime_markers {()=>{"[M9:THREADS] pthread=true TLS=true mutex=true cond=true join=true shared_fd=true futex_timeout=true\n[M9:SHARED] fork_mapping=true futex_cross_process=true\n[M9:SIGNALS] frame=true sigreturn=true SSE=true EINTR=true SA_RESTART=true ppoll_mask=true\n[M9:POLL] nonblocking=true readiness=true timeout=true EOF=true HUP=true NVAL=true\n[M9:LIFECYCLE] exec_thread=true identity=true missing_interpreter=true fault_group=true exit_group=true bad_sigreturn=true\n[M9:TTY] PTY=true lock=true canonical=true raw=true poll=true foreground=true CtrlC=true hangup=true\n"};}
     const GOOD: &str = concat!(
+        runtime_markers!(),
+        runtime_markers!(),
+        runtime_markers!(),
+        "[M9:DYNAMIC] interpreter=true shared_library=true dlopen=true dynamic_TLS=true missing_library=true\n[M9:MISSING-LIB] Error loading shared library /lib/missing-m9.so: No such file or directory\n[LINUX:INTERPRETER] path=/lib/missing-m9-loader.so errno=-2\n[M9:OOM] shared_metadata=true fork=rolled_back exec=retained spawn=rolled_back frames_restored=true heap_restored=true\n[M9:RECLAIM] image=/bin/linux-threads frames_restored=true heap_restored=true tasks=0 descriptors=0\n[M9:RECLAIM] image=/bin/linux-dynamic frames_restored=true heap_restored=true tasks=0 descriptors=0\n[M9:RECLAIM] image=/bin/linux-pie frames_restored=true heap_restored=true tasks=0 descriptors=0\n",
         "[LINUX:BOUNDARY] page_end=true vector_fault=true writev_partial=true empty_random=true\n",
         "[LINUX:MEMORY] partial_oom=rolled_back overlap=retained frames_restored=true heap_restored=true\n[LINUX:PROBE] errno=true mmap=true TLS=true fork=true wait=true exec=true env=true CLOEXEC=true SIGPIPE=true random=true sleep=true\n[LINUX:MUSL] TLS=true malloc=true errno=true file=true\n[LINUX:BUSYBOX] applet=echo passed=true\n[LINUX:BUSYBOX] applet=ls passed=true\n[LINUX:BUSYBOX] applet=cat passed=true\n[LINUX:SHELL] bytes=12 redirection=true verified=true\n[LINUX:SHELL] bytes=5000 redirection=true verified=true\nM8-status-1\n",
         "[BOOT:ENTRY]\n[BOOT:PROTOCOL]\n[BOOT:MEMORY]\n[CPU:PAGING]\n[CPU:TABLES]\n[TRAP:BREAKPOINT] saved_if=0 return=iretq\n[CPU:ACPI]\n[CPU:IOAPIC]\n[CPU:APIC]\n[MM:FRAMES]\n[MM:TABLES] boot_table_refs=0 NX=on WP=on direct_map=NX\n[MM:HEAP]\n[MM:STACK]\n[MM:TEST] mappings=256 invalid_free=rejected frame_oom=recovered map_oom=rolled_back\n[MM:ALLOC] coalesced=true fallible_oom=recovered used=0\n[MM:READY]\n[CPU:TIMER] ticks=8 monotonic_ns=80000000\n[TRAP:BREAKPOINT] saved_if=1 return=iretq\n",
         "[USER:CPU] syscall=true return=iretq\n[APP:RUST] args: hello-rust AnovaOS ring3; BSS=zero x87/SSE2=ok\n[USER:EXIT] pid=1 status=0\n[APP:C] args: hello-c native-v1; BSS=zero SSE2=ok\n[USER:EXIT] pid=2 status=7\n[USER:COPYFAULT] write=false recovered=true\n[USER:COPYFAULT] write=true recovered=true\n[USER:LOADER] partial_oom=rolled_back\n[USER:CASE] name=syscalls passed=true\n[USER:CASE] name=timer passed=true\n[USER:CASE] name=page-fault passed=true\n[USER:CASE] name=kernel-read passed=true\n[USER:CASE] name=kernel-write passed=true\n[USER:CASE] name=stack-guard passed=true\n[USER:CASE] name=invalid-opcode passed=true\n[USER:CASE] name=privileged passed=true\n[USER:CASE] name=bad-rsp passed=true\n[USER:CASE] name=read-only passed=true\n[USER:CASE] name=no-execute passed=true\n[USER:TEST] cases=11 repeated=8 pointers=rejected syscalls=checked faults=contained frames_restored=true user_irqs=1\n",
         "[PROC:OOM] spawn=rolled_back fork=rolled_back exec=retained frames_restored=true heap_restored=true\n[PROC:WORKER] GPR/XMM0-15/x87/MXCSR preserved\n[PROC:WORKER] GPR/XMM0-15/x87/MXCSR preserved\n[PROC:CASE] preemption-fpu-fault passed=true\n[PROC:CASE] fork-private-fd passed=true\n[PROC:CASE] fork-cpu-state passed=true\n[PROC:CASE] exec-reset-retain-fd passed=true\n[PROC:CASE] wait-any-orphan-repeat passed=true\n[PROC:CASE] capacity-reuse passed=true\n[SCHED:TEST] preemptions=4 preempt_switches=3 switches=8 sleeps=4 waits=16 idle_halts=3 forks=2 execs=1 spawns=55 reaps=57\n[SCHED:READY] processes_reclaimed=true descriptors=0 frames_restored=true heap_restored=true\n[USER:READY]\n[VFS:MOUNTS]\n[PCI:BLK]\n[BLK:READY]\n[BLK:BOUNDS] last_sector=ok capacity=reject overflow=reject flush=ok\n[DISK:MOUNT] /persist=ext2:rw\n[INIT:START] pid=1\n[FS:CASE] paths-copy-offset-fork-exec-cwd passed=true\n[FS:CASE] pipe-block-drain-eof-broken passed=true\n[FS:CASE] limits-rollback-reuse passed=true\n[FS:CASE] tmpfs-oom-rollback passed=true\n[DISK:TEST] offsets=true fork=true indirect=true sparse=true unlink=true reuse=true negatives=true\n[FS:TEST] passed=true\n[SHELL:STATUS] code=0\n[SHELL:STATUS] code=7\n[SHELL:STATUS] code=127\n[SHELL:STATUS] code=1\n[SHELL:STATUS] code=2\n[SHELL:TEST] files=verified pipeline_bytes=5000 redirection=true cwd=true\n[INIT:TEST] shell_status=0 children_reaped=true\n[VFS:IO] blocks=3 wakes=3 open_descriptions=0 pipes=0\n[BLK:RESET] acknowledged=true dma_released=true\n[VFS:READY] frames_restored=true heap_restored=true tmpfs=volatile\n[BOOT:OK]\n[TEST:PASS]\n",
     );
+
+    #[test]
+    fn runtime_gate_requires_all_three_program_profiles_and_real_cleanup() {
+        for marker in [
+            "[M9:THREADS]",
+            "[M9:SIGNALS]",
+            "[M9:TTY]",
+            "[M9:OOM]",
+            "[M9:RECLAIM] image=/bin/linux-dynamic",
+            "[M9:DYNAMIC]",
+        ] {
+            assert_eq!(
+                assess(&GOOD.replacen(marker, "[REMOVED]", 1), Some(33), false),
+                Err(Failure::Markers)
+            );
+        }
+    }
 
     #[test]
     fn requires_both_ordered_stages_and_debug_exit() {

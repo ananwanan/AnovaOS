@@ -5,7 +5,7 @@
 
 用 Rust 从零开发的 x86_64 操作系统，目标是在自己的系统中编辑、编译、调试和运行应用，并逐步兼容部分现有 Linux 软件。
 
-**当前状态：M0–M8 已通过本地 QEMU q35/TCG 验证。原生进程、VFS、管道、init 和串口 shell 现已接入现代 virtio-blk、挂载于 `/persist` 的受限 ext2、文本编辑器、sync/fsync 与正常 ACPI 关机。同一个显式持久盘经过关机/重启后，源码和原生二进制校验一致。普通 `run` 使用临时盘，`/tmp` 仍然易失；显式静态 Linux ABI 已运行 musl 1.2.4 测试程序和固定 BusyBox 1.36.1 的 echo/ls/cat/ash 子集，受测管道和重定向通过；自定义信号处理器、动态链接和通用 Linux 兼容仍待实现，外设 IRQ 保持屏蔽。**
+**当前状态：M0–M9 已通过本地 QEMU q35/TCG 验证。原生应用、VFS、管道、init/shell、现代 virtio-blk 和 `/persist` 受限 ext2 已支持源码编辑、sync/fsync、正常关机及重启保留。受限 Linux profile 已运行 musl 1.2.4 静态、静态 PIE 和动态程序，验证 pthread/TLS/futex、真实信号处理与中断/重启、poll、非阻塞 I/O、四组 PTY，以及启动共享库、dlopen 和动态 TLS；保留固定 BusyBox 1.36.1 echo/ls/cat/ash 子集。当前单核，共 32 个进程/线程槽；通用 Linux/glibc、网络及系统内编译器仍未实现，外设 IRQ 保持屏蔽。**
 
 项目仓库：[ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS)。
 
@@ -66,6 +66,9 @@
 | [docs/validation/M6.md](docs/validation/M6.md) | 文件、shell、管道、终端与 tmpfs 重启丢失验证 |
 | [docs/M7_STORAGE.md](docs/M7_STORAGE.md) | PCI/virtio 所有权、ext2 范围、同步关机、磁盘镜像与编辑器 |
 | [docs/validation/M7.md](docs/validation/M7.md) | 重启后的源码/二进制校验、设备错误与回归证据 |
+| [docs/M8_LINUX.md](docs/M8_LINUX.md) | 静态 Linux ABI、固定 musl/BusyBox 构建与受测 CLI 范围 |
+| [docs/M9_RUNTIME.md](docs/M9_RUNTIME.md) | 线程、信号、终端、动态 musl 与所有权边界 |
+| [docs/validation/M9.md](docs/validation/M9.md) | 运行时哈希、宿主对照、QEMU 验收与回归证据 |
 | [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) | 强制开发需求，包括文件用途说明 |
 | [docs/FILE_PURPOSES.md](docs/FILE_PURPOSES.md) | 仓库中每个文件的用途 |
 | [docs/STATUS.md](docs/STATUS.md) | 当前已实现能力和下一步 |
@@ -120,11 +123,11 @@ cargo xtask root-image build/disks/work.ext2 # 创建新的持久数据盘
 cargo xtask run --disk build/disks/work.ext2 # 复用此盘，在系统内 shutdown 正常关机
 ```
 
-以上命令已在宿主 `xtask` 包中实现。镜像、缓存、日志和临时固件变量副本均位于 `build/`；普通启动使用临时数据盘、不连接网络。GitHub Actions 已配置相同检查，其运行结果与 [本地验收](docs/validation/M7.md) 分开记录。
+以上命令已在宿主 `xtask` 包中实现。镜像、缓存、日志和临时固件变量副本均位于 `build/`；普通启动使用临时数据盘、不连接网络。GitHub Actions 已配置相同检查，其运行结果与 [本地验收](docs/validation/M9.md) 分开记录。
 
 ## 下一步
 
-M8 将加入独立的 Linux syscall personality 和固定静态 CLI 程序兼容测试。当前磁盘和编辑器范围见 [M7 存储设计](docs/M7_STORAGE.md)，另见 [当前状态](docs/STATUS.md) 和 [路线图](ROADMAP.md)。
+M8/M9 已加入独立 Linux syscall personality、受测静态 CLI，以及受限的线程、信号、终端和动态 musl 运行时。当前磁盘和编辑器范围见 [M7 存储设计](docs/M7_STORAGE.md)，另见 [当前状态](docs/STATUS.md) 和 [路线图](ROADMAP.md)。
 
 ## 许可证
 
@@ -136,3 +139,13 @@ M8 将加入独立的 Linux syscall personality 和固定静态 CLI 程序兼容
 
 详见 [M8 静态 Linux CLI](docs/M8_LINUX.md)，包含边界、构建依赖以及 `cargo xtask trace-compat` / `cargo xtask test-compat`。
 普通串口会话可执行 `/linux/sh`，进入后使用 `/linux/echo`、`/linux/cat` 和 `/linux/ls`。
+
+## M9 musl 运行时
+
+```sh
+linux-threads
+linux-pie
+linux-dynamic
+```
+
+在原生 shell 输入以上命令可启动独立 Linux 用户 ELF，验证 pthread/futex、共享内存、信号、就绪等待和 PTY；linux-dynamic 还会实际装载共享库和动态 TLS。支持范围、资源限制、缺库诊断和作业控制边界见 [M9 运行时](docs/M9_RUNTIME.md) 与 [M9 验证](docs/validation/M9.md)。native v1 和持久盘的 ABI 策略保留各自契约。

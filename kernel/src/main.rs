@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #![no_std]
 #![no_main]
-//! Boot CPU/memory/PCI ownership and run native processes with a persistent disk and shell.
+//! Boot CPU/memory/PCI ownership and run native/Linux workloads with persistent storage and a shell.
 
 extern crate alloc;
 
@@ -107,7 +107,7 @@ extern "C" fn kernel_main(timer_port: u64, timer_mask: u64) -> ! {
     mm::inject_fault();
     task::start();
     serial::write(format_args!(
-        "[BOOT:OK] M8 native/Linux CLI processes reclaimed; BSP idle, interrupts enabled\n"
+        "[BOOT:OK] M9 native/Linux runtime processes reclaimed; BSP idle, interrupts enabled\n"
     ));
     #[cfg(feature = "qemu-test")]
     {

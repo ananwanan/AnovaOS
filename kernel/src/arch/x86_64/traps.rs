@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Stable Rust uses explicit assembly entries, not the unstable x86-interrupt ABI.
-//! All gates clear IF. Kernel traps diagnose, user faults terminate one app;
-//! native syscalls and narrowly guarded usercopy faults return through IRETQ.
+//! All gates clear IF. Kernel traps diagnose; user traps enter native fault or Linux signal policy.
+//! Native/Linux syscalls and narrowly guarded usercopy faults return through checked IRETQ.
 use super::{apic, cpu, paging::EarlyMapper};
 use crate::serial;
 use anova_platform::VirtAddr;
@@ -193,20 +193,20 @@ pub fn init(mapper: &mut EarlyMapper<'_>) {
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub struct TrapFrame {
-    r15: u64,
-    r14: u64,
-    r13: u64,
-    r12: u64,
-    r11: u64,
+    pub r15: u64,
+    pub r14: u64,
+    pub r13: u64,
+    pub r12: u64,
+    pub r11: u64,
     pub r10: u64,
     pub r9: u64,
     pub r8: u64,
     pub rdi: u64,
     pub rsi: u64,
-    rbp: u64,
+    pub rbp: u64,
     pub rdx: u64,
-    rcx: u64,
-    rbx: u64,
+    pub rcx: u64,
+    pub rbx: u64,
     pub rax: u64,
     pub vector: u64,
     pub error: u64,

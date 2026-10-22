@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Schedule bounded native/Linux processes on one BSP with private roots/stacks and saved CPU state.
+//! Schedule bounded native/Linux processes and shared-root threads with private stacks on one BSP.
 //! User traps only capture state; lifecycle, copying and reclamation run on the kernel root.
 mod linux;
 mod loader;
@@ -56,6 +56,7 @@ struct Process {
     wait: Option<(u64, UserAddr)>,
     cwd: usize,
     io: Option<TrapFrame>,
+    thread: linux::threads::Thread,
 }
 static CAPTURE: AtomicPtr<user::Context> = AtomicPtr::new(ptr::null_mut());
 static USER_IRQS: AtomicU64 = AtomicU64::new(0);
@@ -125,8 +126,31 @@ impl Kernel {
             processes,
             metrics: Metrics::default(),
             fs: Vfs::new(boot::initramfs()).map_err(|_| anova_memory::Error::OutOfMemory)?,
-            terminal: fs::Terminal::new(),
+            terminal: fs::Terminal::new().map_err(|_| anova_memory::Error::OutOfMemory)?,
         })
+    }
+    fn load_image(
+        &mut self,
+        bytes: &[u8],
+        personality: &str,
+        args: &[&str],
+        env: &[&str],
+    ) -> Result<loader::Loaded, loader::LoadError> {
+        let data = if personality == anova_abi::linux::PERSONALITY {
+            match anova_elf::interpreter(bytes)? {
+                Some(path) => Some(self.fs.load_executable(ROOT, path).map_err(|error| {
+                    serial::write(format_args!(
+                        "[LINUX:INTERPRETER] path={path} errno={}\n",
+                        anova_abi::linux::errno(error)
+                    ));
+                    loader::LoadError::Interpreter(anova_abi::linux::errno(error))
+                })?),
+                None => None,
+            }
+        } else {
+            None
+        };
+        loader::load_interpreter(bytes, personality, args, env, data.as_deref())
     }
     fn process(&self, i: usize) -> &Process {
         self.processes[i].as_ref().expect("Missing process")
@@ -148,10 +172,12 @@ impl Kernel {
         let i = self.policy.insert(parent)?;
         let result = (|| {
             let stack = mm::user::KernelStack::new(i).map_err(|_| NO_MEMORY)?;
-            let image = loader::load(bytes, personality, args).map_err(|e| match e {
-                loader::LoadError::Memory(_) => NO_MEMORY,
-                _ => INVALID_ARGUMENT,
-            })?;
+            let image = self
+                .load_image(bytes, personality, args, &[])
+                .map_err(|e| match e {
+                    loader::LoadError::Memory(_) => NO_MEMORY,
+                    _ => INVALID_ARGUMENT,
+                })?;
             let context = user::Context::new(image.entry, image.stack);
             let (files, cwd) = if parent == 0 {
                 (self.fs.standard()?, ROOT)
@@ -163,7 +189,7 @@ impl Kernel {
                     .find(|(slot, p)| p.is_some() && self.policy.entry(*slot).pid == parent)
                     .map(|(_, p)| p.as_ref().unwrap())
                     .ok_or(NO_CHILD)?;
-                (self.fs.inherit(&parent.files), parent.cwd)
+                (self.fs.inherit(&parent.files)?, parent.cwd)
             };
             Ok(Process {
                 image: Some(image),
@@ -173,6 +199,7 @@ impl Kernel {
                 wait: None,
                 cwd,
                 io: None,
+                thread: linux::threads::Thread::new(self.policy.entry(i).pid),
             })
         })();
         match result {
@@ -201,7 +228,7 @@ impl Kernel {
             .load_executable(ROOT, core::str::from_utf8(&path[..5 + name.len()]).unwrap())
     }
     fn fork(&mut self, parent: usize) -> Result<u64, i64> {
-        let i = self.policy.insert(self.policy.entry(parent).pid)?;
+        let i = self.policy.insert(self.process(parent).thread.tgid)?;
         let result = (|| {
             let stack = mm::user::KernelStack::new(i).map_err(|_| NO_MEMORY)?;
             let old = self.process(parent);
@@ -213,27 +240,34 @@ impl Kernel {
                 sigmask: image.sigmask,
                 ignored: image.ignored,
                 pending: 0,
+                actions: anova_memory::shared::Shared::try_new(core::cell::RefCell::new(
+                    *image.actions.borrow(),
+                ))
+                .map_err(|_| NO_MEMORY)?,
                 space: image.space.clone_eager().map_err(|_| NO_MEMORY)?,
                 entry: image.entry,
                 stack: image.stack,
             };
             let mut context = old.context;
+            let cwd = old.cwd;
             context.frame.rax = 0;
             Ok(Process {
                 image: Some(image),
                 stack: Some(stack),
                 context,
-                files: Descriptors::default(),
+                files: self
+                    .fs
+                    .inherit(&self.processes[parent].as_ref().unwrap().files)?,
                 wait: None,
-                cwd: old.cwd,
+                cwd,
                 io: None,
+                thread: linux::threads::Thread::new(self.policy.entry(i).pid),
             })
         })();
         match result {
             Ok(mut process) => {
-                process.files = self
-                    .fs
-                    .inherit(&self.processes[parent].as_ref().unwrap().files);
+                process.thread.pgid = self.process(parent).thread.pgid;
+                process.thread.sid = self.process(parent).thread.sid;
                 self.processes[i] = Some(process);
                 self.metrics.forks += 1;
                 Ok(self.policy.entry(i).pid)
@@ -255,17 +289,30 @@ impl Kernel {
         args: &[&str],
         personality: &str,
     ) -> Result<(), i64> {
-        let image = loader::load(bytes, personality, args).map_err(|e| match e {
-            loader::LoadError::Memory(_) => NO_MEMORY,
-            _ => INVALID_ARGUMENT,
-        })?;
+        let image = self
+            .load_image(bytes, personality, args, &[])
+            .map_err(|e| match e {
+                loader::LoadError::Memory(_) => NO_MEMORY,
+                _ => INVALID_ARGUMENT,
+            })?;
         let p = self.process_mut(i);
         p.context = user::Context::new(image.entry, image.stack);
+        let linux = image.linux;
         p.image = Some(image);
+        if linux {
+            serial::write(format_args!(
+                "[LINUX:EXEC] image={} dynamic={}\n",
+                args.first().copied().unwrap_or(""),
+                anova_elf::interpreter(bytes).ok().flatten().is_some()
+            ));
+            let group = self.process(i).thread.pgid;
+            self.terminal.set_foreground(group);
+        }
         self.metrics.execs += 1;
         Ok(())
     }
     fn finish(&mut self, i: usize, outcome: Outcome) {
+        self.linux_clear_tid(i);
         let pid = self.policy.entry(i).pid;
         match outcome {
             Outcome::Signal(signal) => {
@@ -287,20 +334,15 @@ impl Kernel {
             }
         }
         let p = self.processes[i].as_mut().unwrap();
-        if let Some(image) = &p.image
-            && image.linux
-            && image.clear_tid != 0
-        {
-            let _ = image.space.with_active(|| {
-                mm::uaccess::to_user(&image.space, UserAddr(image.clear_tid), &[0; 4])
-            });
-        }
         drop(p.image.take());
         drop(p.stack.take());
         self.fs.clear(&mut p.files);
         p.io = None;
         p.wait = None;
+        p.thread.blocked = None;
+        p.thread.saved_mask = None;
         self.policy.exit(i, outcome.status());
+        self.linux_notify_exit(i, outcome);
     }
     fn reap(&mut self, i: usize) {
         self.processes[i] = None;
@@ -506,6 +548,7 @@ impl Kernel {
         let mut preempted = false;
         loop {
             self.terminal.poll();
+            self.linux_wake();
             for i in 0..CAPACITY {
                 if self.policy.entry(i).state == State::Blocked {
                     let p = self.process(i);
@@ -524,7 +567,22 @@ impl Kernel {
             }
             for i in 0..CAPACITY {
                 let e = self.policy.entry(i);
-                if e.parent == 0 && matches!(e.state, State::Zombie(_)) {
+                if (e.parent == 0
+                    || self.processes[i]
+                        .as_ref()
+                        .is_some_and(|p| p.thread.tgid != e.pid))
+                    && matches!(e.state, State::Zombie(_))
+                {
+                    if e.pid == root_pid
+                        && root_outcome.is_none()
+                        && let State::Zombie(status) = e.state
+                    {
+                        root_outcome = Some(if status.reason == 3 {
+                            Outcome::Signal(status.code)
+                        } else {
+                            Outcome::Exit(status.code)
+                        });
+                    }
                     self.reap(i);
                 }
             }
@@ -547,11 +605,17 @@ impl Kernel {
             previous = Some(i);
             preempted = false;
             if let Some(signal) = self.linux_pending(i) {
-                self.finish(i, Outcome::Signal(signal));
-                if self.policy.entry(i).pid == root_pid {
-                    root_outcome = Some(Outcome::Signal(signal));
+                match self.deliver_signal(i, signal) {
+                    Ok(true) => {}
+                    Ok(false) => continue,
+                    Err(signal) => {
+                        self.linux_exit_group(i, Outcome::Signal(signal));
+                        if self.policy.entry(i).pid == root_pid {
+                            root_outcome = Some(Outcome::Signal(signal));
+                        }
+                        continue;
+                    }
                 }
-                continue;
             }
             if let Some((pid, output)) = self.process_mut(i).wait.take() {
                 match self.wait(i, pid, output) {
@@ -573,7 +637,18 @@ impl Kernel {
                     continue;
                 }
             }
+            if self.process(i).thread.blocked.is_some()
+                || self.process(i).thread.stopped
+                || self.process(i).thread.leader_exit.is_some()
+            {
+                self.policy.block(i);
+                continue;
+            }
             if !self.valid_return(i) {
+                if self.process(i).image.as_ref().unwrap().linux {
+                    self.linux_bad_return(i);
+                    continue;
+                }
                 self.finish(i, Outcome::BadReturn);
                 if self.policy.entry(i).pid == root_pid {
                     root_outcome = Some(Outcome::BadReturn);
@@ -625,6 +700,10 @@ impl Kernel {
                     error: f.error,
                     address: FAULT_ADDRESS.load(Ordering::Relaxed),
                 };
+                if self.process(i).image.as_ref().unwrap().linux {
+                    self.linux_exception(i, &f, FAULT_ADDRESS.load(Ordering::Relaxed));
+                    continue;
+                }
                 self.finish(i, outcome);
                 if self.policy.entry(i).pid == root_pid {
                     root_outcome = Some(outcome);
@@ -807,6 +886,16 @@ fn checked_run(bytes: &[u8], args: &[&str], pid: u64, expected: Outcome) {
     );
     assert_eq!(mm::heap_used(), heap, "Process leaked heap storage");
     serial::write(format_args!("[USER:REAP] pid={pid} frames_restored=true\n"));
+    if let Some(name) = args.first().filter(|name| {
+        matches!(
+            **name,
+            "/bin/linux-threads" | "/bin/linux-dynamic" | "/bin/linux-pie"
+        )
+    }) {
+        serial::write(format_args!(
+            "[M9:RECLAIM] image={name} frames_restored=true heap_restored=true tasks=0 descriptors=0\n"
+        ));
+    }
 }
 pub fn start() {
     cpu::without_interrupts(user::init);
@@ -852,6 +941,9 @@ pub fn start() {
         ("/bin/linux-probe", &["/bin/linux-probe"][..]),
         ("/bin/linux-probe", &["/bin/linux-probe", "exit-high"][..]),
         ("/bin/linux-musl", &["/bin/linux-musl", "test"][..]),
+        ("/bin/linux-threads", &["/bin/linux-threads"][..]),
+        ("/bin/linux-dynamic", &["/bin/linux-dynamic"][..]),
+        ("/bin/linux-pie", &["/bin/linux-pie"][..]),
     ] {
         let bytes = Vfs::new(boot::initramfs())
             .unwrap()

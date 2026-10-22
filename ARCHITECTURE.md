@@ -1,7 +1,7 @@
 <!-- Describe implemented subsystem boundaries and the planned operating-system architecture. -->
 # 架构设计
 
-本文描述目标架构；以下启动、M2 BSP 异常/时钟、M3 内存、M4 隔离用户应用与 M5 单核调度子集已实现，其余部分仍为规划。当前能力见 [STATUS](docs/STATUS.md)。
+本文描述目标架构与已实现的 M0–M9 子集：启动、BSP 异常/时钟、内存、隔离用户应用、单核进程/线程、VFS/持久存储和受限 Linux 运行时。后续网络、系统内编译器、SMP 与图形部分仍为规划。当前能力见 [STATUS](docs/STATUS.md)。
 
 ## 1. 总体结构
 
@@ -246,8 +246,8 @@ The explicit initramfs Linux executable kind selects a separate syscall personal
 TLS and bounded process/memory calls; generic VFS and scheduler policy retain
 backend-neutral types. Startup stacks expose checked argv/envp/auxv. Native disk
 image policy remains native v1. Static musl and a pinned BusyBox profile are
-verified; custom signal handlers, dynamic loading, threads and general Linux
-compatibility are not implemented. See [M8 design](docs/M8_LINUX.md).
+verified as the historical M8 baseline. M9 adds the bounded runtime below;
+general Linux compatibility remains unverified. See [M8 design](docs/M8_LINUX.md).
 
 M8 optimization keeps page-bounded C-string/vector decoding in
 `crates/abi/src/linux/strings.rs`, parameterized by the kernel's checked copy
@@ -255,3 +255,25 @@ operation. Exec fills owned buffers in place; no user reference survives the
 activation boundary. The native/Linux stack encoder places payload and words
 once. `kernel/task/linux/io.rs` imports descriptor arrays before I/O and retains
 partial-write progress independently of later user-buffer faults.
+
+## Implemented M9 runtime boundary
+
+The scheduler now admits process leaders and Linux threads in the same 32-slot
+pool. A shared address-space owner, anonymous backing, descriptor tables and
+signal actions use fallible single-thread reference counting from
+`crates/memory/src/shared.rs`; no kernel/hardware dependency is introduced into
+VFS. Root/page-table destruction precedes the last backing release, and no
+Shared/RefCell borrow crosses user execution. Process traps retain 64 KiB guarded
+stacks; the scheduler continuation uses a separate 128 KiB guarded stack.
+
+`kernel/task/linux/threads.rs` translates clone/futex/group exit and deadlines;
+`signals.rs` translates AMD64 frames and checked sigreturn; `terminal.rs` handles
+poll/ppoll, ioctls and group/session requests; `memory.rs` handles mmap/mprotect.
+The common VFS retains descriptor/open/pipe semantics, while `kernel/fs/tty.rs`
+owns bounded COM1/PTY line disciplines. The ELF parser validates executable and
+interpreter metadata; the kernel maps both and supplies auxv, then the real musl
+loader performs relocation/symbol/TLS work in user space.
+
+Dynamic fixtures and test transcripts remain distinct from kernel mechanisms.
+See [M9_RUNTIME](docs/M9_RUNTIME.md) for flags, locking/ownership, unsupported
+operations and [validation/M9](docs/validation/M9.md) for observed results.

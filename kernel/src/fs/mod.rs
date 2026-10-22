@@ -4,102 +4,12 @@
 use crate::{
     arch::x86_64::traps::TrapFrame,
     mm::{uaccess, user::UserSpace},
-    serial,
 };
 use anova_abi::*;
-use anova_vfs::{Descriptors, Device, Vfs};
+use anova_vfs::{Descriptors, Vfs};
 
-pub struct Terminal {
-    line: [u8; 256],
-    length: usize,
-    queue: [u8; 1024],
-    head: usize,
-    count: usize,
-    eof: bool,
-    last_cr: bool,
-}
-impl Terminal {
-    pub fn new() -> Self {
-        Self {
-            line: [0; 256],
-            length: 0,
-            queue: [0; 1024],
-            head: 0,
-            count: 0,
-            eof: false,
-            last_cr: false,
-        }
-    }
-    /// Consume at most 64 UART bytes per scheduler iteration; the 100 Hz timer wakes idle input.
-    pub fn poll(&mut self) {
-        if self.queue.len() - self.count < self.line.len() || self.eof {
-            return;
-        }
-        for _ in 0..64 {
-            let Some(byte) = serial::try_read() else {
-                break;
-            };
-            if byte == b'\n' && self.last_cr {
-                self.last_cr = false;
-                continue;
-            }
-            self.last_cr = byte == b'\r';
-            match byte {
-                8 | 127 if self.length > 0 => {
-                    self.length -= 1;
-                    serial::bytes(b"\x08 \x08");
-                }
-                b'\r' | b'\n' | 4 => {
-                    if byte == 4 && self.length == 0 {
-                        self.eof = true;
-                        break;
-                    }
-                    if byte != 4 {
-                        self.line[self.length] = b'\n';
-                        self.length += 1;
-                        serial::bytes(b"\n");
-                    }
-                    for b in &self.line[..self.length] {
-                        self.queue[(self.head + self.count) % 1024] = *b;
-                        self.count += 1;
-                    }
-                    self.length = 0;
-                    if self.queue.len() - self.count < self.line.len() {
-                        break;
-                    }
-                }
-                32..=126 if self.length < 255 => {
-                    self.line[self.length] = byte;
-                    self.length += 1;
-                    serial::bytes(&[byte]);
-                }
-                _ => {}
-            }
-        }
-    }
-    pub fn ready(&self) -> bool {
-        self.count > 0 || self.eof
-    }
-    fn read(&mut self, output: &mut [u8]) -> Result<usize, i64> {
-        if output.is_empty() {
-            return Ok(0);
-        }
-        if self.count == 0 {
-            if self.eof {
-                self.eof = false;
-                return Ok(0);
-            }
-            return Err(WOULD_BLOCK);
-        }
-        let n = output.len().min(self.count);
-        for b in &mut output[..n] {
-            *b = self.queue[self.head];
-            self.head = (self.head + 1) % 1024;
-            self.count -= 1;
-        }
-        Ok(n)
-    }
-}
+mod tty;
+pub use tty::{Terminal, TerminalSignal};
 fn path(
     space: &UserSpace,
     address: u64,
@@ -118,16 +28,12 @@ fn path(
 }
 pub fn ready(frame: &TrapFrame, files: &Descriptors, vfs: &Vfs<'_>, terminal: &Terminal) -> bool {
     let writing = frame.rax == SYS_WRITE;
-    if !writing
-        && matches!(
-            vfs.device(files, frame.rdi, false),
-            Ok(Some(Device::Console))
-        )
+    if let Ok(Some(device)) = vfs.device(files, frame.rdi, writing)
+        && terminal.is_terminal(device)
     {
-        terminal.ready()
-    } else {
-        vfs.ready(files, frame.rdi, writing)
+        return terminal.endpoint_ready(device, writing, vfs);
     }
+    vfs.ready(files, frame.rdi, writing)
 }
 pub fn syscall(
     frame: &TrapFrame,
@@ -152,15 +58,14 @@ pub fn syscall(
                 let mut bytes = [0; MAX_WRITE];
                 if writing {
                     uaccess::from_user(space, UserAddr(frame.rsi), &mut bytes[..len])?;
-                    if device == Some(Device::Console) {
-                        serial::bytes(&bytes[..len]);
-                        len as i64
+                    if device.is_some_and(|d| terminal.is_terminal(d)) {
+                        terminal.write(device.unwrap(), &bytes[..len], vfs)? as i64
                     } else {
                         vfs.write(files, frame.rdi, &bytes[..len])? as i64
                     }
                 } else {
-                    let n = if device == Some(Device::Console) {
-                        terminal.read(&mut bytes[..len])?
+                    let n = if device.is_some_and(|d| terminal.is_terminal(d)) {
+                        terminal.read(device.unwrap(), &mut bytes[..len], vfs)?
                     } else {
                         vfs.read(files, frame.rdi, &mut bytes[..len])?
                     };

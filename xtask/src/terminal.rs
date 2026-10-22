@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Drive native/Linux CLI through COM1 in ordinary boots, checking editing, EOF and volatile tmpfs.
+//! Drive native/Linux CLI through COM1, checking dynamic musl, Ctrl+C, editing, EOF and volatile tmpfs.
 //! Watchdogs kill only these disposable QEMU guests; a prompt alone is never success evidence.
 use super::*;
 use std::io::Write;
@@ -28,9 +28,13 @@ fn session(root: &Path, iso: &Path, reboot: bool) -> Result<()> {
     let mut cmd = qemu(root, iso, &vars.0, false)?;
     cmd.args(["-serial", "stdio"])
         .stdin(Stdio::piped())
-        .stdout(output)
+        .stdout(Stdio::piped())
         .stderr(error);
     let mut guest = Guest(cmd.spawn()?);
+    let mut transcript = transcript::Transcript::capture(
+        guest.0.stdout.take().ok_or("Missing UART output pipe")?,
+        output,
+    )?;
     let mut input = guest.0.stdin.take().ok_or("Missing UART input pipe")?;
     let exchanges: &[(&str, &[u8])] = if reboot {
         &[
@@ -47,8 +51,11 @@ fn session(root: &Path, iso: &Path, reboot: bool) -> Result<()> {
                 b"cat /tmp/terminal\r",
             ),
             ("\r\nterminal-file\r\n", b"linux-musl test\r"),
-            ("[LINUX:MUSL] TLS=true malloc=true errno=true file=true", b"/linux/sh\r"),
-            ("[LINUX:ENOSYS] nr=13", b"/linux/echo M8-UART | /linux/cat > /tmp/linux-uart; /linux/cat /tmp/linux-uart; exit\r"),
+            ("[LINUX:MUSL] TLS=true malloc=true errno=true file=true", b"linux-dynamic\r"),
+            ("[M9:DYNAMIC] interpreter=true shared_library=true dlopen=true dynamic_TLS=true missing_library=true",b"linux-threads interrupt\r"),
+            ("[M9:UART] waiting",b"\x03"),
+            ("[M9:UART] CtrlC=true EINTR=true",b"/linux/sh\r"),
+            ("[LINUX:EXEC] image=/linux/sh dynamic=false", b"/linux/echo M8-UART | /linux/cat > /tmp/linux-uart; /linux/cat /tmp/linux-uart; exit\r"),
             ("\r\nM8-UART\r\n", b"status\r"),
             ("[SHELL:STATUS] code=0", b"\x04"),
         ]
@@ -56,6 +63,7 @@ fn session(root: &Path, iso: &Path, reboot: bool) -> Result<()> {
     let start = Instant::now();
     let mut step = 0;
     let mut ready_at = None;
+    let mut observed = 0;
     loop {
         if let Some(exit) = guest.0.try_wait()? {
             return Err(format!(
@@ -64,8 +72,8 @@ fn session(root: &Path, iso: &Path, reboot: bool) -> Result<()> {
             )
             .into());
         }
-        let bytes = fs::read(&serial)?;
-        let text = String::from_utf8_lossy(&bytes);
+        transcript.poll()?;
+        let text = transcript.text();
         if text.contains("[PANIC]")
             || text.contains("[EXCEPTION]")
             || text.contains("[INIT:FAIL]")
@@ -73,10 +81,13 @@ fn session(root: &Path, iso: &Path, reboot: bool) -> Result<()> {
         {
             return Err(format!("{name}: guest failure; see {}", serial.display()).into());
         }
-        if step < exchanges.len() && text.contains(exchanges[step].0) {
+        if step < exchanges.len()
+            && let Some(at) = transcript.find_from(observed, exchanges[step].0)
+        {
             // Let the shell actually enter its next blocking read before sending more input.
             let since = *ready_at.get_or_insert_with(Instant::now);
             if since.elapsed() >= Duration::from_millis(80) {
+                observed = at + exchanges[step].0.len();
                 input.write_all(exchanges[step].1)?;
                 input.flush()?;
                 step += 1;
@@ -103,6 +114,7 @@ fn session(root: &Path, iso: &Path, reboot: bool) -> Result<()> {
     }
     guest.0.kill()?;
     guest.0.wait()?;
+    transcript.finish()?;
     drop(guest);
     vars.cleanup()?;
     let evidence = logs.join(format!("{name}.result.txt"));

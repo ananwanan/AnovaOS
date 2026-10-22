@@ -1,7 +1,7 @@
 <!-- Separate verified native support from planned existing-software ABI compatibility. -->
 # 现有软件兼容策略
 
-本文记录现有软件兼容策略与验证矩阵。当前 **M0–M8 已验证自有 native Rust/C 应用、持久存储，以及显式静态 Linux personality 下的 musl 1.2.4 和受限 BusyBox 1.36.1。** 不代表通用 Linux 兼容。静态 ABI 的确切范围见 [M8_LINUX](docs/M8_LINUX.md)；native ABI 和存储仍保持各自边界。
+本文记录兼容策略与验证矩阵。当前 **M0–M9 已验证 native Rust/C、持久存储、受限 BusyBox 1.36.1 CLI，以及 musl 1.2.4 静态、静态 PIE、动态 ELF 和 pthread/TLS/futex、信号、poll、PTY 子集。** 不代表通用 Linux 或 glibc 兼容。静态起点见 [M8_LINUX](docs/M8_LINUX.md)，当前运行时边界见 [M9_RUNTIME](docs/M9_RUNTIME.md)。
 
 ## 1. 兼容层次
 
@@ -69,7 +69,7 @@ musl 和 glibc 是不同的用户态组合。不能混用不匹配的解释器�
 
 ## 4. 首批软件矩阵
 
-自有 native 样例已按 [M4 验证记录](docs/validation/M4.md) 验收，实际 ELF 哈希见该记录和镜像中的应用清单；其他软件仍为计划。
+自有 native 样例已按 [M4 验证记录](docs/validation/M4.md) 验收；受限 Linux 静态 CLI 和 musl 运行时分别见 [M8 验证](docs/validation/M8.md) 与 [M9 验证](docs/validation/M9.md)。实际 ELF 哈希见对应记录和镜像中的应用清单。
 
 | 软件/构建 | 计划阶段 | 首个受测功能 | 当前状态 |
 | --- | --- | --- | --- |
@@ -78,8 +78,8 @@ musl 和 glibc 是不同的用户态组合。不能混用不匹配的解释器�
 | 自有 Linux syscall ELF | M8 | errno、auxv、TLS、fork/exec/env/wait、CLOEXEC、SIGPIPE、匿名内存 | q35/TCG 本地通过 |
 | 静态 musl 1.2.4 hello/file | M8 | TLS、errno、malloc、文件读写 | q35/TCG 本地通过 |
 | BusyBox 1.36.1 受限静态构建 | M8 | echo/ls/cat、指定 sh 管道重定向及退出码 | q35/TCG 本地通过；其他 applet 未验证 |
-| 动态 musl 小程序 | M9 | PT_INTERP、共享库、TLS | 计划 |
-| pthread/futex/信号样例 | M9 | 线程同步、join、信号返回 | 计划 |
+| 动态 musl 1.2.4 小程序 | M9 | PT_INTERP、共享库、dlopen、动态 TLS | q35/TCG 本地通过；受限 profile |
+| musl 静态/静态 PIE/动态 pthread 样例 | M9 | 线程同步、join、futex、信号返回、poll、PTY | q35/TCG 本地通过；完整边界见 M9_RUNTIME |
 | make 与基础构建工具 | M11 | 子进程、文件时间、失败传播 | 计划 |
 | GCC/G++ 受控构建包 | M11 | guest 内编译/链接 C 与 C++ | 计划 |
 | Rust `std` app | M12 前期 | Vec/String、参数、文件 I/O | 计划 |
@@ -108,4 +108,17 @@ musl 和 glibc 是不同的用户态组合。不能混用不匹配的解释器�
 
 重点负例包括：坏地址、部分 I/O、EINTR、无效 fd、EOF、并发关闭、超时、资源不足、文件截断、缺解释器/共享库。按软件需求逐步扩展，不一次追求完整 Linux 测试集。
 
-M8 的确切构建、syscall 子集与限制见 [M8_LINUX](docs/M8_LINUX.md) 和 [验证记录](docs/validation/M8.md)。自定义信号处理器返回 ENOSYS；上述 shell 测试不代表支持 trap、Ctrl+C、作业控制或任意脚本。
+M8 的确切构建、syscall 子集与限制见 [M8_LINUX](docs/M8_LINUX.md) 和 [验证记录](docs/validation/M8.md)。这是 M8 历史记录。M9 已验证声明的自定义信号处理器、原生串口 Ctrl+C、PTY 前台信号及动态 musl；上述 BusyBox shell 测试仍不代表完整交互作业控制或任意脚本。
+
+## M9 measured runtime additions
+
+| Program/input | Result | Boundaries |
+| --- | --- | --- |
+| First-party musl 1.2.4 static ET_EXEC | Verified | pthread/cond/mutex/join, TLS, futex, signals, poll, PTYs, lifecycle negatives |
+| Same source as static PIE | Verified | Musl rcrt1 self-relocation; same runtime cases |
+| Same source as PT_INTERP dynamic ELF | Verified | Actual musl interpreter, startup TLS .so, dlopen after thread creation and dynamic TLS |
+| Missing interpreter / missing dlopen library | Verified rejection | ENOENT leaves exec caller intact; loader names missing library |
+| UART dynamic launch and Ctrl+C | Verified within declared terminal profile | No complete ash jobs, realtime signals or glibc claim |
+
+Exact build flags, runtime checksum, guest evidence, host trace differences and
+remaining limits are in [M9 validation](docs/validation/M9.md).

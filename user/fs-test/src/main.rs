@@ -85,8 +85,19 @@ fn files() {
         assert_eq!(rt::raw(SYS_OPEN, u64::MAX, 128, OPEN_READ), BAD_ADDRESS);
     }
     assert_eq!(&rt::readdir(d).unwrap().unwrap().name[..7], b"console");
-    assert!(rt::readdir(d).unwrap().is_some());
-    assert!(rt::readdir(d).unwrap().is_none());
+    let mut required = 0;
+    let mut entries = 1;
+    while let Some(entry) = rt::readdir(d).unwrap() {
+        entries += 1;
+        assert!(entries <= 16, "Device iteration did not terminate");
+        match &entry.name[..entry.name_len as usize] {
+            b"null" => required |= 1,
+            b"ptmx" => required |= 2,
+            b"pts" => required |= 4,
+            _ => {}
+        }
+    }
+    assert_eq!(required, 7, "Missing console companion or PTY device");
     rt::close(d).unwrap();
     rt::write(b"[FS:CASE] paths-copy-offset-fork-exec-cwd passed=true\n");
 }

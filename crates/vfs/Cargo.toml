@@ -10,3 +10,4 @@ repository.workspace = true
 [dependencies]
 anova-abi = { path = "../abi" }
 anova-storage = { path = "../storage" }
+anova-memory = { path = "../memory" }

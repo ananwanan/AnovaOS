@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #![no_std]
-//! Bounded memory/ext2 VFS mounts, paths, shared open descriptions and byte-stream pipes.
+//! Bounded memory/ext2 mounts, shared descriptors, pipes, PTY lifetimes and immutable file mappings.
 //! One non-preemptible owner serializes all mutations; no hardware, locks or user pointers.
 extern crate alloc;
 pub mod archive;
@@ -14,7 +14,8 @@ use anova_storage::ext2::Ext2;
 pub use fd::Descriptors;
 
 pub const ROOT: usize = 0;
-pub const NODE_LIMIT: usize = 96;
+// Leave room for PTY/library nodes and the independent real heap-exhaustion workload.
+pub const NODE_LIMIT: usize = 128;
 pub const OPEN_LIMIT: usize = 128;
 pub const PIPE_LIMIT: usize = 16;
 pub const PIPE_BYTES: usize = 1024;
@@ -30,6 +31,9 @@ pub enum Mount {
 pub enum Device {
     Console,
     Null,
+    Ptmx,
+    PtyMaster(usize),
+    PtySlave(usize),
 }
 enum Data<'a> {
     Directory,
@@ -74,6 +78,7 @@ pub struct Vfs<'a> {
     pipes: Vec<Option<Pipe>>,
     disk: Option<Ext2>,
     linux: [bool; NODE_LIMIT],
+    pty_unlocked: [bool; 4],
 }
 fn slots<T>(n: usize, mut f: impl FnMut() -> T) -> Result<Vec<T>, i64> {
     let mut v = Vec::new();
@@ -100,6 +105,7 @@ impl<'a> Vfs<'a> {
             pipes: slots(PIPE_LIMIT, || None)?,
             disk: None,
             linux: [false; NODE_LIMIT],
+            pty_unlocked: [false; 4],
         };
         let mut input = archive::Archive::new(archive)?;
         while let Some(entry) = input.entry()? {
@@ -129,6 +135,20 @@ impl<'a> Vfs<'a> {
         let dev = fs.resolve(ROOT, "/dev")?;
         fs.insert(dev, "console", Data::Device(Device::Console), Mount::Devfs)?;
         fs.insert(dev, "null", Data::Device(Device::Null), Mount::Devfs)?;
+        fs.insert(dev, "ptmx", Data::Device(Device::Ptmx), Mount::Devfs)?;
+        let pts = fs.insert(dev, "pts", Data::Directory, Mount::Devfs)?;
+        for (n, (master, slave)) in [("ptm0", "0"), ("ptm1", "1"), ("ptm2", "2"), ("ptm3", "3")]
+            .iter()
+            .enumerate()
+        {
+            fs.insert(
+                dev,
+                master,
+                Data::Device(Device::PtyMaster(n)),
+                Mount::Devfs,
+            )?;
+            fs.insert(pts, slave, Data::Device(Device::PtySlave(n)), Mount::Devfs)?;
+        }
         Ok(fs)
     }
     /// Attach a disk only after its feature/allocation checks. Roll back namespace publication on error.
@@ -538,6 +558,74 @@ impl<'a> Vfs<'a> {
             }
         }
     }
+
+    /// Return immutable initramfs backing for a private executable mapping, independent of fd offset.
+    pub fn mapping_bytes(
+        &self,
+        fds: &Descriptors,
+        fd: u64,
+        offset: u64,
+        length: u64,
+    ) -> Result<&'a [u8], i64> {
+        let open = self.opens[fds.handle(fd)?].unwrap();
+        if open.flags & OPEN_READ == 0 {
+            return Err(BAD_DESCRIPTOR);
+        }
+        let Target::Node(node) = open.target else {
+            return Err(INVALID_ARGUMENT);
+        };
+        let Data::Borrowed(bytes, _) = self.nodes[node].data else {
+            return Err(UNSUPPORTED);
+        };
+        let start = usize::try_from(offset).map_err(|_| INVALID_ARGUMENT)?;
+        if start > bytes.len() {
+            return Err(INVALID_ARGUMENT);
+        }
+        Ok(&bytes[start..bytes.len().min(start.saturating_add(length as usize))])
+    }
+    pub fn pty_present(&self, n: usize, master: bool) -> bool {
+        self.opens.iter().flatten().any(|o|match o.target {
+            Target::Node(node)=>matches!(self.nodes[node].data,Data::Device(d) if d==if master {Device::PtyMaster(n)} else {Device::PtySlave(n)}),_=>false
+        })
+    }
+    pub fn pty_lock(&mut self, n: usize, locked: bool) {
+        self.pty_unlocked[n] = !locked;
+    }
+    pub fn readiness(&self, fds: &Descriptors, fd: u64) -> Result<(bool, bool, bool, bool), i64> {
+        let open = self.opens[fds.handle(fd)?].unwrap();
+        Ok(match open.target {
+            Target::ReadPipe(p) => {
+                let p = self.pipes[p].as_ref().unwrap();
+                (p.len > 0 || p.writers == 0, false, p.writers == 0, false)
+            }
+            Target::WritePipe(p) => {
+                let p = self.pipes[p].as_ref().unwrap();
+                (false, p.len < PIPE_BYTES, false, p.readers == 0)
+            }
+            _ => (
+                open.flags & OPEN_READ != 0,
+                open.flags & OPEN_WRITE != 0,
+                false,
+                false,
+            ),
+        })
+    }
+    pub fn status_flags(&self, fds: &Descriptors, fd: u64) -> Result<u64, i64> {
+        Ok(self.opens[fds.handle(fd)?].unwrap().flags)
+    }
+    pub fn set_append(&mut self, fds: &Descriptors, fd: u64, append: bool) -> Result<(), i64> {
+        let open = self.opens[fds.handle(fd)?].as_mut().unwrap();
+        open.flags = (open.flags & !OPEN_APPEND) | if append { OPEN_APPEND } else { 0 };
+        Ok(())
+    }
+    pub fn nonblocking(&self, fds: &Descriptors, fd: u64) -> Result<bool, i64> {
+        Ok(self.opens[fds.handle(fd)?].unwrap().flags & (1 << 20) != 0)
+    }
+    pub fn set_nonblocking(&mut self, fds: &Descriptors, fd: u64, value: bool) -> Result<(), i64> {
+        let open = self.opens[fds.handle(fd)?].as_mut().unwrap();
+        open.flags = (open.flags & !(1 << 20)) | if value { 1 << 20 } else { 0 };
+        Ok(())
+    }
     pub fn standard(&mut self) -> Result<Descriptors, i64> {
         let mut fds = Descriptors::default();
         for flags in [OPEN_READ, OPEN_WRITE, OPEN_WRITE] {
@@ -572,10 +660,11 @@ impl<'a> Vfs<'a> {
             return Err(INVALID_ARGUMENT);
         }
         let fd = fds.free()?;
+        fds.ensure()?;
         if self.opens.iter().all(Option::is_some) {
             return Err(FILE_LIMIT);
         }
-        let node = match self.resolve(cwd, path) {
+        let mut node = match self.resolve(cwd, path) {
             Ok(_) if flags & OPEN_EXCLUSIVE != 0 => return Err(ALREADY_EXISTS),
             Ok(id) => id,
             Err(NOT_FOUND) if flags & OPEN_CREATE != 0 => {
@@ -610,6 +699,22 @@ impl<'a> Vfs<'a> {
             }
             Err(e) => return Err(e),
         };
+        if matches!(self.nodes[node].data, Data::Device(Device::Ptmx)) {
+            let n = (0..4)
+                .find(|&n| !self.pty_present(n, true))
+                .ok_or(FILE_LIMIT)?;
+            node = self
+                .nodes
+                .iter()
+                .position(|v| matches!(v.data,Data::Device(Device::PtyMaster(k)) if k==n))
+                .ok_or(NOT_FOUND)?;
+            self.pty_unlocked[n] = false;
+        }
+        if let Data::Device(Device::PtySlave(n)) = self.nodes[node].data
+            && (!self.pty_present(n, true) || !self.pty_unlocked[n])
+        {
+            return Err(IO_ERROR);
+        }
         if flags & OPEN_DIRECTORY != 0 && !matches!(self.nodes[node].data, Data::Directory) {
             return Err(NOT_DIRECTORY);
         }
@@ -640,23 +745,25 @@ impl<'a> Vfs<'a> {
             flags,
             refs: 1,
         })?;
-        fds.slots[fd] = Some(id);
+        fds.table.as_ref().unwrap().borrow_mut().slots[fd] = Some(id);
         Ok(fd as u64)
     }
-    pub fn inherit(&mut self, parent: &Descriptors) -> Descriptors {
-        for id in parent.slots.iter().flatten() {
+    pub fn inherit(&mut self, parent: &Descriptors) -> Result<Descriptors, i64> {
+        let Some(table) = parent.table.as_ref() else {
+            return Ok(Descriptors::default());
+        };
+        let table = *table.borrow();
+        let inherited = Descriptors::from_table(table)?;
+        for id in table.slots.iter().flatten() {
             self.opens[*id].as_mut().unwrap().refs += 1;
         }
-        Descriptors {
-            slots: parent.slots,
-            close_on_exec: parent.close_on_exec,
-        }
+        Ok(inherited)
     }
     pub fn close(&mut self, fds: &mut Descriptors, fd: u64) -> Result<(), i64> {
         let mut cleanup = Ok(());
         let id = fds.handle(fd)?;
-        fds.slots[fd as usize] = None;
-        fds.close_on_exec[fd as usize] = false;
+        fds.table.as_ref().unwrap().borrow_mut().slots[fd as usize] = None;
+        fds.table.as_ref().unwrap().borrow_mut().close_on_exec[fd as usize] = false;
         let open = self.opens[id].as_mut().unwrap();
         open.refs -= 1;
         if open.refs == 0 {
@@ -692,15 +799,27 @@ impl<'a> Vfs<'a> {
         cleanup
     }
     pub fn close_exec(&mut self, fds: &mut Descriptors) {
+        if fds.table.is_none() {
+            return;
+        }
         for i in 0..fd::FD_LIMIT {
-            if fds.close_on_exec[i] {
+            let close = fds.table.as_ref().unwrap().borrow().close_on_exec[i];
+            if close {
                 let _ = self.close(fds, i as u64);
             }
         }
     }
     pub fn clear(&mut self, fds: &mut Descriptors) {
+        if fds.table.is_none() {
+            return;
+        }
+        if fds.shared() {
+            *fds = Descriptors::default();
+            return;
+        }
         for i in 0..fd::FD_LIMIT {
-            if fds.slots[i].is_some() {
+            let present = fds.table.as_ref().unwrap().borrow().slots[i].is_some();
+            if present {
                 // Descriptor ownership is released even if a poisoned disk reports a cleanup error.
                 let _ = self.close(fds, i as u64);
             }
@@ -718,13 +837,14 @@ impl<'a> Vfs<'a> {
             self.close(fds, target)?;
         }
         self.opens[id].as_mut().unwrap().refs += 1;
-        fds.slots[target as usize] = Some(id);
-        fds.close_on_exec[target as usize] = false;
+        fds.table.as_ref().unwrap().borrow_mut().slots[target as usize] = Some(id);
+        fds.table.as_ref().unwrap().borrow_mut().close_on_exec[target as usize] = false;
         Ok(target)
     }
     pub fn pipe(&mut self, fds: &mut Descriptors) -> Result<[u64; 2], i64> {
-        let mut free = fds
-            .slots
+        fds.ensure()?;
+        let slots = fds.slots();
+        let mut free = slots
             .iter()
             .enumerate()
             .filter(|(_, s)| s.is_none())
@@ -758,8 +878,8 @@ impl<'a> Vfs<'a> {
             readers: 1,
             writers: 1,
         });
-        fds.slots[r] = Some(a);
-        fds.slots[w] = Some(b);
+        fds.table.as_ref().unwrap().borrow_mut().slots[r] = Some(a);
+        fds.table.as_ref().unwrap().borrow_mut().slots[w] = Some(b);
         Ok([r as u64, w as u64])
     }
     pub fn device(&self, fds: &Descriptors, fd: u64, writing: bool) -> Result<Option<Device>, i64> {

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #![no_std]
-//! Validate a deliberately bounded static ELF64 ET_EXEC subset before allocation.
-//! No host casts, relocation or interpreter; static Linux TLS metadata is checked for libc initialization.
+//! Validate bounded native ET_EXEC and Linux ET_EXEC/ET_DYN images before allocation.
+//! Linux interpreters and TLS are checked here; user-space loaders perform dynamic relocations.
 
 pub mod stack;
 use anova_abi::USER_MIN;
@@ -74,7 +74,73 @@ pub fn parse(bytes: &[u8]) -> Result<Image, Error> {
 }
 
 pub fn parse_linux(bytes: &[u8]) -> Result<Image, Error> {
-    parse_personality(bytes, true)
+    parse_linux_at(bytes, 0x1000_0000)
+}
+pub fn parse_linux_at(bytes: &[u8], bias: u64) -> Result<Image, Error> {
+    let mut image = parse_personality(bytes, true)?;
+    if integer(bytes, 16, 2)? == 3 {
+        if bias & 4095 != 0 || bias < USER_MIN {
+            return Err(Error::Address);
+        }
+        image.entry = image.entry.checked_add(bias).ok_or(Error::Address)?;
+        image.phdr = image.phdr.checked_add(bias).ok_or(Error::Address)?;
+        for segment in &mut image.segments[..image.count] {
+            segment.address = segment.address.checked_add(bias).ok_or(Error::Address)?;
+            if segment
+                .address
+                .checked_add(segment.memory_size)
+                .is_none_or(|end| end > IMAGE_LIMIT)
+            {
+                return Err(Error::Address);
+            }
+        }
+    }
+    Ok(image)
+}
+
+/// Return only a bounded, absolute, NUL-terminated interpreter path from a validated ELF.
+pub fn interpreter(bytes: &[u8]) -> Result<Option<&str>, Error> {
+    if bytes.len() < 64
+        || bytes[..7] != *b"\x7fELF\x02\x01\x01"
+        || integer(bytes, 18, 2)? != 62
+        || integer(bytes, 54, 2)? != 56
+    {
+        return Err(Error::Header);
+    }
+    let offset = usize::try_from(integer(bytes, 32, 8)?).map_err(|_| Error::Bounds)?;
+    let count = integer(bytes, 56, 2)? as usize;
+    if count == 0
+        || count > 32
+        || offset < 64
+        || offset
+            .checked_add(count * 56)
+            .is_none_or(|end| end > bytes.len())
+    {
+        return Err(Error::Bounds);
+    }
+    let mut found = None;
+    for header in bytes[offset..offset + count * 56].chunks_exact(56) {
+        if integer(header, 0, 4)? != 3 {
+            continue;
+        }
+        if found.is_some() {
+            return Err(Error::Unsupported);
+        }
+        let start = integer(header, 8, 8)? as usize;
+        let size = integer(header, 32, 8)? as usize;
+        let data = bytes
+            .get(start..start.checked_add(size).ok_or(Error::Bounds)?)
+            .ok_or(Error::Bounds)?;
+        if !(2..=128).contains(&size)
+            || data[0] != b'/'
+            || data[size - 1] != 0
+            || data[..size - 1].contains(&0)
+        {
+            return Err(Error::Bounds);
+        }
+        found = Some(core::str::from_utf8(&data[..size - 1]).map_err(|_| Error::Header)?);
+    }
+    Ok(found)
 }
 
 fn parse_personality(bytes: &[u8], linux: bool) -> Result<Image, Error> {
@@ -82,7 +148,8 @@ fn parse_personality(bytes: &[u8], linux: bool) -> Result<Image, Error> {
         return Err(Error::Header);
     }
     let at = |offset, length| integer(bytes, offset, length);
-    if at(16, 2)? != 2
+    let dynamic = linux && at(16, 2)? == 3;
+    if (!dynamic && at(16, 2)? != 2)
         || at(18, 2)? != 62
         || at(20, 4)? != 1
         || at(48, 4)? != 0
@@ -124,6 +191,7 @@ fn parse_personality(bytes: &[u8], linux: bool) -> Result<Image, Error> {
         }
         match kind {
             0 | 4 | 6 => continue, // NULL, NOTE and PHDR metadata need no runtime action.
+            2 | 3 | 0x6474_e550 | 0x6474_e553 if linux => continue,
             0x6474_e551 if flags & 1 == 0 => continue, // Non-executable GNU_STACK.
             7 if linux => {
                 if tls.is_some() || filesz > memsz || (align > 1 && !align.is_power_of_two()) {
@@ -151,7 +219,7 @@ fn parse_personality(bytes: &[u8], linux: bool) -> Result<Image, Error> {
             continue;
         }
         let end = address.checked_add(memsz).ok_or(Error::Address)?;
-        if address < USER_MIN || end > IMAGE_LIMIT {
+        if (!dynamic && address < USER_MIN) || end > IMAGE_LIMIT {
             return Err(Error::Address);
         }
         if file <= offset as u64 && file + filesz >= (offset + count * 56) as u64 {
@@ -244,6 +312,34 @@ mod tests {
             put(&mut bytes, offset, value, count);
         }
         bytes
+    }
+    #[test]
+    fn linux_pie_bias_and_interpreter_bounds_are_checked_before_loading() {
+        let mut bytes = valid();
+        put(&mut bytes, 16, 3, 2);
+        put(&mut bytes, 24, 0x1000, 8);
+        put(&mut bytes, 72, 0, 8);
+        put(&mut bytes, 80, 0, 8);
+        put(&mut bytes, 96, 8192, 8);
+        put(&mut bytes, 104, 8192, 8);
+        let image = parse_linux_at(&bytes, 0x20000000).unwrap();
+        assert_eq!(image.entry, 0x20001000);
+        assert_eq!(image.phdr, 0x20000040);
+        assert_eq!(
+            parse_linux_at(&bytes, u64::MAX).unwrap_err(),
+            Error::Address
+        );
+        put(&mut bytes, 56, 2, 2);
+        put(&mut bytes, 120, 3, 4);
+        put(&mut bytes, 128, 512, 8);
+        put(&mut bytes, 152, 11, 8);
+        bytes[512..523].copy_from_slice(b"/lib/ld.so\0");
+        assert_eq!(interpreter(&bytes), Ok(Some("/lib/ld.so")));
+        bytes[522] = b'x';
+        assert_eq!(interpreter(&bytes), Err(Error::Bounds));
+        bytes[522] = 0;
+        bytes[512] = b'x';
+        assert_eq!(interpreter(&bytes), Err(Error::Bounds));
     }
     #[test]
     fn accepts_file_backed_entry_and_zero_fill_extent() {

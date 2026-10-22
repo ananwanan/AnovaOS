@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Own private user pages and independently allocated guarded process kernel stacks.
+//! Own shared user address spaces, private/shared page backing and guarded per-task kernel stacks.
 //! BSP mutations occur on the permanent kernel root at IF=0; user roots share upper paths.
 use super::*;
 use alloc::vec::Vec;
 use anova_abi::UserAddr;
+use anova_memory::shared::Shared;
+use core::cell::RefCell;
 
+// Trap capture returns to the separate 128 KiB scheduler stack before deep exec/ELF work.
+const STACK_BYTES: u64 = 64 * 1024;
 const GUARD: u64 = MANAGED_BASE + 0x100_0000;
 const STRIDE: u64 = STACK_BYTES + 2 * PAGE_SIZE;
 
@@ -47,9 +51,143 @@ pub fn set_test_budget(value: usize) {
     BUDGET.store(value, core::sync::atomic::Ordering::Relaxed);
 }
 
-pub struct UserSpace {
+struct OwnedSpace {
     tables: Option<PageTables>,
-    pages: Vec<(VirtAddr, PhysAddr)>,
+    pages: Vec<(VirtAddr, Shared<UserFrame>)>,
+}
+
+struct UserFrame {
+    identity: usize,
+    address: PhysAddr,
+    shared: bool,
+}
+impl Drop for UserFrame {
+    fn drop(&mut self) {
+        MEMORY.with(|slot| {
+            slot.as_mut()
+                .expect("Memory not initialized")
+                .frames
+                .release(self.address, Owner::User)
+                .expect("Invalid user frame release")
+        });
+    }
+}
+
+/// Shared roots are mutated only at IF=0 on the scheduler root; RefCell enforces borrow exclusivity.
+pub struct UserSpace(Shared<RefCell<OwnedSpace>>);
+impl UserSpace {
+    pub fn new() -> Result<Self, Error> {
+        Ok(Self(Shared::try_new(RefCell::new(OwnedSpace::new()?))?))
+    }
+    pub fn share(&self) -> Self {
+        Self(self.0.clone())
+    }
+    pub fn identity(&self) -> usize {
+        Shared::as_ptr(&self.0) as usize
+    }
+    pub fn root(&self) -> PhysAddr {
+        self.0.borrow().root()
+    }
+    pub fn clone_eager(&self) -> Result<Self, Error> {
+        Ok(Self(Shared::try_new(RefCell::new(
+            self.0.borrow().clone_eager()?,
+        ))?))
+    }
+    pub fn with_active<R>(&self, action: impl FnOnce() -> R) -> R {
+        // Only immutable borrows survive activation; mutations run on the permanent root.
+        self.0.borrow().with_active(action)
+    }
+    pub fn map(&mut self, address: u64, permissions: Permissions) -> Result<(), Error> {
+        self.0.borrow_mut().map(address, permissions)
+    }
+    pub fn unmap(&mut self, address: u64) -> Result<(), Error> {
+        self.0.borrow_mut().unmap(address)
+    }
+    pub fn map_anonymous(&mut self, start: u64, end: u64) -> Result<(), Error> {
+        self.0.borrow_mut().map_anonymous(start, end)
+    }
+    pub fn initialize(&self, address: u64, bytes: &[u8]) -> Result<(), Error> {
+        self.0.borrow().initialize(address, bytes)
+    }
+    pub fn accessible(&self, address: UserAddr, length: usize, write: bool, execute: bool) -> bool {
+        self.0.borrow().accessible(address, length, write, execute)
+    }
+    pub fn mapped(&self, address: u64) -> bool {
+        self.0
+            .borrow()
+            .pages
+            .iter()
+            .any(|(v, _)| v.0 == address & !4095)
+    }
+    pub fn share_mapping(&mut self, start: u64, end: u64) {
+        for (address, frame) in &mut self.0.borrow_mut().pages {
+            if (start..end).contains(&address.0) {
+                Shared::get_mut(frame)
+                    .expect("New mapping already shared")
+                    .shared = true;
+            }
+        }
+    }
+    pub fn futex_key(&self, address: u64, private: bool) -> Option<(usize, u64)> {
+        if private {
+            return Some((self.identity(), address));
+        }
+        self.0
+            .borrow()
+            .pages
+            .iter()
+            .find(|(v, _)| v.0 == address & !4095)
+            .map(|(_, frame)| (frame.identity, address & 4095))
+    }
+    pub fn shared_backing(&self, address: u64) -> bool {
+        self.0
+            .borrow()
+            .pages
+            .iter()
+            .any(|(v, frame)| v.0 == address && frame.shared)
+    }
+    pub fn protect(
+        &mut self,
+        start: u64,
+        end: u64,
+        permissions: Option<Permissions>,
+    ) -> Result<(), Error> {
+        let mut space = self.0.borrow_mut();
+        if (start..end)
+            .step_by(4096)
+            .any(|a| !space.pages.iter().any(|(v, _)| v.0 == a))
+        {
+            return Err(Error::NotMapped);
+        }
+        MEMORY.with(|slot| {
+            let manager = slot.as_mut().expect("Memory not initialized");
+            let mut store = Store {
+                frames: &mut manager.frames,
+                direct: manager.direct,
+                boot: None,
+                active: false,
+            };
+            for page in (start..end).step_by(4096) {
+                if let Some(permissions) = permissions {
+                    space.tables.as_mut().unwrap().protect(
+                        VirtAddr(page),
+                        Permissions {
+                            user: true,
+                            ..permissions
+                        },
+                        &mut store,
+                    )?;
+                } else {
+                    space
+                        .tables
+                        .as_mut()
+                        .unwrap()
+                        .deny_user(VirtAddr(page), &mut store)?;
+                }
+            }
+            Ok(())
+        })
+    }
 }
 
 pub fn free_frames() -> usize {
@@ -62,7 +200,7 @@ pub fn free_frames() -> usize {
     })
 }
 
-impl UserSpace {
+impl OwnedSpace {
     pub fn new() -> Result<Self, Error> {
         MEMORY.with(|slot| {
             let manager = slot.as_mut().expect("Memory not initialized");
@@ -87,34 +225,56 @@ impl UserSpace {
     pub fn clone_eager(&self) -> Result<Self, Error> {
         let mut child = Self::new()?;
         for (address, source) in &self.pages {
-            let permissions = MEMORY.with(|slot| {
+            let (permissions, accessible) = MEMORY.with(|slot| {
                 let manager = slot.as_mut().expect("Memory not initialized");
                 let mapping = self
                     .tables
                     .as_ref()
-                    .expect("Closed user space")
+                    .unwrap()
                     .query(*address, &manager.store())?;
-                Ok::<_, Error>(Permissions {
-                    writable: mapping.writable,
-                    executable: mapping.executable,
-                    user: true,
-                    ..Permissions::READ_ONLY
-                })
+                Ok::<_, Error>((
+                    Permissions {
+                        writable: mapping.writable,
+                        executable: mapping.executable,
+                        user: true,
+                        ..Permissions::READ_ONLY
+                    },
+                    mapping.user,
+                ))
             })?;
-            child.map(address.0, permissions)?;
-            let target = child.pages.last().expect("Missing copied leaf").1;
-            MEMORY.with(|slot| {
-                let direct = slot.as_ref().expect("Memory not initialized").direct;
-                // SAFETY: Both leaves are exclusively owned, distinct live RAM frames.
-                // No process can run while the scheduler copies with IF=0 on this BSP.
-                unsafe {
-                    core::ptr::copy_nonoverlapping(
-                        direct_pointer(direct, *source),
-                        direct_pointer(direct, target),
-                        PAGE_SIZE as usize,
-                    );
-                }
-            });
+            if source.shared {
+                child.map_frame(address.0, source.clone(), permissions)?;
+            } else {
+                child.map(address.0, permissions)?;
+                let target = child.pages.last().unwrap().1.address;
+                MEMORY.with(|slot| {
+                    let direct = slot.as_ref().expect("Memory not initialized").direct;
+                    // SAFETY: Distinct owned live RAM frames; IF=0 excludes every user writer.
+                    unsafe {
+                        core::ptr::copy_nonoverlapping(
+                            direct_pointer(direct, source.address),
+                            direct_pointer(direct, target),
+                            PAGE_SIZE as usize,
+                        );
+                    }
+                });
+            }
+            if !accessible {
+                MEMORY.with(|slot| {
+                    let manager = slot.as_mut().unwrap();
+                    let mut store = Store {
+                        frames: &mut manager.frames,
+                        direct: manager.direct,
+                        boot: None,
+                        active: false,
+                    };
+                    child
+                        .tables
+                        .as_mut()
+                        .unwrap()
+                        .deny_user(*address, &mut store)
+                })?;
+            }
         }
         Ok(child)
     }
@@ -151,29 +311,61 @@ impl UserSpace {
                 BUDGET.store(budget - 1, core::sync::atomic::Ordering::Relaxed);
             }
         }
-        self.pages.try_reserve(1).map_err(|_| Error::OutOfMemory)?;
         permissions.user = true;
         let frame = MEMORY.with(|slot| {
             let manager = slot.as_mut().expect("Memory not initialized");
             let frame = manager.frames.allocate(Owner::User, Zone::Any)?;
-            // SAFETY: An exclusively owned usable frame; its permanent HHDM alias is valid.
-            unsafe { direct_pointer(manager.direct, frame).write_bytes(0, PAGE_SIZE as usize) };
+            // SAFETY: This exclusive usable RAM frame has a permanent HHDM alias.
+            unsafe {
+                direct_pointer(manager.direct, frame).write_bytes(0, PAGE_SIZE as usize);
+            }
+            Ok::<_, Error>(frame)
+        })?;
+        static NEXT: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(1);
+        let identity = NEXT.fetch_update(
+            core::sync::atomic::Ordering::Relaxed,
+            core::sync::atomic::Ordering::Relaxed,
+            |n| n.checked_add(1),
+        );
+        let identity = match identity {
+            Ok(id) => id,
+            Err(_) => {
+                MEMORY.with(|slot| slot.as_mut().unwrap().frames.release(frame, Owner::User))?;
+                return Err(Error::OutOfMemory);
+            }
+        };
+        self.map_frame(
+            address,
+            Shared::try_new(UserFrame {
+                identity,
+                address: frame,
+                shared: false,
+            })?,
+            permissions,
+        )
+    }
+    fn map_frame(
+        &mut self,
+        address: u64,
+        frame: Shared<UserFrame>,
+        mut permissions: Permissions,
+    ) -> Result<(), Error> {
+        self.pages.try_reserve(1).map_err(|_| Error::OutOfMemory)?;
+        permissions.user = true;
+        MEMORY.with(|slot| {
+            let manager = slot.as_mut().unwrap();
             let mut store = Store {
                 frames: &mut manager.frames,
                 direct: manager.direct,
                 boot: None,
                 active: false,
             };
-            if let Err(error) = self.tables.as_mut().expect("Closed user space").map(
+            self.tables.as_mut().unwrap().map(
                 VirtAddr(address),
-                frame,
+                frame.address,
                 permissions,
                 &mut store,
-            ) {
-                manager.frames.release(frame, Owner::User)?;
-                return Err(error);
-            }
-            Ok(frame)
+            )
         })?;
         self.pages.push((VirtAddr(address), frame));
         Ok(())
@@ -192,12 +384,11 @@ impl UserSpace {
                 boot: None,
                 active: false,
             };
-            let frame = self
-                .tables
+            self.tables
                 .as_mut()
                 .expect("Closed user space")
                 .unmap(VirtAddr(address), &mut store)?;
-            manager.frames.release(frame, Owner::User)
+            Ok::<_, Error>(())
         })?;
         self.pages.swap_remove(index);
         Ok(())
@@ -208,7 +399,7 @@ impl UserSpace {
             return Err(Error::InvalidRange);
         }
         for page in (start..end).step_by(4096) {
-            if self.accessible(UserAddr(page), 1, false, false) {
+            if self.pages.iter().any(|(v, _)| v.0 == page) {
                 return Err(Error::InvalidRange);
             }
         }
@@ -239,7 +430,8 @@ impl UserSpace {
                     .iter()
                     .find(|(v, _)| v.0 == base)
                     .ok_or(Error::NotMapped)?
-                    .1;
+                    .1
+                    .address;
                 let offset = (virtual_address - base) as usize;
                 let count = (bytes.len() - done).min(PAGE_SIZE as usize - offset);
                 // SAFETY: pages lists exclusively owned, live RAM; initialization runs
@@ -283,7 +475,7 @@ impl UserSpace {
     }
 }
 
-impl Drop for UserSpace {
+impl Drop for OwnedSpace {
     fn drop(&mut self) {
         MEMORY.with(|slot| {
             let manager = slot.as_mut().expect("Memory not initialized");
@@ -307,15 +499,9 @@ impl Drop for UserSpace {
                 .take()
                 .expect("Closed user space")
                 .destroy_user(&mut store);
-            // CR3 was restored without PCID/PGE before reaching Drop. No CPU can
-            // retain these lower translations, and borrowed upper paths survive.
-            for (_, frame) in self.pages.drain(..) {
-                manager
-                    .frames
-                    .release(frame, Owner::User)
-                    .expect("Invalid user page release");
-            }
         });
+        // Page tables are gone before the last backing reference can return a frame to the allocator.
+        self.pages.clear();
     }
 }
 

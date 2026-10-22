@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Build native Rust/C and explicit static Linux images with separate user target/linker flags.
+//! Build native Rust/C and explicit Linux runtime fixtures with separate user target/linker flags.
 //! Validate every ELF and record its explicit ABI identity and SHA-256 before packing initramfs.
 use super::*;
 use sha2::{Digest, Sha256};
@@ -16,7 +16,49 @@ pub const NAMES: [&str; 8] = [
 ];
 const USER_TARGET: &str = "x86_64-unknown-linux-gnu";
 
+// A multi-image command uses one immutable, verified user-space build snapshot.
+// Rehash outputs before each reuse so an altered/missing artifact fails the entire command.
+type Snapshot = Vec<(PathBuf, [u8; 32])>;
+static SNAPSHOT: std::sync::OnceLock<Snapshot> = std::sync::OnceLock::new();
+fn reuse_snapshot() -> Result<bool> {
+    let Some(snapshot) = SNAPSHOT.get() else {
+        return Ok(false);
+    };
+    for (path, expected) in snapshot {
+        checked_file(path)?;
+        let actual: [u8; 32] = Sha256::digest(fs::read(path)?).into();
+        if actual != *expected {
+            return Err(format!(
+                "Verified user artifact changed during this command: {}",
+                path.display()
+            )
+            .into());
+        }
+    }
+    println!("Reusing verified user-space build snapshot");
+    Ok(true)
+}
+fn remember_snapshot(root: &Path, apps: &Path) -> Result<()> {
+    let mut paths = fs::read_dir(apps)?
+        .map(|entry| entry.map(|e| e.path()))
+        .collect::<std::io::Result<Vec<_>>>()?;
+    paths.push(root.join("build/images/busybox-1.36.1-source.tar.gz"));
+    let mut snapshot = Vec::new();
+    for path in paths {
+        checked_file(&path)?;
+        let digest = Sha256::digest(fs::read(&path)?).into();
+        snapshot.push((path, digest));
+    }
+    SNAPSHOT
+        .set(snapshot)
+        .map_err(|_| "User build snapshot initialized twice")?;
+    Ok(())
+}
+
 pub fn build(root: &Path, clippy: bool) -> Result<()> {
+    if !clippy && reuse_snapshot()? {
+        return Ok(());
+    }
     let output = Command::new("rustc")
         .args(["--print", "sysroot"])
         .output()?;
@@ -172,7 +214,9 @@ pub fn build(root: &Path, clippy: bool) -> Result<()> {
         )?;
     }
     linux::build(root, &apps)?;
+    linux::build_m9(root, &apps)?;
     initramfs(&apps)?;
+    remember_snapshot(root, &apps)?;
     println!("Verified native Rust/C ELF outputs in {}", apps.display());
     Ok(())
 }
@@ -180,7 +224,7 @@ pub fn build(root: &Path, clippy: bool) -> Result<()> {
 /// Pack the bounded project-owned archive; names and permissions are explicit image policy.
 fn initramfs(apps: &Path) -> Result<()> {
     let mut entries: Vec<(u8, String, Vec<u8>)> = Vec::new();
-    for path in ["/bin", "/etc", "/tmp", "/dev", "/persist", "/linux"] {
+    for path in ["/bin", "/etc", "/tmp", "/dev", "/persist", "/linux", "/lib"] {
         entries.push((2, path.into(), Vec::new()));
     }
     for name in NAMES {
@@ -214,11 +258,25 @@ fn initramfs(apps: &Path) -> Result<()> {
     for name in ["echo", "cat", "ls", "sh", "true", "false"] {
         entries.push((3, format!("/linux/{name}"), b"busybox".to_vec()));
     }
-    for name in ["linux-probe", "linux-musl"] {
+    for name in [
+        "linux-probe",
+        "linux-musl",
+        "linux-threads",
+        "linux-dynamic",
+        "linux-pie",
+        "linux-bad-interpreter",
+    ] {
         entries.push((
             5,
             format!("/bin/{name}"),
             fs::read(apps.join(format!("{name}.elf")))?,
+        ));
+    }
+    for file in ["ld-musl-x86_64.so.1", "libm9.so", "libm9extra.so"] {
+        entries.push((
+            if file.starts_with("ld-") { 5 } else { 1 },
+            format!("/lib/{file}"),
+            fs::read(apps.join(file))?,
         ));
     }
     for name in [

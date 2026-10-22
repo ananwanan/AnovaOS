@@ -5,6 +5,7 @@
 pub mod frames;
 pub mod heap;
 pub mod paging;
+pub mod shared;
 
 pub const PAGE_SIZE: u64 = 4096;
 pub const PHYSICAL_LIMIT: u64 = 1 << 52;

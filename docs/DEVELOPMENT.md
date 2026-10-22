@@ -69,7 +69,7 @@ Run from the repository root:
 | `cargo xtask smoke --case unmapped` | Access after unmap and TLB flush, QEMU 37 | Intentionally returns 1 |
 | `cargo xtask smoke --case oom` | Infallible allocation panic, QEMU 35 | Intentionally returns 1 |
 | `cargo xtask verify` | Boot passes; twelve reached failure injections are rejected | Wrong vector/error/IST/address, unexpected outcome or unreached injection fails |
-| `cargo xtask terminal-test` | Two normal boots: UART editing/CRLF/EOF, shell restart and volatile file loss | Missing actual output, guest failure or 30-second/session watchdog returns 1 |
+| `cargo xtask terminal-test` | Two normal boots: UART editing/CRLF/EOF, dynamic musl, Ctrl+C/EINTR, shell restart and volatile file loss | Missing actual output, guest failure or 30-second/session watchdog returns 1 |
 | `cargo xtask root-image build/disks/NAME.ext2` | New 16 MiB native-v1 ext2 data image | Existing files and unsafe paths are refused |
 | `cargo xtask run --disk build/disks/NAME.ext2` | Reuse an explicitly selected image; guest shutdown cleanly powers off | Does not format missing/existing images |
 | `cargo xtask persistence-test` | Editor/source/binary checks across shutdown/reboot, e2fsck and device error scenarios | Missing bytes/hash/mount/error/actual exit or 60-second/session watchdog fails |
@@ -78,7 +78,8 @@ Run from the repository root:
 smoke accepts --case boot/panic/timeout/invalid-opcode/general-protection/page-fault/
 double-fault/stack-guard/read-only/no-execute/direct-no-execute/unmapped/oom
 and --timeout-secs 1..300; its default is 30 seconds. verify uses
-30 seconds per case, except 8 seconds for the deliberately hung image. Deadlines bound the QEMU process;
+30 seconds per case, including the deliberately hung image. Larger M9 runtime
+images must reach their actual injection point before the watchdog classification. Deadlines bound the QEMU process;
 compilation and downloads have their own failure behavior.
 
 ## Target and image boundaries
@@ -170,3 +171,30 @@ qemu-x86_64 -strace on Linux and records actual host calls. `cargo xtask test-co
 runs the full boot regression with required Linux evidence. The ordinary UART
 test also launches musl and ash. Other applets and full signal/terminal behavior
 remain unverified.
+
+## M9 runtime verification
+
+[M9_RUNTIME.md](M9_RUNTIME.md) defines the pinned musl 1.2.4 runtime hash,
+ANOVA_MUSL_LIBC override, resource bounds and supported flags. apps now builds
+static/PIE/dynamic thread/signal/TTY probes, a deliberately missing-interpreter
+ELF, two TLS shared objects and the verified actual interpreter. Initramfs packs
+these under /bin and /lib. File purposes cover every new source and fixture.
+
+trace-compat records all three M9 profiles with QEMU-user on Linux, alongside
+M8 traces. Same-architecture exec children can leave QEMU-user; the transcript
+states this boundary. M9_HOST identifies Linux's permissive W+X policy in this
+comparison. QEMU-user 8.2.2 aborts on the deliberately malformed sigreturn case;
+only that host-emulator case is marked unavailable. Native Linux and system-QEMU
+exercise the case independently; the guest gate always requires its signal result.
+
+verify/test-compat now require three independent runtime successes and exact
+frame/heap/task/descriptor cleanup, real heap-exhaustion rollback, missing-library
+and missing-interpreter errors. terminal-test launches dynamic musl over UART and
+sends an actual Ctrl+C byte to an interruptible read. Persistence tests retain
+the original controlled save/shutdown/reboot and real disk error requirements.
+See [validation/M9.md](validation/M9.md) for measured results and hashes.
+
+Multi-image commands build user space once, retain its SHA-256 snapshot and
+rehash all generated app/runtime/archive outputs before every image reuse.
+Changed/missing outputs fail the command. Separate invocations rebuild normally;
+this avoids repeated BusyBox builds without accepting stale user artifacts.

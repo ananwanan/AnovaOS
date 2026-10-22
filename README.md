@@ -7,15 +7,15 @@ An x86_64 operating system built from scratch in Rust. The goal is to edit,
 compile, debug, and run applications inside AnovaOS itself, while gradually
 supporting selected existing Linux software.
 
-**Current status: M0–M8 are locally verified on QEMU q35/TCG. Native processes,
-VFS, pipes, init and a serial shell now include modern virtio-blk, a checked
-ext2 data volume at `/persist`, a text editor, sync/fsync and clean ACPI shutdown.
-Sources and native binaries survive a verified shutdown/reboot with the same
-explicit persistent image. Plain `run` uses a disposable disk; `/tmp` stays
-volatile. An explicit static Linux ABI now runs a musl 1.2.4 probe and a pinned
-BusyBox 1.36.1 echo/ls/cat/ash profile, including tested pipes and redirection.
-Custom signal handlers, dynamic linking and general Linux compatibility remain
-pending; device IRQs stay masked.**
+**Current status: M0–M9 are locally verified on QEMU q35/TCG. Native apps,
+VFS, pipes, init/shell, modern virtio-blk and checked ext2 storage at `/persist`
+include source editing, sync/fsync and clean ACPI shutdown/reboot persistence.
+The bounded Linux profile runs musl 1.2.4 static, static PIE and dynamic programs,
+pthread/TLS/futex tests, real signal handlers and restart/interruption, poll,
+nonblocking I/O and four PTY pairs. Startup shared libraries and dlopen with TLS
+are tested alongside the pinned BusyBox 1.36.1 echo/ls/cat/ash profile.
+There are 32 total process/thread slots on one CPU. General Linux/glibc support,
+networking and guest compilers remain future work; device IRQs stay masked.**
 
 Repository: [ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS).
 
@@ -90,6 +90,9 @@ development language and formatting guide is in English.
 | [docs/validation/M6.md](docs/validation/M6.md) | Actual file, shell, pipe, terminal and volatile-reboot validation |
 | [docs/M7_STORAGE.md](docs/M7_STORAGE.md) | PCI/virtio ownership, ext2 profile, durability, disk images and source editor |
 | [docs/validation/M7.md](docs/validation/M7.md) | Shutdown/reboot, source/binary integrity, device errors and regression evidence |
+| [docs/M8_LINUX.md](docs/M8_LINUX.md) | Static Linux ABI, pinned musl/BusyBox builds and supported CLI profile |
+| [docs/M9_RUNTIME.md](docs/M9_RUNTIME.md) | Threads, signals, terminals, dynamic musl and ownership limits |
+| [docs/validation/M9.md](docs/validation/M9.md) | Runtime hashes, host comparison, QEMU acceptance and regressions |
 | [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) | Mandatory owner requirements, including file-purpose explanations |
 | [docs/FILE_PURPOSES.md](docs/FILE_PURPOSES.md) | Purpose of every repository file |
 | [docs/STATUS.md](docs/STATUS.md) | Current implementation status and next steps |
@@ -165,12 +168,12 @@ cargo xtask run --disk build/disks/work.ext2 # Reuse that image; shutdown cleanl
 
 These commands now exist in the host `xtask` package. Images, caches, logs, and
 disposable firmware variable copies stay in `build/`. Normal runs use a temporary data disk and no network. GitHub Actions is configured to run the same checks; its status
-is reported separately from [local validation](docs/validation/M7.md).
+is reported separately from [local validation](docs/validation/M9.md).
 
 ## Next steps
 
-M8 adds an explicitly separate Linux syscall personality and fixed static CLI
-compatibility tests. The current disk/editor bounds are in [M7 storage](docs/M7_STORAGE.md). See
+M8/M9 provide an explicit Linux syscall personality, selected static CLI tests
+and a bounded musl threading/signal/terminal/dynamic runtime. The current disk/editor bounds are in [M7 storage](docs/M7_STORAGE.md). See
 [current status](docs/STATUS.md) and [roadmap](ROADMAP.md).
 
 ## License
@@ -193,3 +196,18 @@ See [M8 static Linux CLI](docs/M8_LINUX.md) for exact limits, build dependencies
 and the compatibility commands `cargo xtask trace-compat` / `cargo xtask test-compat`.
 The normal UART session can launch `/linux/sh`; inside it use `/linux/echo`,
 `/linux/cat` and `/linux/ls`.
+
+## M9 musl runtime
+
+```sh
+linux-threads
+linux-pie
+linux-dynamic
+```
+
+These are native-shell commands launching independent Linux user ELFs. They test
+pthread/futex, shared memory, signals, readiness and PTYs; linux-dynamic also
+loads actual shared objects and dynamic TLS. See [M9 runtime profile](docs/M9_RUNTIME.md)
+and [M9 validation](docs/validation/M9.md) for supported flags, resource limits,
+missing-library diagnostics and remaining job-control limitations. Native v1 and
+the persistent disk ABI policy keep their existing contracts.

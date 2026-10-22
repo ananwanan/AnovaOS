@@ -26,8 +26,8 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `crates/abi/Cargo.toml` | Defines the allocation-free native ABI shared by the kernel and application SDK. |
 | `crates/abi/src/lib.rs` | Native v1 constants, checked user addresses and padding-free process/query layouts. These are AnovaOS interfaces; they do not implement the Linux syscall ABI. |
 | `crates/elf/Cargo.toml` | Hosts bounded ELF validation and native startup-stack construction without hardware. |
-| `crates/elf/src/lib.rs` | Validate a deliberately bounded static ELF64 ET_EXEC subset before allocation. No host casts, untrusted references, relocation, interpreter or TLS processing. |
-| `crates/elf/src/stack.rs` | Encode a bounded native argc/argv/envp startup block without host pointers. |
+| `crates/elf/src/lib.rs` | Validate bounded native ET_EXEC and Linux ET_EXEC/ET_DYN segments, interpreter paths and TLS before mapping. |
+| `crates/elf/src/stack.rs` | Encode checked native/Linux arguments, environment and executable/interpreter auxv in one user stack page. |
 | `crates/memory/Cargo.toml` | Packages reusable no_std frame, heap and page-table policies for kernel/host tests. |
 | `crates/memory/src/frames.rs` | Only explicitly supplied usable RAM enters the allocator. All other memory stays reserved, including holes and every bootloader-reclaimable byte. |
 | `crates/memory/src/heap.rs` | An intrusive buddy heap. Free blocks hold their own links; allocation and coalescing never allocate metadata or call another allocator. |
@@ -40,8 +40,8 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `crates/sched/src/lib.rs` | Bounded BSP scheduling policy and parent/child lifecycle without hardware or allocation. The kernel owns contexts/resources; this policy never switches stacks or takes locks. |
 | `crates/vfs/Cargo.toml` | Share bounded in-memory VFS, archive, open-file and pipe semantics with host tests. |
 | `crates/vfs/src/archive.rs` | Decode the project-owned ANOVAFS1 archive using checked byte ranges, never casts. Entries are parent-first absolute UTF-8 paths; payloads remain borrowed from boot RAM. |
-| `crates/vfs/src/fd.rs` | Store process-local descriptor indices; Vfs alone manages open-description references. Tables cannot be copied or cloned without incrementing the associated shared ownership. |
-| `crates/vfs/src/lib.rs` | Bounded VFS mounts, component-wise paths, shared open descriptions and byte-stream pipes. One non-preemptible owner serializes all mutations; no hardware, locks or user pointers. |
+| `crates/vfs/src/fd.rs` | Own fallible shared descriptor tables, close-on-exec state and allocation-free empty placeholders. |
+| `crates/vfs/src/lib.rs` | Own bounded memory/ext2 namespaces, shared opens/tables, pipes, PTY endpoint lifetime and immutable mapping backing. |
 | `crates/vfs/src/tests.rs` | Test VFS path/mount boundaries, descriptor ownership, pipe shutdown and capacity rollback. |
 | `docs/CODING_STYLE.md` | English development conventions, mandatory file purposes and stable Rust formatting. |
 | `docs/DEVELOPMENT.md` | Host setup, target separation, app/image commands, validation and evidence handling. |
@@ -56,7 +56,7 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `docs/M6_FILESYSTEM.md` | Define VFS/archive, fd/pipe ownership, native ABI, terminal, init and shell contracts. |
 | `docs/REFERENCES.md` | Primary architecture, protocol, ABI and toolchain reference links. |
 | `docs/REQUIREMENTS.md` | Owner-mandated development requirements, including DEV-001 file explanations. |
-| `docs/STATUS.md` | Record verified M0–M7 capabilities, exact storage bounds and the next M8 Linux ABI task. |
+| `docs/STATUS.md` | Record verified M0–M9 capabilities, runtime/storage bounds and the next M10 networking task. |
 | `docs/TOOLCHAINS.md` | Planned path to guest-hosted GCC/G++/Rust/Cargo and optional self-hosting. |
 | `docs/validation/M0-M1.md` | Historical local engineering/boot acceptance evidence and input hashes. |
 | `docs/validation/M2.md` | Historical local CPU/timer/trap validation evidence and limitations. |
@@ -74,20 +74,20 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `kernel/src/arch/x86_64/interrupts.S` | Build uniform saved-GPR frames for CPU traps, IRQs and the native syscall entry; restore the checked frame with IRETQ. Long mode always saves SS:RSP. |
 | `kernel/src/arch/x86_64/mod.rs` | Select the x86_64 CPU, paging, interrupt and user-transition implementations. |
 | `kernel/src/arch/x86_64/paging.rs` | A bounded BSP-only copy-on-write extension of the retained Limine tables. M3 consumes this mapper and clones every live table into owned frame storage. |
-| `kernel/src/arch/x86_64/traps.rs` | Stable Rust uses explicit assembly entries, not the unstable x86-interrupt ABI. All gates clear IF. Kernel traps diagnose, user faults terminate one app; native syscalls and narrowly guarded usercopy faults return through IRETQ. |
+| `kernel/src/arch/x86_64/traps.rs` | Dispatch kernel diagnostics, native user faults, Linux signals, syscalls and checked usercopy recovery with IF=0 and IRETQ. |
 | `kernel/src/arch/x86_64/user.S` | Resume saved user GPR/FPU state and use its own trusted SYSCALL stack. Every user trap returns to a single BSP scheduler continuation with IF=0. |
 | `kernel/src/arch/x86_64/user.rs` | BSP saved GPR/segment/x87/SSE2 contexts, native SYSCALL and IRETQ transitions. Each user trap returns to the trusted scheduler root/stack; kernel code remains SIMD-free. |
 | `kernel/src/boot.rs` | Borrow retained Limine data. M3 allocates only USABLE RAM; bootloader data, original stacks/tables, modules, firmware and the early pool remain reserved. Retained native ELF modules support isolation tests; a tagged archive supplies the M6 root. |
 | `kernel/src/fs/mod.rs` | Bridge checked native user buffers to the shared VFS and polled canonical terminal. Calls run on the BSP at IF=0; blocking retains only a copied syscall frame, never a lock. |
-| `kernel/src/main.rs` | Boot owned memory/CPU state and run isolated, preemptively scheduled native processes. |
+| `kernel/src/main.rs` | Boot owned memory/CPU/PCI state and run isolated native/Linux workloads with persistent storage and a shell. |
 | `kernel/src/mm/lock.rs` | Non-sleeping BSP locks. Order: memory manager before heap; the fixed heap never calls the frame allocator. IRQ/NMI/fatal paths must not take either. |
 | `kernel/src/mm/mod.rs` | BSP memory ownership: checked USABLE frames, fully owned table hierarchy, guarded stacks, reclaiming buddy heap and private process memory integration. |
-| `kernel/src/mm/uaccess.rs` | Copy bounded user bytes after page-wise checks, recovering only at REP MOVSB. IF=0 and scheduler-only map ownership pin the address space on the sole BSP. No thread shares an address space and no copy spans a scheduling/blocking boundary. |
-| `kernel/src/mm/user.rs` | Own private user pages and independently allocated guarded process kernel stacks. BSP mutations occur on the permanent kernel root at IF=0; user roots share upper paths. |
+| `kernel/src/mm/uaccess.rs` | Copy bounded user bytes with page checks and REP MOVSB fault recovery; IF=0 pins shared mappings and no copy spans a scheduling/blocking boundary. |
+| `kernel/src/mm/user.rs` | Own shared user roots and reference-counted private/shared pages, permissions and guarded task stacks. |
 | `kernel/src/mm/validation.rs` | Runtime invariants and isolated QEMU stress/fault validation. |
 | `kernel/src/serial.rs` | Single-BSP COM1 output and nonblocking byte input; no heap, locks or firmware. |
-| `kernel/src/task/loader.rs` | Load a validated native ET_EXEC into zeroed private pages and build argc/argv. Permission decisions precede activation; physical aliases initialize RX data. |
-| `kernel/src/task/mod.rs` | Schedule bounded native processes on one BSP with private roots/stacks and saved CPU state. User traps only capture state; lifecycle, copying and reclamation run on the kernel root. |
+| `kernel/src/task/loader.rs` | Validate and map native/Linux executables and actual musl interpreters, then construct checked startup state. |
+| `kernel/src/task/mod.rs` | Schedule bounded native/Linux processes and shared-root threads on one BSP with private stacks; lifecycle, copying and reclamation run on the kernel root. |
 | `kernel/src/task/validation.rs` | Verify loader/syscall/fault containment plus transactional process/fork/exec failures. |
 | `linker/user-x86_64.ld` | Place native static user text/rodata/data in separate pages below the image limit. |
 | `linker/x86_64.ld` | Link the high-half kernel with retained Limine requests and separate RX/R/RW segments. |
@@ -122,7 +122,7 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `xtask/src/main.rs` | Host CLI for reproducible kernel/app builds, ISO assembly and QEMU validation. |
 | `xtask/src/purposes.rs` | Check file-purpose inventory coverage and top-of-file comments for first-party code. Human review still verifies that each explanation describes its actual responsibility. |
 | `xtask/src/smoke.rs` | Require real CPU/memory/user/process evidence together with the QEMU exit result. |
-| `xtask/src/terminal.rs` | Drive real COM1 input in two ordinary boots, checking line editing, shell EOF and volatile tmpfs. Watchdogs kill only these disposable QEMU guests; a prompt alone is never success evidence. |
+| `xtask/src/terminal.rs` | Drive ordinary UART editing/EOF, dynamic musl launch, real Ctrl+C interruption and volatile reboot checks. |
 
 ## M7 storage and editor files
 
@@ -143,15 +143,31 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `user/fs-test/src/disk.rs` | Exercise real ext2 fd/indirect/sparse/unlink syscalls and verify persisted source/ELF data. |
 | `xtask/src/disk.rs` | Create safe regular ext2 images and drive independent reboot/integrity/device-error scenarios. |
 | `crates/abi/src/linux.rs` | Translate native errors and supported Linux open flags without contaminating generic subsystems. |
-| `kernel/src/task/linux.rs` | Dispatch the static Linux personality, checked wire formats, TLS, memory, process and limited signal operations. |
+| `kernel/src/task/linux.rs` | Dispatch the bounded Linux personality and delegate memory, thread, signal and terminal wire translations. |
 | `user/linux/probe.S` | Pass the real Linux startup stack to the freestanding ABI probe with SysV alignment. |
 | `user/linux/probe.c` | Exercise Linux stack, errno, memory, TLS, fork/exec/env/wait, CLOEXEC, SIGPIPE, random and sleep. |
 | `user/linux/musl.c` | Verify unmodified static musl startup, compiler TLS, allocation, errno and actual file I/O. |
 | `user/linux/busybox.config` | Select the pinned static BusyBox applet profile from allnoconfig defaults. |
-| `xtask/src/linux.rs` | Build verified BusyBox sources, preserve notices/source bundle and trace exact guest ELFs on Linux. |
+| `xtask/src/linux.rs` | Build and hash pinned static/dynamic musl/BusyBox fixtures, package upstream sources and record bounded Linux-host traces. |
 | `docs/M8_LINUX.md` | Define supported Linux startup/syscalls, bounded semantics, build recipes and explicit unsupported behavior. |
 | `docs/validation/M8.md` | Record actual M8 binaries, host traces, guest cases, regression evidence and limitations. |
 | `docs/third-party/musl.md` | Preserve the unmodified tested musl package copyright and MIT notices for guest distribution. |
 | `crates/abi/src/linux/strings.rs` | Decode page-bounded C strings and pointer vectors through a checked copy callback without allocation. |
 | `kernel/src/task/linux/io.rs` | Import Linux writev descriptors before I/O and preserve completed bytes across later buffer faults. |
 | `docs/validation/M8_OPTIMIZATION.md` | Record M8 string/stack/I/O improvements, measurable copy counts, boundary tests and regression evidence. |
+
+## M9 runtime files
+
+| File | Purpose |
+| --- | --- |
+| `crates/memory/src/shared.rs` | Fallible single-thread reference-counted metadata ownership with exact final destruction and allocation-failure tests. |
+| `kernel/src/fs/tty.rs` | Bounded COM1/four-PTY line disciplines, input/output queues, settings, foreground signals and hangup. |
+| `kernel/src/task/linux/memory.rs` | Translate bounded mmap/brk/munmap/mprotect, real PROT_NONE/W^X, private file backing and shared anonymous pages. |
+| `kernel/src/task/linux/signals.rs` | Translate signal actions/masks and addressing, build AMD64 user frames and import checked signal-return state. |
+| `kernel/src/task/linux/terminal.rs` | Translate poll/ppoll readiness, terminal ioctls, PTY control and bounded process-group/session interfaces. |
+| `kernel/src/task/linux/threads.rs` | Share clone resources, manage futex atomic waits/wakes/requeue/deadlines and group/clear-TID lifecycle. |
+| `user/linux/m9.c` | Independent musl static/PIE/dynamic Ring 3 fixture for threading, signals, PTYs, exec/fault/exit negatives and UART interruption. |
+| `user/linux/shared.c` | Initialized shared-object TLS used by startup linking and dlopen after worker threads already exist. |
+| `docs/M9_RUNTIME.md` | Exact M9 ownership, flags, limits, unsupported operations, runtime checksum and build/verification contract. |
+| `docs/validation/M9.md` | Measured M9 program hashes, host-trace boundaries, actual guest results and inherited regression evidence. |
+| `xtask/src/transcript.rs` | Capture ordered guest stdout, preserve UART evidence and match raw bytes independently of filesystem snapshots or partial UTF-8. |

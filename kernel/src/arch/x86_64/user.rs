@@ -69,16 +69,29 @@ pub struct Context {
 }
 
 impl Context {
+    pub fn fpu_bytes(&self) -> &[u8; 512] {
+        &self.fpu.0
+    }
+    pub fn restore_fpu(&mut self, bytes: &[u8; 512]) -> bool {
+        let mxcsr = u32::from_le_bytes(bytes[24..28].try_into().unwrap());
+        if mxcsr & !0xffbf != 0 {
+            return false;
+        }
+        self.fpu.0 = *bytes;
+        true
+    }
     pub fn new(entry: u64, stack: u64) -> Self {
         let mut fpu = FpuState([0; 512]);
         fpu.0[..2].copy_from_slice(&0x037f_u16.to_le_bytes());
         fpu.0[24..28].copy_from_slice(&0x1f80_u32.to_le_bytes());
-        let mut frame = super::traps::TrapFrame::default();
-        frame.rip = entry;
-        frame.rsp = stack;
-        frame.cs = 0x33;
-        frame.ss = 0x2b;
-        frame.rflags = 0x202;
+        let frame = super::traps::TrapFrame {
+            rip: entry,
+            rsp: stack,
+            cs: 0x33,
+            ss: 0x2b,
+            rflags: 0x202,
+            ..Default::default()
+        };
         Self {
             frame,
             fpu,

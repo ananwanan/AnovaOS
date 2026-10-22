@@ -74,3 +74,12 @@ the image. The ISO contains /etc/busybox.LICENSE and /etc/musl.LICENSE.
 The tested musl 1.2.4 package notices are preserved in
 [third-party/musl.md](third-party/musl.md). First-party syscall probes and the
 compatibility adapter retain Apache-2.0; no Linux kernel implementation is imported.
+
+## M9 runtime packaging
+
+The shipped ld-musl-x86_64.so.1 is the unmodified musl 1.2.4-2 runtime with the
+same MIT notice already included at /etc/musl.LICENSE. Its exact SHA-256 is
+verified by xtask before packaging. The M9 C probes and TLS shared objects are
+first-party Apache-2.0 sources. Dynamic linkage does not import musl or BusyBox
+implementation code into the kernel. Preserve the existing BusyBox exact-source
+bundle and musl notices when distributing the ISO.

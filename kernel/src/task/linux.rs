@@ -2,6 +2,10 @@
 //! Implement the bounded Linux AMD64 personality on the BSP scheduler boundary.
 //! Translate wire formats at this boundary; generic VFS, native ABI and scheduling remain independent.
 mod io;
+mod memory;
+pub(crate) mod signals;
+mod terminal;
+pub(crate) mod threads;
 pub(super) use io::io_frame;
 
 use super::*;
@@ -84,7 +88,14 @@ impl Kernel {
         if !image.linux {
             return None;
         }
-        image.pending &= !image.ignored;
+        let mut ignored = 0;
+        for (k, action) in image.actions.borrow().iter().enumerate() {
+            if action.handler == 1 || (action.handler == 0 && matches!(k + 1, 17 | 18 | 23 | 28)) {
+                ignored |= 1u64 << k;
+            }
+        }
+        image.ignored = ignored;
+        image.pending &= !ignored;
         let ready = image.pending & !image.sigmask;
         if ready == 0 {
             None
@@ -111,7 +122,43 @@ impl Kernel {
     pub(super) fn linux_syscall(&mut self, i: usize) {
         let f = self.process(i).context.frame;
         if matches!(f.rax, 60 | 231) {
-            self.finish(i, Outcome::Exit((f.rdi & 255) as u32));
+            if f.rax == 231 {
+                self.linux_exit_group(i, Outcome::Exit((f.rdi & 255) as u32));
+            } else {
+                self.linux_thread_exit(i, (f.rdi & 255) as u32);
+            }
+            return;
+        }
+        if matches!(f.rax, 13 | 14 | 15 | 62 | 130 | 131 | 200 | 234) {
+            let result = self.signal_syscall(i, &f);
+            if f.rax != 15 && self.process(i).image.is_some() {
+                self.process_mut(i).context.frame.rax = result as u64;
+            }
+            return;
+        }
+        if f.rax == 56 {
+            let result = self.linux_clone(i, &f).map_or_else(|e| e, |n| n as i64);
+            self.process_mut(i).context.frame.rax = result as u64;
+            return;
+        }
+        if f.rax == 202 {
+            let result = self.linux_futex(i, &f).unwrap_or_else(|e| e);
+            self.process_mut(i).context.frame.rax = result as u64;
+            return;
+        }
+        if matches!(f.rax, 7 | 271) {
+            let result = self.linux_poll(i, &f).unwrap_or_else(|e| e);
+            self.process_mut(i).context.frame.rax = result as u64;
+            return;
+        }
+        if matches!(f.rax, 16 | 109 | 111 | 112 | 121 | 124) {
+            let result = self.linux_terminal(i, &f).unwrap_or_else(|e| e);
+            self.process_mut(i).context.frame.rax = result as u64;
+            return;
+        }
+        if f.rax == 24 {
+            self.policy.ready(i);
+            self.process_mut(i).context.frame.rax = 0;
             return;
         }
         if f.rax == 57 {
@@ -126,52 +173,25 @@ impl Kernel {
             }
             return;
         }
-        if f.rax == 62 {
-            let target = (0..CAPACITY).find(|&k| {
-                self.policy.entry(k).pid == f.rdi
-                    && self.processes[k].is_some()
-                    && !matches!(self.policy.entry(k).state, State::Empty | State::Zombie(_))
-            });
-            let result = if let Some(target) = target {
-                if f.rsi == 0 {
-                    0
-                } else if matches!(f.rsi, 9 | 13 | 15)
-                    && self.process(target).image.as_ref().unwrap().linux
-                {
-                    self.process_mut(target).image.as_mut().unwrap().pending |= 1 << (f.rsi - 1);
-                    self.policy.ready(target);
-                    0
-                } else {
-                    ENOSYS
-                }
-            } else {
-                -3
-            };
-            self.process_mut(i).context.frame.rax = result as u64;
-            return;
-        }
         if f.rax == 35 {
             let space = &self.process(i).image.as_ref().unwrap().space;
-            let mut bytes = [0; 16];
-            let result = space
-                .with_active(|| uaccess::from_user(space, UserAddr(f.rdi), &mut bytes))
-                .map_err(errno);
-            let sec = u64::from_le_bytes(bytes[..8].try_into().unwrap());
-            let ns = u64::from_le_bytes(bytes[8..].try_into().unwrap());
-            let delay = sec
-                .checked_mul(100)
-                .and_then(|n| n.checked_add(ns.div_ceil(10_000_000)));
+            let result = threads::deadline(space, f.rdi, false);
             let result = match result {
-                Err(e) => e,
-                Ok(()) if sec > i64::MAX as u64 || ns >= 1_000_000_000 => -22,
-                Ok(()) => match delay.and_then(|n| apic::ticks().checked_add(n)) {
-                    Some(deadline) => {
-                        self.policy.sleep(i, deadline);
+                Ok(Some(deadline)) => {
+                    if f.rsi != 0 && !space.accessible(UserAddr(f.rsi), 16, true, false) {
+                        -14
+                    } else {
+                        self.process_mut(i).thread.blocked = Some(threads::Blocked::Sleep {
+                            deadline,
+                            remaining: f.rsi,
+                        });
+                        self.policy.block(i);
                         self.metrics.sleeps += 1;
                         0
                     }
-                    None => -22,
-                },
+                }
+                Ok(None) => -14,
+                Err(e) => e,
             };
             self.process_mut(i).context.frame.rax = result as u64;
             return;
@@ -212,18 +232,31 @@ impl Kernel {
             return;
         }
         let result = self.linux_call(i, &f);
+        if f.rax == 80 && result == 0 {
+            let (group, cwd) = (self.process(i).thread.tgid, self.process(i).cwd);
+            for p in self
+                .processes
+                .iter_mut()
+                .flatten()
+                .filter(|p| p.thread.tgid == group)
+            {
+                p.cwd = cwd;
+            }
+        }
         if result == -32 {
-            let image = self.process(i).image.as_ref().unwrap();
-            if (image.sigmask | image.ignored) & (1 << 12) == 0 {
-                self.finish(i, Outcome::Signal(13));
-                return;
-            }
-            if image.ignored & (1 << 12) == 0 {
-                self.process_mut(i).image.as_mut().unwrap().pending |= 1 << 12;
-            }
+            self.queue_signal(i, 13);
         }
         if result == ENOSYS {
             serial::write(format_args!("[LINUX:ENOSYS] nr={}\n", f.rax));
+        }
+        if result == WOULD_BLOCK
+            && self
+                .fs
+                .nonblocking(&self.process(i).files, f.rdi)
+                .unwrap_or(false)
+        {
+            self.process_mut(i).context.frame.rax = (-11i64) as u64;
+            return;
         }
         if result == WOULD_BLOCK && matches!(f.rax, 0 | 1 | 20) {
             self.process_mut(i).io = Some(f);
@@ -260,21 +293,68 @@ impl Kernel {
         let bytes = self.executable(i, name).map_err(errno)?;
         let args = arguments.strings();
         let env = environment.strings();
-        let mut image = loader::load_env(
-            &bytes,
-            anova_abi::linux::PERSONALITY,
-            &args[..arguments.len()],
-            &env[..environment.len()],
-        )
-        .map_err(|e| match e {
-            loader::LoadError::Memory(_) => -12i64,
-            _ => -8i64,
-        })?;
+        let mut image = self
+            .load_image(
+                &bytes,
+                anova_abi::linux::PERSONALITY,
+                &args[..arguments.len()],
+                &env[..environment.len()],
+            )
+            .map_err(|e| match e {
+                loader::LoadError::Memory(_) => -12i64,
+                loader::LoadError::Interpreter(error) => error,
+                _ => -8i64,
+            })?;
+        let newfiles = self
+            .fs
+            .inherit(&self.processes[i].as_ref().unwrap().files)
+            .map_err(errno)?;
+        let group = self.process(i).thread.tgid;
+        let leader = (0..CAPACITY)
+            .find(|&k| self.policy.entry(k).pid == group && self.processes[k].is_some());
+        let parent = leader.map_or(self.policy.entry(i).parent, |k| self.policy.entry(k).parent);
+        for k in 0..CAPACITY {
+            if k != i
+                && self.processes[k]
+                    .as_ref()
+                    .is_some_and(|p| p.thread.tgid == group)
+            {
+                if self.process(k).image.is_some() {
+                    self.linux_clear_tid(k);
+                }
+                self.fs
+                    .clear(&mut self.processes[k].as_mut().unwrap().files);
+                self.processes[k] = None;
+                self.policy.remove(k);
+            }
+        }
+        self.policy.exec_identity(i, group, parent);
+
+        self.fs
+            .clear(&mut self.processes[i].as_mut().unwrap().files);
+        self.process_mut(i).files = newfiles;
         let p = self.process_mut(i);
         image.sigmask = p.image.as_ref().unwrap().sigmask;
         image.ignored = p.image.as_ref().unwrap().ignored;
+        for (k, action) in p
+            .image
+            .as_ref()
+            .unwrap()
+            .actions
+            .borrow()
+            .iter()
+            .enumerate()
+        {
+            if action.handler == 1 {
+                image.actions.borrow_mut()[k] = *action;
+            }
+        }
         p.context = user::Context::new(image.entry, image.stack);
         p.image = Some(image);
+        p.thread.blocked = None;
+        p.thread.saved_mask = None;
+        p.io = None;
+        p.wait = None;
         self.fs
             .close_exec(&mut self.processes[i].as_mut().unwrap().files);
         self.metrics.execs += 1;
@@ -286,11 +366,11 @@ impl Kernel {
             self.process_mut(i).image.as_mut().unwrap().clear_tid = f.rdi;
             return pid as i64;
         }
-        if matches!(f.rax, 13 | 14) {
-            return self.linux_signal_state(i, f);
+        if matches!(f.rax, 9..=12) {
+            return self.linux_memory(i, f).unwrap_or_else(|e| e);
         }
-        if matches!(f.rax, 9 | 11 | 12) {
-            return self.linux_memory(i, f);
+        if f.rax == 324 && f.rdi == 0 && f.rsi == 0 {
+            return 0;
         }
         if f.rax == 158 {
             match f.rdi {
@@ -346,7 +426,11 @@ impl Kernel {
                     )
                     .unwrap();
                     return Ok(if result == WOULD_BLOCK && matches!(f.rax, 0 | 1) {
-                        WOULD_BLOCK
+                        if self.fs.nonblocking(&p.files, f.rdi).map_err(errno)? {
+                            -11
+                        } else {
+                            WOULD_BLOCK
+                        }
                     } else {
                         errno(result)
                     });
@@ -363,7 +447,7 @@ impl Kernel {
                         };
                         let mut bytes = [0; 129];
                         let n = string(space, address, &mut bytes)?;
-                        let flags = open_flags(flags)?;
+                        let flags = open_flags(flags & !(0x800 | 0x100))?;
                         let path = core::str::from_utf8(&bytes[..n]).unwrap();
                         if flags & OPEN_CREATE != 0
                             && self.fs.metadata(p.cwd, path) == Err(NOT_FOUND)
@@ -386,6 +470,23 @@ impl Kernel {
                         p.files
                             .set_close_on_exec(fd, linux_flags & 0x80000 != 0)
                             .map_err(errno)?;
+                        let rawflags = if f.rax == 2 { f.rsi } else { f.rdx };
+                        self.fs
+                            .set_nonblocking(&p.files, fd, rawflags & 0x800 != 0)
+                            .map_err(errno)?;
+                        if let Ok(Some(anova_vfs::Device::PtyMaster(n))) =
+                            self.fs.device(&p.files, fd, false)
+                        {
+                            self.terminal.reset_pty(n);
+                        }
+                        if let Ok(Some(d @ anova_vfs::Device::PtySlave(_))) =
+                            self.fs.device(&p.files, fd, false)
+                            && rawflags & 0x100 == 0
+                            && p.thread.sid == pid
+                            && self.terminal.session(d) == 0
+                        {
+                            self.terminal.attach(d, p.thread.sid, p.thread.pgid);
+                        }
                         fd as i64
                     }
                     4 | 5 | 6 | 262 => {
@@ -433,7 +534,7 @@ impl Kernel {
                         } else {
                             -9
                         }
-                    } // No termios ioctl is claimed by this profile.
+                    } // Supported terminal ioctls are dispatched by the outer terminal adapter.
                     20 => io::writev(
                         f,
                         space,
@@ -478,7 +579,8 @@ impl Kernel {
                         }
                         0
                     }
-                    39 | 186 => pid as i64,
+                    39 => p.thread.tgid as i64,
+                    186 => pid as i64,
                     110 => parent as i64,
                     102 | 104 | 107 | 108 => 0, // Single root identity, no credential transitions.
                     63 => {
@@ -487,7 +589,7 @@ impl Kernel {
                             "AnovaOS",
                             "anova",
                             "0.1.0",
-                            "M8 static Linux ABI",
+                            "M9 Linux runtime profile",
                             "x86_64",
                             "(none)",
                         ]
@@ -513,6 +615,31 @@ impl Kernel {
                                     .set_close_on_exec(fd, f.rsi == 1030)
                                     .map_err(errno)?;
                                 fd as i64
+                            }
+                            3 => {
+                                let flags = self.fs.status_flags(&p.files, f.rdi).map_err(errno)?;
+                                let access = match flags & (OPEN_READ | OPEN_WRITE) {
+                                    OPEN_READ => 0,
+                                    OPEN_WRITE => 1,
+                                    _ => 2,
+                                };
+                                access
+                                    | 0x8000
+                                    | if flags & OPEN_APPEND != 0 { 0x400 } else { 0 }
+                                    | if self.fs.nonblocking(&p.files, f.rdi).map_err(errno)? {
+                                        0x800
+                                    } else {
+                                        0
+                                    }
+                            }
+                            4 if f.rdx & !(0x800 | 0x400 | 0x8000 | 3) == 0 => {
+                                self.fs
+                                    .set_nonblocking(&p.files, f.rdi, f.rdx & 0x800 != 0)
+                                    .map_err(errno)?;
+                                self.fs
+                                    .set_append(&p.files, f.rdi, f.rdx & 0x400 != 0)
+                                    .map_err(errno)?;
+                                0
                             }
                             1 => p.files.close_on_exec(f.rdi).map_err(errno)? as i64,
                             2 if f.rdx <= 1 => {
@@ -614,157 +741,5 @@ impl Kernel {
             };
             run().unwrap_or_else(|e| e)
         })
-    }
-    fn linux_signal_state(&mut self, i: usize, f: &TrapFrame) -> i64 {
-        if f.r10 != 8 {
-            return -22;
-        }
-        let image = self.process(i).image.as_ref().unwrap();
-        let mut input = [0; 32];
-        let mut output = [0; 32];
-        let len = if f.rax == 14 { 8 } else { 32 };
-        if f.rax == 13 {
-            if f.rdi == 0 || f.rdi > 64 || matches!(f.rdi, 9 | 19) {
-                return -22;
-            }
-            output[..8].copy_from_slice(&((image.ignored >> (f.rdi - 1)) & 1).to_le_bytes());
-        } else {
-            if f.rdi > 2 {
-                return -22;
-            }
-            output[..8].copy_from_slice(&image.sigmask.to_le_bytes());
-        }
-        let result = image.space.with_active(|| -> Result<(), i64> {
-            if f.rsi != 0 {
-                uaccess::from_user(&image.space, UserAddr(f.rsi), &mut input[..len])
-                    .map_err(errno)?;
-            }
-            if f.rax == 13 && f.rsi != 0 {
-                let handler = u64::from_le_bytes(input[..8].try_into().unwrap());
-                if handler > 1 {
-                    return Err(ENOSYS);
-                }
-                let flags = u64::from_le_bytes(input[8..16].try_into().unwrap());
-                if flags & !0x0400_0000 != 0 {
-                    return Err(-22);
-                }
-            }
-            if f.rdx != 0 {
-                uaccess::to_user(&image.space, UserAddr(f.rdx), &output[..len]).map_err(errno)?;
-            }
-            Ok(())
-        });
-        if let Err(e) = result {
-            return e;
-        }
-        if f.rsi != 0 {
-            let image = self.process_mut(i).image.as_mut().unwrap();
-            let value = u64::from_le_bytes(input[..8].try_into().unwrap());
-            if f.rax == 13 {
-                let bit = 1u64 << (f.rdi - 1);
-                image.ignored = (image.ignored & !bit) | if value == 1 { bit } else { 0 };
-            } else {
-                image.sigmask = match f.rdi {
-                    0 => image.sigmask | value,
-                    1 => image.sigmask & !value,
-                    _ => value,
-                } & !((1 << 8) | (1 << 18));
-            }
-        }
-        0
-    }
-    fn linux_memory(&mut self, i: usize, f: &TrapFrame) -> i64 {
-        let image = self.process_mut(i).image.as_mut().unwrap();
-        match f.rax {
-            12 => {
-                let old = image.brk;
-                if !(0x4000_0000..=0x4080_0000).contains(&f.rdi) {
-                    return old as i64;
-                }
-                let start = (old + 4095) & !4095;
-                let end = (f.rdi + 4095) & !4095;
-                if end > start && image.space.map_anonymous(start, end).is_err() {
-                    return old as i64;
-                }
-                for page in (end..start).step_by(4096) {
-                    if image.space.unmap(page).is_err() {
-                        return old as i64;
-                    }
-                }
-                image.brk = f.rdi;
-                f.rdi as i64
-            }
-            9 => {
-                if f.r8 != u64::MAX || f.r9 != 0 || f.rsi == 0 {
-                    return -22;
-                }
-                let Some(size) = f
-                    .rsi
-                    .checked_add(4095)
-                    .map(|n| n & !4095)
-                    .filter(|n| *n <= 8 * 1024 * 1024)
-                else {
-                    return -12;
-                };
-                // musl reserves a real inaccessible guard at the beginning of its brk arena.
-                if f.rdx == 0 && f.r10 == 0x32 {
-                    let Some(end) = f.rdi.checked_add(size) else {
-                        return -22;
-                    };
-                    if f.rdi & 4095 != 0 || f.rdi < 0x4000_0000 || end > (image.brk + 4095) & !4095
-                    {
-                        return -22;
-                    }
-                    for page in (f.rdi..end).step_by(4096) {
-                        if image.space.unmap(page).is_err() {
-                            return -22;
-                        }
-                    }
-                    return f.rdi as i64;
-                }
-                if f.rdx != 3 || f.r10 != 0x22 {
-                    return -22;
-                }
-                let mut start = 0x5000_0000;
-                let mut run = 0;
-                let mut found = false;
-                for page in (0x5000_0000..0x5080_0000).step_by(4096) {
-                    if image.space.accessible(UserAddr(page), 1, false, false) {
-                        run = 0;
-                        start = page + 4096;
-                    } else {
-                        run += 4096;
-                        if run == size {
-                            found = true;
-                            break;
-                        }
-                    }
-                }
-                if !found || image.space.map_anonymous(start, start + size).is_err() {
-                    return -12;
-                }
-                start as i64
-            }
-            11 => {
-                let Some(end) = f
-                    .rdi
-                    .checked_add(f.rsi)
-                    .and_then(|n| n.checked_add(4095))
-                    .map(|n| n & !4095)
-                else {
-                    return -22;
-                };
-                if f.rdi & 4095 != 0 || f.rsi == 0 || f.rdi < 0x5000_0000 || end > 0x5080_0000 {
-                    return -22;
-                }
-                for page in (f.rdi..end).step_by(4096) {
-                    if image.space.unmap(page).is_err() {
-                        return -22;
-                    }
-                }
-                0
-            }
-            _ => ENOSYS,
-        }
     }
 }

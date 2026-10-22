@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Build a pinned, unmodified BusyBox source tree with the declared static musl applet profile.
+//! Build pinned BusyBox and musl runtime fixtures, package shared libraries and trace host behavior.
 //! Keep source/license/config evidence beside generated binaries; never import BusyBox into the kernel.
 use super::*;
 use sha2::{Digest, Sha256};
@@ -145,6 +145,109 @@ pub fn build(root: &Path, apps: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Build musl thread/signal/TTY probes and real dynamic-loader/TLS inputs independently of native apps.
+pub fn build_m9(root: &Path, apps: &Path) -> Result<()> {
+    for name in ["libm9.so", "libm9extra.so"] {
+        command(
+            Command::new("musl-gcc")
+                .args([
+                    "-shared",
+                    "-fPIC",
+                    "-O2",
+                    "-Wall",
+                    "-Wextra",
+                    "-Werror",
+                    "-fcf-protection=none",
+                    "-Wl,--build-id=none",
+                ])
+                .arg(root.join("user/linux/shared.c"))
+                .arg("-o")
+                .arg(apps.join(name)),
+        )?;
+    }
+    let runtime = env::var_os("ANOVA_MUSL_LIBC")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/usr/lib/x86_64-linux-musl/libc.so"));
+    checked_file(&runtime)?;
+    let runtime = fs::read(runtime)?;
+    if format!("{:x}", Sha256::digest(&runtime))
+        != "6e8ff8ad02f4a3a0b70029577e2eb9df8f6526aea302a60a8d649874d6fa45ea"
+    {
+        return Err(
+            "M9 requires the pinned Ubuntu musl 1.2.4-2 runtime; see docs/M9_RUNTIME.md".into(),
+        );
+    }
+    fs::write(apps.join("ld-musl-x86_64.so.1"), runtime)?;
+    for (name, flags) in [
+        ("linux-threads", vec!["-static", "-no-pie"]),
+        (
+            "linux-dynamic",
+            vec!["-pie", "-DM9_DYNAMIC", "-Wl,-rpath,/lib"],
+        ),
+        ("linux-pie", vec!["-static-pie"]),
+    ] {
+        let path = apps.join(format!("{name}.elf"));
+        let mut cc = Command::new("musl-gcc");
+        cc.args([
+            "-O2",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-pthread",
+            "-fcf-protection=none",
+            "-Wl,--build-id=none",
+        ])
+        .args(flags)
+        .arg(root.join("user/linux/m9.c"));
+        if name == "linux-dynamic" {
+            cc.arg("-L").arg(apps).arg("-lm9");
+        }
+        command(cc.arg("-o").arg(&path))?;
+        anova_elf::parse_linux(&fs::read(&path)?)
+            .map_err(|e| format!("Invalid M9 ELF {name}: {e:?}"))?;
+    }
+    command(
+        Command::new("musl-gcc")
+            .args([
+                "-pie",
+                "-DM9_DYNAMIC",
+                "-O2",
+                "-pthread",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                "-fcf-protection=none",
+                "-Wl,--build-id=none",
+                "-Wl,--dynamic-linker=/lib/missing-m9-loader.so",
+            ])
+            .arg(root.join("user/linux/m9.c"))
+            .arg("-L")
+            .arg(apps)
+            .arg("-lm9")
+            .arg("-o")
+            .arg(apps.join("linux-bad-interpreter.elf")),
+    )?;
+    let mut manifest = fs::OpenOptions::new()
+        .append(true)
+        .open(apps.join("manifest.toml"))?;
+    for file in [
+        "linux-threads.elf",
+        "linux-dynamic.elf",
+        "linux-pie.elf",
+        "linux-bad-interpreter.elf",
+        "libm9.so",
+        "libm9extra.so",
+        "ld-musl-x86_64.so.1",
+    ] {
+        writeln!(
+            manifest,
+            "\n[[linux_runtime]]\nfile = \"{file}\"\nlibc = \"musl-1.2.4\"\nsha256 = \"{:x}\"",
+            Sha256::digest(fs::read(apps.join(file))?)
+        )?;
+    }
+    Ok(())
+}
+
 /// Trace the exact guest binaries against a Linux host without requiring ptrace permissions.
 pub fn trace(root: &Path) -> Result<()> {
     apps::build(root, false)?;
@@ -155,7 +258,7 @@ pub fn trace(root: &Path) -> Result<()> {
     let output = work.join("pipeline.txt");
     let musl_path = work.join("musl.txt");
     fs::write(&output, b"M8-host-cat\n")?;
-    let cases: Vec<(&str, PathBuf, Vec<String>)> = vec![
+    let mut cases: Vec<(&str, PathBuf, Vec<String>)> = vec![
         (
             "musl",
             apps.join("linux-musl.elf"),
@@ -193,16 +296,37 @@ pub fn trace(root: &Path) -> Result<()> {
             ],
         ),
     ];
+    for (name, binary) in [
+        ("m9-threads", "linux-threads.elf"),
+        ("m9-pie", "linux-pie.elf"),
+    ] {
+        cases.push((name, apps.join(binary), vec![]));
+    }
+    cases.push((
+        "m9-dynamic",
+        apps.join("ld-musl-x86_64.so.1"),
+        vec![
+            "--library-path".into(),
+            apps.display().to_string(),
+            apps.join("linux-dynamic.elf").display().to_string(),
+        ],
+    ));
     for (name, binary, args) in cases {
         let stdout = File::create(logs.join(format!("compat-host-{name}.out")))?;
         let stderr = File::create(logs.join(format!("compat-host-{name}.trace")))?;
         command(
-            Command::new("qemu-x86_64")
-                .arg("-strace")
+            Command::new("timeout")
+                .args(["30", "qemu-x86_64", "-strace"])
                 .arg(binary)
                 .args(args)
                 .env_clear()
                 .env("PATH", env::var_os("PATH").unwrap_or_default())
+                .env("M9_HOST", "1")
+                .env("M9_QEMU_USER", "1")
+                .env("M9_FILE", root.join("Cargo.toml"))
+                .env("M9_EXEC", apps.join("linux-threads.elf"))
+                .env("M9_EXTRA", apps.join("libm9extra.so"))
+                .env("M9_BAD_INTERP", apps.join("linux-bad-interpreter.elf"))
                 .stdout(stdout)
                 .stderr(stderr),
         )?;

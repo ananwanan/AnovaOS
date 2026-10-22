@@ -4,7 +4,7 @@
 pub mod strings;
 
 use crate::*;
-pub const PERSONALITY: &str = "linux.x86_64.static.v1";
+pub const PERSONALITY: &str = "linux.x86_64.v1";
 pub const ENOSYS: i64 = -38;
 pub const E2BIG: i64 = -7;
 pub const EFAULT: i64 = -14;
