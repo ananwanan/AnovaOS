@@ -1,3 +1,4 @@
+<!-- Inventory tracked file purposes and explain generated/legal exceptions to source headers. -->
 # Repository file purposes
 
 This inventory explains every tracked first-party file and the generated or
@@ -54,9 +55,10 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `docs/M4_USERSPACE.md` | Historical M4 entry/loader/copy/SDK contracts, with M5 supersession and ownership notes. |
 | `docs/M5_PROCESSES.md` | Define BSP scheduling, CPU/FPU state, native process syscalls and ownership/locking boundaries. |
 | `docs/M6_FILESYSTEM.md` | Define VFS/archive, fd/pipe ownership, native ABI, terminal, init and shell contracts. |
+| `docs/M14_GUI.md` | Plan the Rust-native GUI, C ABI and C/C++/Rust SDK architecture, security boundaries, five stage gates and limits. |
 | `docs/REFERENCES.md` | Primary architecture, protocol, ABI and toolchain reference links. |
-| `docs/REQUIREMENTS.md` | Owner-mandated development requirements, including DEV-001 file explanations. |
-| `docs/STATUS.md` | Record verified M0–M11 capabilities, runtime/storage bounds and the next M12 Rust/Cargo task. |
+| `docs/REQUIREMENTS.md` | Owner-mandated DEV-001 file-purpose rules and DEV-002 native GUI/SDK milestones. |
+| `docs/STATUS.md` | Record verified M0–M11 capabilities, the next M12 Rust/Cargo task and unimplemented M14 GUI design. |
 | `docs/TOOLCHAINS.md` | Distinguish accepted guest GCC/G++ from planned Rust/Cargo and optional compiler self-hosting. |
 | `docs/validation/M0-M1.md` | Historical local engineering/boot acceptance evidence and input hashes. |
 | `docs/validation/M2.md` | Historical local CPU/timer/trap validation evidence and limitations. |
