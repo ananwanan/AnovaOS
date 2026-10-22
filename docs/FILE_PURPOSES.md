@@ -58,8 +58,8 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `docs/M14_GUI.md` | Plan the Rust-native GUI, C ABI and C/C++/Rust SDK architecture, security boundaries, five stage gates and limits. |
 | `docs/REFERENCES.md` | Primary architecture, protocol, ABI and toolchain reference links. |
 | `docs/REQUIREMENTS.md` | Owner-mandated DEV-001 file-purpose rules and DEV-002 native GUI/SDK milestones. |
-| `docs/STATUS.md` | Record verified M0–M11 capabilities, the next M12 Rust/Cargo task and unimplemented M14 GUI design. |
-| `docs/TOOLCHAINS.md` | Distinguish accepted guest GCC/G++ from planned Rust/Cargo and optional compiler self-hosting. |
+| `docs/STATUS.md` | Record verified M0–M12 offline capabilities, the next M13 SDK task and unimplemented M14 GUI design. |
+| `docs/TOOLCHAINS.md` | Distinguish guest C/C++/Rust application builds from online Cargo and optional compiler self-hosting. |
 | `docs/validation/M0-M1.md` | Historical local engineering/boot acceptance evidence and input hashes. |
 | `docs/validation/M2.md` | Historical local CPU/timer/trap validation evidence and limitations. |
 | `docs/validation/M3.md` | Historical local memory/protection/OOM validation evidence and limitations. |

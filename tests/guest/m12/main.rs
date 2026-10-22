@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Exercise actual musl std allocation, arguments, file I/O, threading and child execution.
+//! Exercise musl std allocation, arguments, file I/O/copy, threading and child execution.
 use std::{env, fs, process::Command, thread};
 
 fn main() {
@@ -9,6 +9,11 @@ fn main() {
     let text = format!("guest-Rust:{}", values[0] + values[1]);
     fs::write("rust-result.txt", &text).unwrap();
     assert_eq!(fs::read_to_string("rust-result.txt").unwrap(), text);
+    assert_eq!(
+        fs::copy("rust-result.txt", "rust-copy.txt").unwrap(),
+        text.len() as u64
+    );
+    assert_eq!(fs::read_to_string("rust-copy.txt").unwrap(), text);
     assert_eq!(
         thread::spawn(|| String::from("thread")).join().unwrap(),
         "thread"
