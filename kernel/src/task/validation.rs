@@ -186,7 +186,7 @@ fn shared_metadata_oom(rust: &[u8]) {
         let root = kernel.process(parent).image.as_ref().unwrap().space.root();
         let before = mm::user::free_frames();
         let mut blocks = alloc::vec::Vec::new();
-        blocks.try_reserve_exact(1024).unwrap();
+        blocks.try_reserve_exact(8192).unwrap();
         let allocated = mm::heap_used();
         for size in [4096, 1024, 256, 64] {
             let layout = core::alloc::Layout::from_size_align(size, 16).unwrap();

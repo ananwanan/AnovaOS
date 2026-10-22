@@ -1,7 +1,7 @@
 <!-- Track milestone dependencies, implementation checklists and acceptance criteria. -->
 # 开发路线与阶段验收
 
-日期：2026-10-22。**M0–M10 已通过本地 q35/TCG 验收；M11–M15 尚未实现，外设 IRQ 路由启用待对应驱动。** 证据见 [M9 验证记录](docs/validation/M9.md) 与 [STATUS](docs/STATUS.md)。[FIRST_TASK](docs/FIRST_TASK.md) 记录 M0/M1 原始实现顺序；当前 M2 边界见 [CPU 基线](docs/M2_CPU.md)。
+日期：2026-10-22。**M0–M11 已通过本地 q35/TCG 验收；M12–M15 尚未实现，外设 IRQ 路由启用待对应驱动。** 证据见 [M11 验证记录](docs/validation/M11.md) 与 [STATUS](docs/STATUS.md)。[FIRST_TASK](docs/FIRST_TASK.md) 记录 M0/M1 原始实现顺序；当前 M2 边界见 [CPU 基线](docs/M2_CPU.md)。
 
 ## 阶段总览
 
@@ -18,7 +18,7 @@
 | M8 | 首批静态 Linux CLI 程序 | M6、M7 | 本地验收通过；受限静态 CLI profile |
 | M9 | 线程、信号、动态 musl | M8 | 本地验收通过；受限运行时与 PTY profile |
 | M10 | 网络和受控包安装 | M7、M9 | 本地受控 IPv4/TLS/包验收通过 |
-| M11 | 系统内 GCC/G++ 应用开发 | M7–M9；可先离线 | 未开始 |
+| M11 | 系统内 GCC/G++ 应用开发 | M7–M9；可先离线 | 本地离线 C/C++/make 验收通过 |
 | M12 | 系统内 Rust/Cargo 应用开发 | M11、M9；联网可后补 | 未开始 |
 | M13 | 可发布的 SDK 与应用包 | M4 基础 SDK、M11/M12 | 未开始 |
 | M14 | 图形 app、多核、实机扩展 | M9、M13；按子任务拆分 | 未开始 |
@@ -186,13 +186,21 @@ crash-safe ext2 transactions are not claimed.
 
 实施细节见 [TOOLCHAINS](docs/TOOLCHAINS.md)。
 
-- [ ] 在宿主构建可在 guest 运行的 gcc/g++、cc1/cc1plus、assembler/linker、构建工具。
-- [ ] 安装 CRT、头文件、libc、libgcc、libstdc++、必要依赖和明确 sysroot。
-- [ ] 补齐编译器实际使用的文件、映射、临时文件、子进程、信号和线程语义。
-- [ ] 先静态/受控构建包运行，再评估动态工具链；TCC 可作中间验证但不替代 GCC。
-- [ ] 使用编辑器在 guest 创建 C/C++ 工程并编译运行。
+- [x] 在宿主构建可在 guest 运行的 gcc/g++、cc1/cc1plus、assembler/linker、构建工具。
+- [x] 安装 CRT、头文件、libc、libgcc、libstdc++、必要依赖和明确 sysroot。
+- [x] 补齐编译器实际使用的文件、映射、临时文件、子进程、信号和线程语义。
+- [x] 先静态/受控构建包运行，再评估动态工具链；TCC 可作中间验证但不替代 GCC。
+- [x] 使用编辑器在 guest 创建 C/C++ 工程并编译运行。
 
 退出条件：C 的 stdio/文件 I/O 和多文件编译通过；C++ `std::string/vector`、RAII 通过，异常/线程按声明配置分别测试；源码与产物重启保留。只在宿主编译、在 guest 执行不算完成。
+
+Implemented offline profile: [M11_TOOLCHAIN](docs/M11_TOOLCHAIN.md), with
+source-built GCC/G++/binutils/make and musl/CRT/libgcc/libstdc++. C stdio,
+files/argv/malloc/multiple sources, C++ containers/RAII/exceptions/thread,
+make incremental rebuild, real failure diagnostics and reboot hashes pass.
+See [validation/M11](docs/validation/M11.md). General projects, dynamic
+application toolchains, LTO/OpenMP/sanitizers and compiler self-bootstrap
+are outside this accepted profile.
 
 ## M12：系统内 Rust 与 Cargo
 

@@ -4,7 +4,7 @@
 use super::*;
 use anova_memory::paging::Permissions;
 const START: u64 = 0x5000_0000;
-const END: u64 = 0x5200_0000;
+const END: u64 = 0x7000_0000;
 fn permissions(prot: u64) -> Result<Option<Permissions>, i64> {
     if prot & !7 != 0 || prot & 6 == 6 {
         return Err(-13);
@@ -23,7 +23,7 @@ impl Kernel {
         if f.rax == 12 {
             let image = self.process_mut(i).image.as_mut().unwrap();
             let old = image.brk;
-            if !(0x4000_0000..=0x4080_0000).contains(&f.rdi) {
+            if !(0x4000_0000..=0x4800_0000).contains(&f.rdi) {
                 return Ok(old as i64);
             }
             let start = (old + 4095) & !4095;
@@ -51,7 +51,7 @@ impl Kernel {
             .rsi
             .checked_add(4095)
             .map(|n| n & !4095)
-            .filter(|n| *n > 0 && *n <= 8 * 1024 * 1024)
+            .filter(|n| *n > 0 && *n <= 128 * 1024 * 1024)
             .ok_or(-22)?;
         let end = f.rdi.checked_add(size).ok_or(-22)?;
         if f.rax == 10 {
@@ -112,12 +112,13 @@ impl Kernel {
         if anonymous && (f.r8 != u64::MAX || f.r9 != 0) {
             return Err(-22);
         }
+        let files = &self.processes[i].as_ref().unwrap().files;
         let data = if anonymous {
             None
         } else {
             Some(
                 self.fs
-                    .mapping_bytes(&self.process(i).files, f.r8, f.r9, size)
+                    .mapping_bytes(files, f.r8, f.r9, size)
                     .map_err(errno)?,
             )
         };
@@ -173,7 +174,7 @@ impl Kernel {
             image.space.initialize(page, &zero).map_err(|_| -14)?;
         }
         if let Some(data) = data {
-            image.space.initialize(start, data).map_err(|_| -14)?;
+            image.space.initialize(start, &data).map_err(|_| -14)?;
         }
         if shared {
             image.space.share_mapping(start, start + size);

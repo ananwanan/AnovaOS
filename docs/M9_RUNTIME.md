@@ -6,6 +6,10 @@ separate. The Linux image identity is now `linux.x86_64.v1`; this is explicit
 initramfs policy, not a guess from ELF OSABI. Validation is recorded in
 [validation/M9.md](validation/M9.md).
 
+The runtime contracts below remain in force. [M11_TOOLCHAIN](M11_TOOLCHAIN.md)
+supersedes the scheduler/user-stack, ELF, argument and memory capacities and
+adds suspended-parent vfork, private mutable-file snapshots and guest compilers.
+
 ## Ownership and scheduling
 
 There are 32 scheduler slots in total, shared by processes, threads and zombies.

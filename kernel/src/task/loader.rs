@@ -91,7 +91,7 @@ pub fn load_interpreter(
     let entry = interpreter
         .as_ref()
         .map_or(image.entry, |(_, elf)| elf.entry);
-    let mut stack_page = [0; 4096];
+    let mut stack_page = [0; 16384];
     let stack = if linux {
         let mut random = [0; 16];
         super::linux::random(&mut random).map_err(LoadError::Entropy)?;
@@ -116,10 +116,11 @@ pub fn load_interpreter(
     if let Some((data, elf)) = interpreter {
         map_image(&mut space, data, &elf)?;
     }
-    for page in ((STACK_TOP - STACK_BYTES)..STACK_TOP).step_by(4096) {
+    let stack_bytes = if linux { 1024 * 1024 } else { STACK_BYTES };
+    for page in ((STACK_TOP - stack_bytes)..STACK_TOP).step_by(4096) {
         space.map(page, Permissions::DATA)?;
     }
-    space.initialize(STACK_TOP - 4096, &stack_page)?;
+    space.initialize(STACK_TOP - stack_page.len() as u64, &stack_page)?;
     Ok(Loaded {
         linux,
         brk: 0x4000_0000,

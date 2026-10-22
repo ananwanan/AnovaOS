@@ -28,6 +28,8 @@ pub struct Inode {
     pub directory: bool,
     pub size: usize,
     pub executable: bool,
+    pub permissions: u16,
+    pub modified: u32,
     raw: [u8; 128],
 }
 pub struct Entry {
@@ -48,8 +50,12 @@ pub struct Ext2 {
     dirty: bool,
     failed: bool,
     writes: u64,
+    clock: u32,
 }
 impl Ext2 {
+    pub fn set_clock(&mut self, seconds: u32) {
+        self.clock = seconds;
+    }
     pub fn stop_device(&mut self) -> Result<(), i64> {
         self.device.stop()
     }
@@ -73,6 +79,18 @@ impl Ext2 {
     }
     pub fn set_executable(&mut self, number: u32) -> Result<(), i64> {
         self.mutate(|s| s.set_executable_inner(number))
+    }
+    pub fn set_permissions(&mut self, number: u32, permissions: u16) -> Result<(), i64> {
+        self.mutate(|s| {
+            if permissions & !0o777 != 0 {
+                return Err(UNSUPPORTED);
+            }
+            let mut inode = s.inode(number)?;
+            s.begin()?;
+            let mode = u16_at(&inode.raw, 0) & !0o777;
+            put16(&mut inode.raw, 0, mode | permissions);
+            s.store_inode(&inode)
+        })
     }
     pub fn create(&mut self, parent: u32, name: &str, directory: bool) -> Result<u32, i64> {
         self.mutate(|s| s.create_inner(parent, name, directory))
@@ -154,6 +172,7 @@ impl Ext2 {
             dirty: false,
             failed: false,
             writes: 0,
+            clock: 0,
         };
         fs.validate_allocation()?;
         Ok(fs)
@@ -281,6 +300,8 @@ impl Ext2 {
             directory,
             size,
             executable: mode & 0o111 != 0,
+            permissions: mode & 0o777,
+            modified: u32_at(&raw, 16),
             raw,
         })
     }
@@ -290,6 +311,10 @@ impl Ext2 {
         let mut block = buffer()?;
         self.read_block(address, &mut block)?;
         block[offset % BLOCK..offset % BLOCK + 128].copy_from_slice(&inode.raw);
+        if self.clock != 0 {
+            put32(&mut *block, offset % BLOCK + 12, self.clock);
+            put32(&mut *block, offset % BLOCK + 16, self.clock);
+        }
         self.write_block(address, &block)
     }
     fn data_pointer(&mut self, inode: &Inode, index: usize) -> Result<u32, i64> {
@@ -574,6 +599,8 @@ impl Ext2 {
             directory,
             size: 0,
             executable: false,
+            permissions: if directory { 0o755 } else { 0o644 },
+            modified: self.clock,
             raw: [0; 128],
         };
         put16(

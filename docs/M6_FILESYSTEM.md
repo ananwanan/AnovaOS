@@ -1,3 +1,4 @@
+<!-- Define native VFS, descriptor, pipe, terminal and shell contracts inherited from M6. -->
 # M6 filesystems, init and native shell
 
 This document defines the implemented VFS, descriptor, pipe, console and shell
@@ -8,6 +9,8 @@ loader and scheduler contracts remain in [M5_PROCESSES.md](M5_PROCESSES.md).
 M7 adds the ext2 mount, executable disk files, durability calls and editor;
 [M7_STORAGE.md](M7_STORAGE.md) supersedes the no-disk/archived-only executable
 boundaries below. The M6 validation record remains historical evidence.
+M11 increases VFS/tmpfs capacities and adds explicit Linux development disks;
+the current bounds are in [M11_TOOLCHAIN](M11_TOOLCHAIN.md).
 
 ## Boot and filesystem model
 

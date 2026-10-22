@@ -9,6 +9,7 @@ mod packages;
 mod purposes;
 mod smoke;
 mod terminal;
+mod toolchain;
 mod transcript;
 
 use std::{
@@ -164,10 +165,12 @@ fn execute() -> Result<()> {
         "run" => {
             let mut disk = None;
             let mut network = false;
+            let mut toolchain = false;
             let mut options = args.iter().skip(1);
             while let Some(option) = options.next() {
                 match option.as_str() {
                     "--network" if !network => network = true,
+                    "--toolchain" if !toolchain => toolchain = true,
                     "--disk" if disk.is_none() => {
                         disk = Some(disk::user_path(
                             &root,
@@ -176,23 +179,32 @@ fn execute() -> Result<()> {
                     }
                     _ => {
                         return Err(
-                            "Usage: cargo xtask run [--network] [--disk build/disks/NAME.ext2]"
+                            "Usage: cargo xtask run [--network] [--toolchain] [--disk build/disks/NAME.ext2]"
                                 .into(),
                         );
                     }
                 }
             }
-            run(&root, disk.as_deref(), network)
+            run(&root, disk.as_deref(), network, toolchain)
         }
         "root-image" => {
-            if args.len() != 2 {
-                return Err("Usage: cargo xtask root-image build/disks/NAME.ext2".into());
-            }
+            let (linux, name) = match &args[1..] {
+                [name] => (false, name),
+                [flag, name] if flag == "--linux" => (true, name),
+                _ => {
+                    return Err(
+                        "Usage: cargo xtask root-image [--linux] build/disks/NAME.ext2".into(),
+                    );
+                }
+            };
             apps::build(&root, false)?;
-            let path = disk::user_path(&root, &args[1])?;
-            disk::create(&root, &path)
+            let path = disk::user_path(&root, name)?;
+            disk::create_profile(&root, &path, linux)
         }
         "package-test" => packages::verify(&root),
+        "toolchain-build" => toolchain::build(&root),
+        "toolchain-image" => toolchain::image(&root).map(|_| ()),
+        "toolchain-test" => toolchain::verify(&root),
         "network-test" => network::verify(&root),
         "terminal-test" => terminal::verify(&root),
         "persistence-test" => disk::verify(&root),
@@ -268,7 +280,7 @@ fn execute() -> Result<()> {
         }
         "help" | "--help" | "-h" => {
             println!(
-                "AnovaOS host tools\n\n  cargo xtask doctor\n  cargo xtask fetch\n  cargo xtask build\n  cargo xtask image\n  cargo xtask run [--network] [--disk build/disks/NAME.ext2]\n  cargo xtask smoke [--case CASE] [--timeout-secs 1..300]\n  cargo xtask verify\n  cargo xtask test-host\n  cargo xtask test-compat\n  cargo xtask trace-compat\n  cargo xtask apps\n  cargo xtask check-apps\n  cargo xtask check-files\n  cargo xtask network-test\n  cargo xtask package-test\n  cargo xtask terminal-test\n  cargo xtask root-image build/disks/NAME.ext2\n  cargo xtask persistence-test\n\nCASE: boot, panic, timeout, invalid-opcode, general-protection, page-fault, double-fault, stack-guard, read-only, no-execute, direct-no-execute, unmapped, oom.\nOutputs stay in build/; run uses disposable OVMF variables and a temporary data disk unless --disk is explicit. Use guest shutdown for persistent images. TCG is mandatory."
+                "AnovaOS host tools\n\n  cargo xtask doctor\n  cargo xtask fetch\n  cargo xtask build\n  cargo xtask image\n  cargo xtask run [--network] [--toolchain] [--disk build/disks/NAME.ext2]\n  cargo xtask smoke [--case CASE] [--timeout-secs 1..300]\n  cargo xtask verify\n  cargo xtask test-host\n  cargo xtask test-compat\n  cargo xtask trace-compat\n  cargo xtask apps\n  cargo xtask check-apps\n  cargo xtask check-files\n  cargo xtask network-test\n  cargo xtask package-test\n  cargo xtask toolchain-build\n  cargo xtask toolchain-image\n  cargo xtask toolchain-test\n  cargo xtask terminal-test\n  cargo xtask root-image [--linux] build/disks/NAME.ext2\n  cargo xtask persistence-test\n\nCASE: boot, panic, timeout, invalid-opcode, general-protection, page-fault, double-fault, stack-guard, read-only, no-execute, direct-no-execute, unmapped, oom.\nOutputs stay in build/; run uses disposable OVMF variables and a temporary data disk unless --disk is explicit. Use guest shutdown for persistent images. TCG is mandatory."
             );
             Ok(())
         }
@@ -525,6 +537,10 @@ impl Drop for Temporary {
 }
 
 fn image(root: &Path, mode: Mode) -> Result<PathBuf> {
+    image_archive(root, mode, None)
+}
+
+fn image_archive(root: &Path, mode: Mode, archive: Option<&Path>) -> Result<PathBuf> {
     assets::check(root)?;
     apps::build(root, false)?;
     let kernel = build(root, mode)?;
@@ -549,7 +565,10 @@ fn image(root: &Path, mode: Mode) -> Result<PathBuf> {
         stage.0.join("boot/apps/manifest.toml"),
     )?;
     fs::copy(
-        root.join("build/apps/initramfs.anovafs"),
+        archive.map_or_else(
+            || root.join("build/apps/initramfs.anovafs"),
+            Path::to_path_buf,
+        ),
         stage.0.join("boot/initramfs.anovafs"),
     )?;
     config.push_str(
@@ -563,7 +582,12 @@ fn image(root: &Path, mode: Mode) -> Result<PathBuf> {
     ] {
         fs::copy(root.join("build/cache").join(input), stage.0.join(output))?;
     }
-    let iso = directory(root, "images")?.join(format!("anova-{}.iso", mode.name()));
+    let name = if archive.is_some() {
+        "devel"
+    } else {
+        mode.name()
+    };
+    let iso = directory(root, "images")?.join(format!("anova-{name}.iso"));
     output_path(&iso)?;
     command(
         Command::new("xorriso")
@@ -616,7 +640,14 @@ fn qemu_disk(
         "-cpu",
         "qemu64,+rdrand",
         "-m",
-        "256M",
+        if iso
+            .file_name()
+            .is_some_and(|name| name == "anova-devel.iso")
+        {
+            "1G"
+        } else {
+            "256M"
+        },
         "-smp",
         "1",
         "-display",
@@ -647,9 +678,21 @@ fn qemu_disk(
     Ok(cmd)
 }
 
-fn run(root: &Path, disk: Option<&Path>, network: bool) -> Result<()> {
-    let iso = image(root, Mode::Normal)?;
+fn run(root: &Path, disk: Option<&Path>, network: bool, devel: bool) -> Result<()> {
+    let iso = if devel {
+        toolchain::image(root)?
+    } else {
+        image(root, Mode::Normal)?
+    };
     let vars = Temporary::new(root, "run")?;
+    let temporary;
+    let disk = if devel && disk.is_none() {
+        temporary = vars.0.join("devel.ext2");
+        disk::create_profile(root, &temporary, true)?;
+        Some(temporary.as_path())
+    } else {
+        disk
+    };
     let mut cmd = qemu_disk(root, &iso, &vars.0, false, disk, false)?;
     if network {
         network::attach(&mut cmd);

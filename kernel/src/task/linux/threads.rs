@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Share Linux thread-group resources and implement atomic BSP futex wait/wake deadlines.
+//! Manage Linux threads, suspended vfork parents and atomic BSP futex wait/wake deadlines.
 //! No borrowed user memory or kernel continuation is retained while a task sleeps.
 use super::*;
 
@@ -36,6 +36,9 @@ pub(crate) struct Thread {
     pub stopped: bool,
     pub leader_exit: Option<Outcome>,
     pub saved_mask: Option<u64>,
+    // A vfork parent cannot run or deliver handlers while its child shares this root.
+    pub vfork_child: Option<(u64, usize)>,
+    pub umask: u16,
     pub info: [SignalInfo; 64],
 }
 impl Thread {
@@ -48,6 +51,8 @@ impl Thread {
             stopped: false,
             leader_exit: None,
             saved_mask: None,
+            vfork_child: None,
+            umask: 0o022,
             info: [SignalInfo {
                 sender: 0,
                 code: 128,
@@ -151,6 +156,7 @@ impl Kernel {
         let mut thread = Thread::new(parent.thread.tgid);
         thread.pgid = parent.thread.pgid;
         thread.sid = parent.thread.sid;
+        thread.umask = parent.thread.umask;
         let process = Process {
             image: Some(image),
             stack: Some(stack),
@@ -400,6 +406,20 @@ impl Kernel {
                 p.image.is_none() || p.thread.stopped || p.thread.leader_exit.is_some()
             }) {
                 continue;
+            }
+            if let Some((pid, identity)) = self.process(i).thread.vfork_child {
+                let shared = self.processes.iter().enumerate().any(|(slot, child)| {
+                    self.policy.entry(slot).pid == pid
+                        && child
+                            .as_ref()
+                            .and_then(|p| p.image.as_ref())
+                            .is_some_and(|image| image.space.identity() == identity)
+                });
+                if shared {
+                    continue;
+                }
+                self.process_mut(i).thread.vfork_child = None;
+                self.policy.ready(i);
             }
             if self.linux_pending(i).is_some() {
                 self.policy.ready(i);

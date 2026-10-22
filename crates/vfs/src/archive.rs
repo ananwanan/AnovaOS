@@ -26,7 +26,7 @@ impl<'a> Archive<'a> {
             return Err(INVALID_ARGUMENT);
         }
         let count = u32::from_le_bytes(bytes[8..12].try_into().unwrap()) as usize;
-        if count > 96 {
+        if count > 2048 {
             return Err(INVALID_ARGUMENT);
         }
         Ok(Self {
@@ -59,7 +59,7 @@ impl<'a> Archive<'a> {
             || path_len == 0
             || path_len > 128
             || (kind == DIRECTORY && data_len != 0)
-            || data_len > 8 * 1024 * 1024
+            || data_len > 64 * 1024 * 1024
         {
             return Err(INVALID_ARGUMENT);
         }

@@ -4,27 +4,28 @@ use crate::Error;
 use anova_abi::UserAddr;
 
 const PAGE_BYTES: usize = 4096;
-const STRING_LIMIT: usize = 16;
-const STRING_BYTES: usize = 128;
+const STRING_LIMIT: usize = 64;
+const STRING_BYTES: usize = 1023;
 
 struct StackPage<'a> {
-    page: &'a mut [u8; PAGE_BYTES],
+    page: &'a mut [u8],
     base: u64,
     cursor: usize,
 }
 impl<'a> StackPage<'a> {
-    fn new(page: &'a mut [u8; PAGE_BYTES], top: u64) -> Result<Self, Error> {
-        let base = top.checked_sub(PAGE_BYTES as u64).ok_or(Error::Arguments)?;
-        if top & (PAGE_BYTES as u64 - 1) != 0 || UserAddr(base).checked_end(PAGE_BYTES) != Some(top)
+    fn new(page: &'a mut [u8], top: u64) -> Result<Self, Error> {
+        let base = top.checked_sub(page.len() as u64).ok_or(Error::Arguments)?;
+        if top & (PAGE_BYTES as u64 - 1) != 0
+            || UserAddr(base).checked_end(page.len()) != Some(top)
+            || page.is_empty()
+            || page.len() > 16384
+            || !page.len().is_multiple_of(PAGE_BYTES)
         {
             return Err(Error::Arguments);
         }
         page.fill(0);
-        Ok(Self {
-            page,
-            base,
-            cursor: PAGE_BYTES,
-        })
+        let cursor = page.len();
+        Ok(Self { page, base, cursor })
     }
     fn bytes(&mut self, bytes: &[u8]) -> Result<u64, Error> {
         let start = self
@@ -68,7 +69,7 @@ impl<'a> StackPage<'a> {
     }
 }
 
-pub fn build(args: &[&str], page: &mut [u8; PAGE_BYTES], top: u64) -> Result<u64, Error> {
+pub fn build(args: &[&str], page: &mut [u8], top: u64) -> Result<u64, Error> {
     if args.is_empty() {
         return Err(Error::Arguments);
     }
@@ -81,7 +82,7 @@ pub fn build(args: &[&str], page: &mut [u8; PAGE_BYTES], top: u64) -> Result<u64
 /// Random bytes must come from the kernel entropy source, never a fixed fixture in production.
 pub fn build_linux(
     args: &[&str],
-    page: &mut [u8; PAGE_BYTES],
+    page: &mut [u8],
     top: u64,
     image: &crate::Image,
     random: [u8; 16],
@@ -92,7 +93,7 @@ pub fn build_linux(
 pub fn build_linux_env(
     args: &[&str],
     env: &[&str],
-    page: &mut [u8; PAGE_BYTES],
+    page: &mut [u8],
     top: u64,
     image: &crate::Image,
     random: [u8; 16],
@@ -103,7 +104,7 @@ pub fn build_linux_env(
 pub fn build_linux_interpreter(
     args: &[&str],
     env: &[&str],
-    page: &mut [u8; PAGE_BYTES],
+    page: &mut [u8],
     top: u64,
     image: &crate::Image,
     random: [u8; 16],
