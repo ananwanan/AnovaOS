@@ -186,7 +186,7 @@ claimed by the M0–M11 baseline.
 - Use one **versioned C ABI** implemented in Rust as the portable library
   interface: C headers, a C++ RAII/move-safe wrapper and safe Rust bindings.
   Preserve equivalent observable behavior for all three languages.
-- At every FFI boundary, use checked \`extern "C"\` / \`#[repr(C)]\` layouts,
+- At every FFI boundary, use checked `extern "C"` / `#[repr(C)]` layouts,
   explicit widths, opaque handles, version/error checks, clear allocation
   ownership and no unwinding. Specify threading, callbacks, event ordering,
   lifetime, invalid arguments and resource exhaustion before freezing v1.
@@ -210,5 +210,5 @@ claimed by the M0–M11 baseline.
   are verified. Never equate host cross-compilation with guest compilation.
 - Any new GUI file follows DEV-001 purpose headers, English comments,
   inventory, ownership/safety review, ABI compatibility tests and exact
-  validation evidence requirements. Add \`cargo xtask\` GUI commands only
+  validation evidence requirements. Add `cargo xtask` GUI commands only
   together with their functioning implementation.
