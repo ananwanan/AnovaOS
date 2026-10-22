@@ -8,6 +8,7 @@ license = "Apache-2.0"
 
 [dependencies]
 itoa = "=1.0.15"
+m12-macro = { path = "macro" }
 
 [profile.dev]
 opt-level = 1

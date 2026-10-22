@@ -1,8 +1,8 @@
 <!-- Record locally verified subsystem capabilities, runtime limits and the next development task. -->
 # Implementation status
 
-Recorded 2026-10-22 (Asia/Shanghai). Baseline `7ce53fe` on dev.
-Task branch: `feat/m12-rust-cargo`. See [M12 profile](M12_RUST.md) and
+Recorded 2026-10-22 (Asia/Shanghai). Continuation baseline `6d623b3`.
+Task branch: `feat/m12-validation`. See [M12 profile](M12_RUST.md) and
 [validation/M12.md](validation/M12.md).
 Remote CI and publication are separate from local acceptance.
 
@@ -72,7 +72,7 @@ Remote CI and publication are separate from local acceptance.
 | COW, shared persistent mmap/writeback, ASLR, SMP, GUI and physical hardware | Not implemented or verified |
 | M10 IPv4 client networking and controlled native packages/TLS | Locally accepted within M10_NETWORK_PACKAGES |
 | M11 offline GCC/G++ 11.2.0, binutils, make and matching musl/C++ sysroot | Locally accepted within M11_TOOLCHAIN |
-| M12 guest Rust 1.90.0/std, offline Cargo/vendor, build.rs/C FFI and a procedural macro | Locally accepted within M12_RUST |
+| M12 guest Rust 1.90.0/std, offline Cargo/vendor, build.rs/C FFI and the fixed Cargo macro graph | Locally accepted within M12_RUST |
 | General Linux networking/glibc, public package repositories and online Cargo registry/Git | Not implemented or verified |
 | External IRQs, asynchronous block I/O, hotplug and boot-memory reclamation | Not implemented |
 
@@ -117,6 +117,13 @@ bounds recorded here. Native limits remain separate.
 - Dependency-free Cargo and frozen builds with locked vendor checksums, build.rs generated
   input/environment, real guest GCC/ar and C FFI, no-op and source-change builds,
   real syntax failure, exact persisted source/ELF hashes and clean reboot.
+- A fixed Cargo procedural-macro graph with a shared host/build dependency,
+  generated source/environment, dependency-change expansion from 42 to 84,
+  macro-error status 101 with retained prior output and successful source repair.
+  All 23 saved source/ELF files remain identical across clean reboot.
+- Linux development disks allocate 512 inodes within the existing 16 MiB
+  one-group profile; the accepted Cargo build uses 146 allocated inodes.
+  Native disks keep their 128-inode profile and existing images are not resized.
 - Actual per-thread sigaltstack/SA_ONSTACK delivery/return and rejected changes,
   musl posix_spawn's shared-root vfork variant, thread-group child waits,
   detached-thread self-unmap exit and forced invalid-return fault handling.

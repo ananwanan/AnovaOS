@@ -13,4 +13,16 @@ name = "m12-app"
 version = "0.1.0"
 dependencies = [
  "itoa",
+ "m12-macro",
 ]
+
+[[package]]
+name = "m12-macro"
+version = "0.1.0"
+dependencies = [
+ "m12-macro-support",
+]
+
+[[package]]
+name = "m12-macro-support"
+version = "0.1.0"

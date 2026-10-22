@@ -204,6 +204,9 @@ pub fn verify(root: &Path) -> Result<()> {
     success(&mut steps, "cargo --version\r");
     success(&mut steps, "mkdir plain\r");
     success(&mut steps, "mkdir plain/src\r");
+    for name in ["macro", "macro/src", "macro-support", "macro-support/src"] {
+        success(&mut steps, &format!("mkdir {name}\r"));
+    }
     for (guest, fixture) in [
         ("main.rs", "main.rs"),
         ("Cargo.toml", "Cargo.toml"),
@@ -211,6 +214,11 @@ pub fn verify(root: &Path) -> Result<()> {
         ("src/main.rs", "cargo.rs"),
         ("build.rs", "build.rs"),
         ("helper.c", "helper.c"),
+        ("macro/Cargo.toml", "macro/Cargo.toml"),
+        ("macro/build.rs", "macro/build.rs"),
+        ("macro/src/lib.rs", "macro/src/lib.rs"),
+        ("macro-support/Cargo.toml", "macro-support/Cargo.toml"),
+        ("macro-support/src/lib.rs", "macro-support/src/lib.rs"),
         ("macro.rs", "macro.rs"),
         ("use_macro.rs", "use_macro.rs"),
         ("bad.rs", "bad.rs"),
@@ -238,15 +246,32 @@ pub fn verify(root: &Path) -> Result<()> {
     success(&mut steps, "cargo build --offline --frozen\r");
     success(&mut steps, "./target/debug/m12-app\r");
     success(&mut steps, "cargo build --offline --frozen\r");
+    let changed_source = fs::read_to_string(root.join("tests/guest/m12/cargo.rs"))?
+        .replace("buffer.format(42)", "buffer.format(43)")
+        .replace("value, \"42\"", "value, \"43\"");
+    edit(&mut steps, "src/main.rs", &changed_source)?;
+    success(&mut steps, "cargo build --offline --frozen\r");
+    success(&mut steps, "./target/debug/m12-app\r");
+    edit(
+        &mut steps,
+        "macro-support/src/lib.rs",
+        &fs::read_to_string(root.join("tests/guest/m12/macro-support/src/lib.rs"))?
+            .replace("\"42\"", "\"84\""),
+    )?;
+    success(&mut steps, "cargo build --offline --frozen\r");
+    success(&mut steps, "./target/debug/m12-app 84\r");
     edit(
         &mut steps,
         "src/main.rs",
-        &fs::read_to_string(root.join("tests/guest/m12/cargo.rs"))?
-            .replace("buffer.format(42)", "buffer.format(43)")
-            .replace("value, \"42\"", "value, \"43\""),
+        &changed_source.replace("m12_macro::answer!()", "m12_macro::answer!(invalid)"),
     )?;
+    send(&mut steps, "anova> ", "cargo build --offline --frozen\r");
+    send(&mut steps, "anova> ", "status\r");
+    send(&mut steps, "[SHELL:STATUS] code=101", "");
+    success(&mut steps, "./target/debug/m12-app 84\r");
+    edit(&mut steps, "src/main.rs", &changed_source)?;
     success(&mut steps, "cargo build --offline --frozen\r");
-    success(&mut steps, "./target/debug/m12-app\r");
+    success(&mut steps, "./target/debug/m12-app 84\r");
     success(&mut steps, "rustc --edition=2024 main.rs -o hello-rust\r");
     success(&mut steps, "./hello-rust guest\r");
     success(
@@ -288,13 +313,22 @@ pub fn verify(root: &Path) -> Result<()> {
         "[M12:FFI] build.rs gcc and static C linkage answer=84",
         "[M12:CARGO] offline vendor value=42",
         "[M12:CARGO] offline vendor value=43",
+        "[M12:CARGO_MACRO] answer=42",
+        "[M12:CARGO_MACRO] answer=84",
+        "m12-macro expects no tokens",
         "error:",
     ] {
         if !serial.contains(marker) {
             return Err(format!("Missing actual Rust acceptance marker: {marker}").into());
         }
     }
-    for (name, expected) in [("itoa", 1), ("m12-app", 2), ("m12-plain", 1)] {
+    for (name, expected) in [
+        ("itoa", 1),
+        ("m12-app", 5),
+        ("m12-plain", 1),
+        ("m12-macro", 2),
+        ("m12-macro-support", 2),
+    ] {
         let count = serial.matches(&format!("Compiling {name} v")).count();
         if count != expected {
             return Err(
@@ -320,7 +354,7 @@ pub fn verify(root: &Path) -> Result<()> {
             ),
             (
                 "[M12:MACRO] loaded shared object and expanded answer=42",
-                b"./target/debug/m12-app\r",
+                b"./target/debug/m12-app 84\r",
             ),
             (
                 "[M12:CARGO] offline vendor value=43",
@@ -338,7 +372,8 @@ pub fn verify(root: &Path) -> Result<()> {
     fs::write(
         root.join("build/logs/rust.result.txt"),
         format!(
-            "result=Ok\ncompiler=guest\noffline=true\nvendor=itoa-1.0.15\nreboot=true\ndisk={}\n",
+            "result=Ok\ncompiler=guest\noffline=true\nvendor=itoa-1.0.15\ncargo_proc_macro=true\nmacro_dependency_rebuild=42_to_84\nmacro_error_exit=101\npersisted_files={}\nreboot=true\ndisk={}\n",
+            before.len(),
             path.display()
         ),
     )?;
@@ -356,15 +391,15 @@ fn edit(steps: &mut Vec<(String, Vec<u8>)>, name: &str, source: &str) -> Result<
     if source.lines().any(|line| line.len() > 250) {
         return Err("Rust editor fixture line too long".into());
     }
-    send(steps, "anova> ", &format!("edit {name}\r"));
-    // Delete the previous contents on repeat edits; the editor's load establishes the line count.
+    let command = format!("edit {name}\r");
+    send(steps, "anova> ", &command);
+    // These fixed source edits preserve line counts, including the deliberately invalid macro call.
     let mut input = String::new();
-    if name == "src/main.rs"
-        && steps
-            .iter()
-            .filter(|(_, b)| b.as_slice() == b"edit src/main.rs\r")
-            .count()
-            > 1
+    if steps
+        .iter()
+        .filter(|(_, b)| b.as_slice() == command.as_bytes())
+        .count()
+        > 1
     {
         for _ in source.lines() {
             input.push_str("d 1\r");
@@ -387,6 +422,11 @@ fn inspect(root: &Path, path: &Path) -> Result<Vec<(String, [u8; 32])>> {
         "src/main.rs",
         "build.rs",
         "helper.c",
+        "macro/Cargo.toml",
+        "macro/build.rs",
+        "macro/src/lib.rs",
+        "macro-support/Cargo.toml",
+        "macro-support/src/lib.rs",
         "macro.rs",
         "use_macro.rs",
         ".cargo/config.toml",
@@ -445,6 +485,8 @@ fn inspect(root: &Path, path: &Path) -> Result<Vec<(String, [u8; 32])>> {
                 expected = expected
                     .replace("buffer.format(42)", "buffer.format(43)")
                     .replace("value, \"42\"", "value, \"43\"");
+            } else if name == "macro-support/src/lib.rs" {
+                expected = expected.replace("\"42\"", "\"84\"");
             }
             if bytes != expected.as_bytes() {
                 return Err(format!("Persisted Rust source differs: {name}").into());

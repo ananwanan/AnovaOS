@@ -40,6 +40,11 @@ job, bounded temporary paths and offline Cargo. It does not invoke rustup,
 contact a host compilation service or apply the bare-metal kernel linker script
 to ordinary applications. Default Rust outputs use static musl linkage.
 
+Linux development disks remain 16 MiB, one-group ext2 with 128-byte inodes and
+the existing 1 MiB file limit, but now allocate 512 inodes. Cargo's macro and
+build-script artifacts exhaust the earlier 128-inode profile. Ordinary native
+disks keep 128 inodes; existing disks are never reformatted automatically.
+
 ## Provenance and offline dependency
 
 [inputs.json](../ports/rust/inputs.json) pins the official 2025-09-18 Rust 1.90.0
@@ -131,19 +136,26 @@ directory cleanup, positioned I/O and locks.
 The runtime gate starts the actual matching rustc and Cargo and shuts down.
 
 The full gate enters sources through UART, runs guest rustc, builds and loads a
-guest procedural-macro shared object, builds a dependency-free Cargo project
-and builds a locked vendor Cargo project.
+standalone procedural-macro shared object, builds a dependency-free Cargo project
+and builds a locked vendor Cargo project with a path-dependent procedural macro.
 Its build.rs generates OUT_DIR input, executes guest GCC/ar and links a real C
 function into Rust. A second Cargo build checks freshness; a source edit forces
-rebuild. A real parser error must return nonzero without replacing an earlier
-working executable. Host inspection checks exact saved source bytes, ELF/mode
-and SHA-256, then a clean second boot runs the saved applications. e2fsck and
+rebuild. The Cargo macro has an ordinary host dependency and a build script
+using the same support crate to generate OUT_DIR source and environment. Editing
+that support crate changes expansion from 42 to 84 and must recompile the support
+crate, macro and application while retaining the vendor dependency. Invalid macro
+input must return Cargo status 101 and leave the earlier application runnable;
+restoring valid source must build successfully again. A separate parser error
+must return nonzero without replacing an earlier working executable.
+Host inspection checks exact source bytes, ELF/mode and SHA-256 for 23 files,
+then a clean second boot runs the saved applications. e2fsck and
 unchanged hashes are required. No banner or host-produced application passes.
 
 Procedural macros use this exact compiler's host ABI. The launcher selects
-dynamic musl CRT/PIC options for a single `proc-macro` crate type; static
-application linkage remains the default. General
-Cargo workspaces, arbitrary proc-macro dependencies, public registry/Git/TLS
+dynamic musl CRT/PIC options for a single `proc-macro` crate type. Cargo `lib`
+and `rlib` dependencies also use PIC so address-bearing data can be linked into
+the macro shared object; application linkage remains static by default. General
+Cargo workspaces, arbitrary proc-macro graphs, public registry/Git/TLS
 transport, a native AnovaOS std port and Rust/LLVM self-bootstrap need their own
 tests and are not implied by this bounded offline profile.
 

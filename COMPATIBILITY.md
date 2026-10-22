@@ -160,8 +160,11 @@ Actual logs and file hashes: [M11 acceptance](docs/validation/M11.md).
 Official checksum-locked Rust 1.90.0 `x86_64-unknown-linux-musl` rustc/Cargo/std
 and rust-lld run on the AnovaOS kernel. A host cross test is preliminary;
 acceptance binaries compile from UART-edited sources inside the guest. Separate
-tests cover std/threads/child output, compiler startup, a shared procedural macro,
+tests cover std/threads/child output, compiler startup, a standalone procedural macro,
 locked offline itoa, build.rs generated input/environment and guest GCC/ar C FFI.
+The fixed Cargo macro graph includes an ordinary host/build dependency, generated
+macro input, transitive rebuilds from 42 to 84, invalid-input status 101 and an
+unchanged runnable prior application, followed by a successful source repair.
 Cargo freshness/source edits, a real parser failure, disk hashes, e2fsck and
 reboot execution are checked. Runtime tests include alternate signal stacks,
 detached exit, invalid-return faults, positioned/resized files and OFD locks.

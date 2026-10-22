@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Create bounded regular ext2 images, attach temporary/persistent disks and verify real reboot data.
+//! Create bounded ext2 images, size Linux development inode tables and verify real reboot data.
 //! Every writable image stays below build/; existing images are never implicitly formatted.
 use super::*;
 use anova_storage::{BlockDevice, SECTOR, check_range, ext2::Ext2};
@@ -73,7 +73,7 @@ pub(super) fn create_profile(root: &Path, path: &Path, linux: bool) -> Result<()
                 "-g",
                 "4096",
                 "-N",
-                "128",
+                if linux { "512" } else { "128" },
                 "-m",
                 "0",
                 "-O",

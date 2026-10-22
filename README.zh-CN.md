@@ -202,6 +202,7 @@ cargo xtask rust-test
 可选镜像使用 3 GiB 内存，组合校验锁定的官方 Rust 1.90.0 musl 二进制包和
 M11 源码构建的 C 工具链。系统内 rustc 编译 std 应用与过程宏共享库；离线
 Cargo 构建锁定的 vendor crate，执行 build.rs，并链接系统内编译的 C 代码。
-验收检查源码修改、构建新鲜度、真实语法错误，以及正常关机重启后的执行。
+还验证 Cargo 过程宏及其普通依赖、构建依赖和生成源码；支持库修改触发依赖重建，
+非法宏输入返回 101 后旧程序仍可运行。验收检查构建新鲜度与正常关机重启后的执行。
 详见 [M12 设计](docs/M12_RUST.md) 与 [验收记录](docs/validation/M12.md)。
 在线 registry/Git、AnovaOS 原生 std 端口和编译器自举仍独立推进。

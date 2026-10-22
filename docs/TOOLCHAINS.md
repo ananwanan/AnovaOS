@@ -111,8 +111,10 @@ make
 | R5 | proc-macro | 编译器进程加载 host 动态库、匹配 ABI 与库搜索 |
 | R6 | 在线 crates.io/Git 获取 | 网络、DNS、TLS、CA、时间及相关传输依赖 |
 
-M12 offline acceptance covers R1–R3, build.rs/C FFI (R4) and a standalone
-matching-ABI procedural macro (R5). R6 online registry/Git remains unverified.
+M12 offline acceptance covers R1–R3, build.rs/C FFI (R4), a standalone
+matching-ABI macro and a fixed Cargo macro/build-script dependency graph (R5).
+The graph checks dependency rebuilds, rejected macro input and retained outputs.
+R6 online registry/Git remains unverified.
 See [M12_RUST](M12_RUST.md) and [actual evidence](validation/M12.md).
 Rust 1.90.0/LLVM/Cargo/std are locked official musl binary distributions; this
 is not a local Rust source build or compiler self-bootstrap.

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Launch the isolated upstream Rust/Cargo tools with a bounded offline guest configuration.
+// Launch isolated Rust/Cargo tools with static apps and PIC libraries for the offline macro graph.
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -10,12 +10,16 @@ int main(int argc, char **argv) {
     const char *name = strrchr(argv[0], '/');
     name = name ? name + 1 : argv[0];
     int cargo = strcmp(name, "cargo") == 0;
-    int types = 0, macro_type = 0;
+    int types = 0, macro_type = 0, library_type = 0;
     for (int k = 1; k < argc; ++k) {
         const char *kind = NULL;
         if (!strcmp(argv[k], "--crate-type") && k + 1 < argc) kind = argv[k+1];
         else if (!strncmp(argv[k], "--crate-type=", 13)) kind = argv[k]+13;
-        if (kind) { ++types; macro_type |= !strcmp(kind, "proc-macro"); }
+        if (kind) {
+            ++types;
+            macro_type |= !strcmp(kind, "proc-macro");
+            library_type |= !strcmp(kind, "lib") || !strcmp(kind, "rlib");
+        }
     }
     const int dynamic_macro = types == 1 && macro_type;
     char *args[96];
@@ -43,7 +47,9 @@ int main(int argc, char **argv) {
         args[n++] = "-Ccodegen-units=1";
         args[n++] = "-Cdebuginfo=0";
         args[n++] = "-Cstrip=symbols";
-        args[n++] = dynamic_macro ? "-Crelocation-model=pic" : "-Crelocation-model=static";
+        // Cargo also links host dependency rlibs into the macro shared object.
+        args[n++] = (dynamic_macro || library_type)
+            ? "-Crelocation-model=pic" : "-Crelocation-model=static";
         if (dynamic_macro) {
             args[n++] = "-Ctarget-feature=-crt-static";
             args[n++] = "-Lnative=/rs/lib";

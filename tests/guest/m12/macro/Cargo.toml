@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: Apache-2.0
+# Build a host procedural macro with a Rust dependency and an actual Cargo build script.
+[package]
+name = "m12-macro"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+m12-macro-support = { path = "../macro-support" }
+
+[build-dependencies]
+m12-macro-support = { path = "../macro-support" }

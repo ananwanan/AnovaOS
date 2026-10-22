@@ -28,7 +28,9 @@ matching std/rust-lld and offline vendor profile at `/rs`. Read
 [M12_RUST](docs/M12_RUST.md) and [validation/M12](docs/validation/M12.md).
 Preserve `rust-cross-test`, `rust-runtime-test` and `rust-test` alongside all
 previous gates. Actual guest compilation covers std, worker-thread child wait,
-build.rs, C FFI and a procedural macro. It does not establish Rust source
+build.rs, C FFI, a standalone procedural macro and a fixed Cargo macro graph
+with shared host/build dependencies. Preserve dependency-change rebuilds,
+macro input rejection and retained prior outputs. It does not establish Rust source
 construction, online registry/Git, native AnovaOS std or compiler bootstrap.
 Linux accepts 256 argv/env entries, a checked 32 KiB startup block, 256 MiB ELF
 and per-mmap bounds, the `[0x50000000, 0xc0000000)` mapping window and bounded

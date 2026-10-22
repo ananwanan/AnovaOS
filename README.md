@@ -19,8 +19,9 @@ verified user-space TLS and locked package installation, upgrades, rollback and 
 M11 adds an optional offline GCC/G++/make development image: C/C++ applications
 compile and run inside the guest, with exceptions, threads and reboot retention verified.
 M12 adds guest Rust 1.90.0/std and offline Cargo with vendor dependencies, build scripts,
-C FFI and a guest-built procedural macro. General Linux/glibc and online Cargo
-registry/Git transport remain future work; device IRQs stay masked.**
+C FFI, standalone macros and a Cargo macro/build-script dependency graph.
+General Linux/glibc and online Cargo registry/Git transport remain future work;
+device IRQs stay masked.**
 
 Repository: [ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS).
 

@@ -223,7 +223,7 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | File | Responsibility |
 | --- | --- |
 | `docs/third-party/m12.md` | Record official Rust/Cargo/LLVM distribution provenance, licenses and unwinder boundaries. |
-| `ports/rust/build.py` | Verify archives, serialize construction and atomically publish the inventoried guest Rust sysroot. |
+| `ports/rust/build.py` | Verify archives, isolate strip scratch output and publish the inventoried guest Rust sysroot. |
 | `ports/rust/inputs.json` | Lock official Rust musl binary archives and the vendored itoa registry checksum. |
 | `tests/guest/m12/Cargo.lock` | Generated lockfile for the fixed offline guest registry dependency; do not hand-edit. |
 | `tests/guest/m12/Cargo.toml` | Define the M12 offline Rust/Cargo acceptance fixture and its declared behavior. |
@@ -239,6 +239,11 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `docs/validation/M12.md` | Record actual M12 guest compilation, feature-specific evidence and inherited regression results. |
 | `tests/guest/m12/helper.c` | Provide the C function compiled by guest build.rs and statically linked through Rust FFI. |
 | `tests/guest/m12/macro.rs` | Export a real procedural macro compiled into a guest shared library. |
+| `tests/guest/m12/macro/Cargo.toml` | Define the Cargo procedural macro and its runtime/build path dependency. |
+| `tests/guest/m12/macro/build.rs` | Generate macro input and environment from the host support crate. |
+| `tests/guest/m12/macro/src/lib.rs` | Expand the Cargo macro from generated input and reject unexpected tokens. |
+| `tests/guest/m12/macro-support/Cargo.toml` | Define the shared host dependency for the macro and its build script. |
+| `tests/guest/m12/macro-support/src/lib.rs` | Supply the edited value used to verify transitive Cargo rebuilds. |
 | `tests/guest/m12/use_macro.rs` | Require actual loading/expansion of the guest-built macro and validate its result. |
 | `tests/guest/m12/plain/Cargo.toml` | Define an independent dependency-free offline Cargo acceptance project. |
 | `tests/guest/m12/plain/Cargo.lock` | Cargo-generated lock for the dependency-free guest project; do not hand-edit. |

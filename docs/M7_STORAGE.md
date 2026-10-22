@@ -49,7 +49,7 @@ ext2, without a partition table; the ISO/ESP and writable data image are separat
 | --- | --- |
 | Revision / layout | Revision 1, one block group, 4 KiB blocks/fragments, first data block 0 |
 | Inodes | 128-byte inodes, first ordinary inode 11, at most 4,096 inodes |
-| Volume | 64–32,768 blocks within advertised device capacity; tool creates 16 MiB/128 inodes |
+| Volume | 64–32,768 blocks within device capacity; tool creates 16 MiB with 128 native or 512 Linux-development inodes |
 | Metadata | Block bitmap 2, inode bitmap 3, inode table 4, contiguous reserved metadata |
 | Features | COMPAT=0, INCOMPAT=FILETYPE only (2), RO_COMPAT=0 |
 | Objects | Regular files and directories; no ext2 links, hard links, xattrs, ACLs or devices |

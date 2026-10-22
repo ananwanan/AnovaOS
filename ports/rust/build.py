@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Verify official musl compiler inputs and stage an isolated, inventoried guest Rust sysroot.
+# Verify official musl inputs and publish an inventoried sysroot without strip scratch files.
 import hashlib
 import fcntl
 import json
@@ -91,12 +91,18 @@ def copy(source, destination):
 
 copy(compiler/'rustc/bin/rustc', stage/'bin/rustc')
 copy(cargo/'cargo/bin/cargo', stage/'bin/cargo')
-subprocess.run(['strip', '--strip-unneeded', '-o', str(stage/'bin/rust-lld'),
-                str(compiler/f'rustc/lib/rustlib/{triple}/bin/rust-lld')], check=True)
+stripped = Path(temporary.name)/'stripped'
+stripped.mkdir()
+
+def strip_copy(source, destination):
+    # Keep objcopy/strip scratch siblings outside the publishable candidate.
+    output = stripped/source.name
+    subprocess.run(['strip', '--strip-unneeded', '-o', str(output), str(source)], check=True)
+    copy(output, destination)
+
+strip_copy(compiler/f'rustc/lib/rustlib/{triple}/bin/rust-lld', stage/'bin/rust-lld')
 for p in (compiler/'rustc/lib').glob('*.so'):
-    destination = stage/'lib'/p.name
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(['strip', '--strip-unneeded', '-o', str(destination), str(p)], check=True)
+    strip_copy(p, stage/'lib'/p.name)
 libraries = stdlib/f'rust-std-{triple}/lib/rustlib/{triple}/lib'
 for p in sorted(libraries.rglob('*')):
     if p.is_file():
