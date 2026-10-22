@@ -464,6 +464,7 @@ pub(super) fn session_network(
             "[SHELL:FAIL]",
             "[FS:FAIL]",
             "[EDIT:FAIL]",
+            "edit: command/save failed; buffer retained",
             "[POWER:FAIL]",
         ]
         .iter()

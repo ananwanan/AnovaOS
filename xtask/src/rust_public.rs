@@ -9,6 +9,9 @@ const REVISION: &str = "e2766b868e4ac1ae2bf5bea1ac43d4c0da23b899";
 const CRATE_HASH: &str = "4a5f13b858c8d314ee3e8f639011f7ccefe71f97f96e50151fb991f267928e2c";
 
 pub fn verify(root: &Path) -> Result<()> {
+    let result_path = directory(root, "logs")?.join("rust-public.result.txt");
+    output_path(&result_path)?;
+    fs::write(&result_path, "result=Running\n")?;
     let work = directory(root, "rust-public")?;
     rust::image_profile(root, false)?;
     let mut config = String::from(
@@ -80,7 +83,7 @@ pub fn verify(root: &Path) -> Result<()> {
         root,
         &iso,
         &disk,
-        "rust-public",
+        "rust-public-build",
         false,
         None,
         &exchanges,
@@ -88,7 +91,7 @@ pub fn verify(root: &Path) -> Result<()> {
         900,
         true,
     )?;
-    let serial = fs::read_to_string(root.join("build/logs/rust-public.serial.log"))?;
+    let serial = fs::read_to_string(root.join("build/logs/rust-public-build.serial.log"))?;
     for marker in [
         "Updating crates.io index",
         "https://github.com/dtolnay/itoa",
@@ -105,7 +108,7 @@ pub fn verify(root: &Path) -> Result<()> {
         archive: "itoa-1.0.15.crate",
         crate_hash: CRATE_HASH,
         git_rev: REVISION,
-        git_source: "mod buffer;",
+        git_source: "pub struct Buffer {",
     };
     let before = inspect(&disk, &profile)?;
     command(Command::new("e2fsck").args(["-f", "-n"]).arg(&disk))?;
@@ -118,9 +121,12 @@ pub fn verify(root: &Path) -> Result<()> {
         None,
         &[
             ("anova> ", b"cd /persist/public\r"),
-            ("anova> ", b"cargo-online build --offline --frozen\r"),
+            (
+                "anova> ",
+                b"cargo-online build --offline --frozen --target-dir rebuilt\r",
+            ),
             ("anova> ", b"status\r"),
-            ("[SHELL:STATUS] code=0", b"./target/debug/m12-public-app\r"),
+            ("[SHELL:STATUS] code=0", b"./rebuilt/debug/m12-public-app\r"),
             (
                 "[M12:PUBLIC] crates.io=true github=true answer=42",
                 b"shutdown\r",
@@ -141,7 +147,7 @@ pub fn verify(root: &Path) -> Result<()> {
             .collect::<String>(),
     )?;
     fs::write(
-        root.join("build/logs/rust-public.result.txt"),
+        result_path,
         format!(
             "result=Ok\ncompiler=guest\nregistry=crates.io\ngit=github.com/dtolnay/itoa\n\
          git_rev={REVISION}\ncrate_sha256={CRATE_HASH}\nstrict_tls=true\n\

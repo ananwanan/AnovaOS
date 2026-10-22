@@ -24,6 +24,9 @@ pub(super) struct CacheProfile<'a> {
 }
 
 pub fn verify(root: &Path) -> Result<()> {
+    let result_path = directory(root, "logs")?.join("rust-online.result.txt");
+    output_path(&result_path)?;
+    fs::write(&result_path, "result=Running\n")?;
     let work = directory(root, "rust-online")?;
     command(
         Command::new("python3")
@@ -118,6 +121,9 @@ pub fn verify(root: &Path) -> Result<()> {
             send(&mut steps, "anova> ", "status\r");
             send(&mut steps, "[SHELL:STATUS] code=101", "");
         } else {
+            send(&mut steps, "anova> ", "cargo fetch\r");
+            send(&mut steps, "anova> ", "status\r");
+            send(&mut steps, "[SHELL:STATUS] code=101", "");
             success(&mut steps, "cargo-online build\r");
             success(&mut steps, "./target/debug/m12-online-app\r");
             success(&mut steps, "cargo-online build --locked\r");
@@ -141,7 +147,7 @@ pub fn verify(root: &Path) -> Result<()> {
         root,
         &iso,
         &disk,
-        "rust-online",
+        "rust-online-build",
         false,
         None,
         &exchanges,
@@ -149,7 +155,7 @@ pub fn verify(root: &Path) -> Result<()> {
         900,
         true,
     )?;
-    let serial = fs::read_to_string(root.join("build/logs/rust-online.serial.log"))?;
+    let serial = fs::read_to_string(root.join("build/logs/rust-online-build.serial.log"))?;
     let failures: Vec<_> = serial
         .split("anova> cargo-online fetch\r\n")
         .skip(1)
@@ -160,7 +166,7 @@ pub fn verify(root: &Path) -> Result<()> {
         &["[60]", "no alternative certificate subject name matches"],
         &["failed to verify the checksum"],
         &["failed to download from", "unexpected eof"],
-        &["[28]", "timed out"],
+        &["[28]", "timeout was reached"],
     ]
     .iter()
     .enumerate()
@@ -190,7 +196,7 @@ pub fn verify(root: &Path) -> Result<()> {
         "Updating git repository",
         "checksum",
         "certificate",
-        "timed out",
+        "Timeout",
     ] {
         if !serial
             .to_ascii_lowercase()
@@ -249,9 +255,12 @@ pub fn verify(root: &Path) -> Result<()> {
         None,
         &[
             ("anova> ", b"cd /persist/online\r"),
-            ("anova> ", b"cargo-online build --offline --frozen\r"),
+            (
+                "anova> ",
+                b"cargo-online build --offline --frozen --target-dir rebuilt\r",
+            ),
             ("anova> ", b"status\r"),
-            ("[SHELL:STATUS] code=0", b"./target/debug/m12-online-app\r"),
+            ("[SHELL:STATUS] code=0", b"./rebuilt/debug/m12-online-app\r"),
             (
                 "[M12:ONLINE] registry=true git=true answer=42",
                 b"shutdown\r",
@@ -274,7 +283,7 @@ pub fn verify(root: &Path) -> Result<()> {
             .collect::<String>(),
     )?;
     fs::write(
-        root.join("build/logs/rust-online.result.txt"),
+        result_path,
         format!(
             "result=Ok\ncompiler=guest\nregistry=https-sparse\ngit=https-smart\ngit_rev={}\n\
          crate_sha256={}\nstrict_tls=true\ncorruption=rejected\ntruncation=rejected\n\

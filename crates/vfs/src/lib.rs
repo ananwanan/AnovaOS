@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #![no_std]
-//! Bounded memory/ext2 mounts, shared descriptors, packet pairs, pipes, PTYs and file snapshots.
+//! Bounded mounts, shared descriptors/readonly file maps, packet pairs, pipes, PTYs and timestamps.
 //! One non-preemptible owner serializes all mutations; no hardware, locks or user pointers.
 extern crate alloc;
 pub mod archive;
@@ -191,7 +191,7 @@ impl<'a> Vfs<'a> {
         self.mount("/persist", Mount::Ext2)?;
         self.nodes[root].inode = Some(2);
         let result = (|| {
-            self.import_disk(&mut disk, root, 2, 0)?;
+            self.import_disk(&mut disk, root, 2)?;
             // This explicit image-wide manifest selects native v1, never ELF OSABI heuristics.
             let manifest = self.child(root, ".anova-abi").ok_or(INVALID_FILESYSTEM)?;
             let number = self.nodes[manifest].inode.ok_or(INVALID_FILESYSTEM)?;
@@ -216,39 +216,38 @@ impl<'a> Vfs<'a> {
         self.disk = Some(disk);
         Ok(())
     }
-    fn import_disk(
-        &mut self,
-        disk: &mut Ext2,
-        parent: usize,
-        inode: u32,
-        depth: usize,
-    ) -> Result<(), i64> {
-        if depth > 8 {
-            return Err(TOO_LONG);
-        }
-        for entry in disk.entries(inode)? {
-            if self.nodes.iter().any(|n| n.inode == Some(entry.inode)) {
-                return Err(INVALID_FILESYSTEM);
-            }
-            let info = disk.inode(entry.inode)?;
-            let name = core::str::from_utf8(&entry.name[..entry.length])
-                .map_err(|_| INVALID_FILESYSTEM)?;
-            let data = if info.directory {
-                Data::Directory
-            } else {
-                Data::Persistent {
-                    size: info.size,
-                    executable: info.executable,
+    fn import_disk(&mut self, disk: &mut Ext2, parent: usize, inode: u32) -> Result<(), i64> {
+        // NODE_LIMIT and duplicate-inode rejection bound traversal without a recursive stack.
+        // Cargo Git caches legitimately exceed the earlier eight-directory import depth.
+        let mut pending = Vec::new();
+        pending.try_reserve(1).map_err(|_| NO_MEMORY)?;
+        pending.push((parent, inode));
+        while let Some((parent, inode)) = pending.pop() {
+            for entry in disk.entries(inode)? {
+                if self.nodes.iter().any(|n| n.inode == Some(entry.inode)) {
+                    return Err(INVALID_FILESYSTEM);
                 }
-            };
-            let node = self.insert(parent, name, data, Mount::Ext2)?;
-            self.nodes[node].inode = Some(entry.inode);
-            self.nodes[node].permissions = info.permissions;
-            self.nodes[node].modified = u64::from(info.modified) * 1_000_000_000;
-            self.nodes[node].accessed = u64::from(info.accessed) * 1_000_000_000;
-            self.nodes[node].changed = u64::from(info.changed) * 1_000_000_000;
-            if info.directory {
-                self.import_disk(disk, node, entry.inode, depth + 1)?;
+                let info = disk.inode(entry.inode)?;
+                let name = core::str::from_utf8(&entry.name[..entry.length])
+                    .map_err(|_| INVALID_FILESYSTEM)?;
+                let data = if info.directory {
+                    Data::Directory
+                } else {
+                    Data::Persistent {
+                        size: info.size,
+                        executable: info.executable,
+                    }
+                };
+                let node = self.insert(parent, name, data, Mount::Ext2)?;
+                self.nodes[node].inode = Some(entry.inode);
+                self.nodes[node].permissions = info.permissions;
+                self.nodes[node].modified = u64::from(info.modified) * 1_000_000_000;
+                self.nodes[node].accessed = u64::from(info.accessed) * 1_000_000_000;
+                self.nodes[node].changed = u64::from(info.changed) * 1_000_000_000;
+                if info.directory {
+                    pending.try_reserve(1).map_err(|_| NO_MEMORY)?;
+                    pending.push((node, entry.inode));
+                }
             }
         }
         Ok(())
@@ -1069,10 +1068,7 @@ impl<'a> Vfs<'a> {
         let Target::Node(node) = open.target else {
             return Err(INVALID_ARGUMENT);
         };
-        let (kind, length, _) = {
-            let (_, kind, length, executable) = self.node_metadata(node)?;
-            (kind, length, executable)
-        };
+        let (_, kind, length, _) = self.node_metadata(node)?;
         if kind != 1 || length > FILE_BYTES {
             return Err(UNSUPPORTED);
         }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Own shared user address spaces, private/shared page backing and guarded per-task kernel stacks.
+//! Own user roots, coherent readonly file/anonymous shared pages and guarded task kernel stacks.
 //! BSP mutations occur on the permanent kernel root at IF=0; user roots share upper paths.
 use super::*;
 use alloc::vec::Vec;

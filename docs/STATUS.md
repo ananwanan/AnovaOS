@@ -163,6 +163,10 @@ setting its extracted mtime; the timestamp implementation and tests are now
 present. Online end-to-end validation and the full regression matrix remain
 pending. See [M12 validation](validation/M12.md).
 
+The 2026-10-23 follow-up also checkpoints the pending online test assertions,
+offline rebuild checks and iterative ext2 directory import. Its host checks
+pass; guest online/public acceptance and the full regression matrix remain pending.
+
 ## Next task
 
 Complete and validate the in-progress M12 online gates before marking R6 accepted.

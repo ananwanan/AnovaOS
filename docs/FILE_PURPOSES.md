@@ -265,3 +265,4 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `kernel/src/task/linux/time.rs` | Adapt utimensat/futimesat, dirfd/descriptor paths, NOW/OMIT and checked timestamp precision. |
 | `kernel/src/mm/user/file_mapping.rs` | Pin readonly shared-file mappings and refresh changed VFS bytes with physical-page and fork ownership. |
 | `crates/vfs/src/file_mapping.rs` | Retain bounded shared-file bytes and version successful writes independently of descriptor lifetime. |
+| `docs/M12_NETWORK.md` | Define opt-in Cargo networking, strict trust/cache ownership, bounded runtime additions and controlled/public acceptance gates. |
