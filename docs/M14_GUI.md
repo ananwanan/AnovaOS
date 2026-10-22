@@ -34,7 +34,7 @@ crate or to complete GPU/Vulkan compatibility.
 
 ## 2. Trust and component boundaries
 
-\`\`\`text
+```text
   Rust app        C++ app          C app
      |               |               |
   Rust SDK        C++ RAII       C headers/wrappers
@@ -50,7 +50,7 @@ crate or to complete GPU/Vulkan compatibility.
               kernel IPC / display / input drivers
                              |
                     framebuffer / device
-\`\`\`
+```
 
 The C ABI is a user-library boundary, **not** the kernel syscall ABI. Applications
 must never acquire unrestricted physical framebuffer access or memory mappings
@@ -75,13 +75,13 @@ on compositor restart. CPU/software paths must not depend on GPU availability.
 
 The ABI shall document, before freezing v1:
 
-1. A separate \`ANOVA_GUI_ABI_VERSION\` and capability/feature negotiation, with
+1. A separate `ANOVA_GUI_ABI_VERSION` and capability/feature negotiation, with
    clear unsupported-version errors. Do not confuse GUI library ABI with the
    native syscall ABI or the Linux compatibility personality.
-2. \`extern "C"\` exported entry points, \`#[repr(C)]\` fixed-layout types,
+2. `extern "C"` exported entry points, `#[repr(C)]` fixed-layout types,
    explicit-width integers, deliberate alignment/padding and call conventions.
-   No Rust \`String\`, \`Vec\`, trait object, unwinding, borrowed internal pointers
-   or unstable \`repr(Rust)\` layouts cross the FFI boundary.
+   No Rust `String`, `Vec`, trait object, unwinding, borrowed internal pointers
+   or unstable `repr(Rust)` layouts cross the FFI boundary.
 3. UTF-8 text as pointer + byte length where needed; borrowed inputs valid only
    for the documented call, output buffers carrying capacity/written length
    or owning an explicit release function. Avoid hidden allocator coupling.
@@ -93,14 +93,14 @@ The ABI shall document, before freezing v1:
 6. Event loop model, callbacks, UI-thread affinity, re-entrancy, ordering,
    cancellation, queue overflow/backpressure and thread-safety of each operation.
 7. C++ wrapper ownership using RAII and move semantics, with exception/no-exception
-   API behavior defined; Rust wrappers use types/lifetimes and a \`Result\`-style
+   API behavior defined; Rust wrappers use types/lifetimes and a `Result`-style
    error model. Each language remains behaviorally equivalent.
-8. Header generation (candidate: \`cbindgen\`), library packaging, symbol/export
+8. Header generation (candidate: `cbindgen`), library packaging, symbol/export
    version policy, compatibility tests and separate SDK/toolchain targets.
 
-Potential API functions like \`anova_gui_query_version\`, \`anova_app_create\`,
-\`anova_window_create\`, \`anova_window_show\`, \`anova_app_poll_event\` and
-\`anova_window_destroy\` are **illustrative names only** until M14.4 freezes
+Potential API functions like `anova_gui_query_version`, `anova_app_create`,
+`anova_window_create`, `anova_window_show`, `anova_app_poll_event` and
+`anova_window_destroy` are **illustrative names only** until M14.4 freezes
 the public API. No implementation is claimed.
 
 SDK validation must compile and run one independently built C, C++ and Rust GUI
@@ -110,7 +110,7 @@ language's build result as evidence for the other two is insufficient.
 
 ## 4. Candidate implementation layout (create on demand)
 
-\`\`\`text
+```text
 crates/gui-protocol/          # Plain validated messages, IDs and wire versions
 user/compositor/              # User-space compositor, window and focus policy
 user/desktop/                 # Desktop shell, taskbar and system applications
@@ -121,14 +121,14 @@ user/gui-sdk/c/               # C headers, library and examples
 user/gui-sdk/cpp/             # C++ RAII header/library and examples
 tests/guest/gui/              # Deterministic integration and fault scenarios
 docs/validation/M14*.md      # Evidence files only once testing really exists
-\`\`\`
+```
 
 No empty directory, dummy implementation, claims of validation, or new Cargo
 dependencies should be committed simply to match this future layout.
 
-Candidate crates for evaluation (not dependencies yet): \`embedded-graphics\`
-for simple pixel primitives, \`tiny-skia\` for richer software drawing, and
-\`fontdue\` for glyph rasterization. Before selection, verify exact crate
+Candidate crates for evaluation (not dependencies yet): `embedded-graphics`
+for simple pixel primitives, `tiny-skia` for richer software drawing, and
+`fontdue` for glyph rasterization. Before selection, verify exact crate
 versions, licenses, target/allocator/no_std requirements, cost, safety and
 guest-side reproducibility. Fonts, rasterizer and layouts belong in user space.
 
@@ -215,7 +215,7 @@ resource reclamation. Demonstrate the full edit/build/run cycle in AnovaOS.
 Dependencies: working software desktop, device/PCI/DMA ownership, safe shared
 memory and a selected tested graphics-device/userspace stack.
 
-- [ ] Evaluate a selected \`virtio-gpu\` display path, document 2D scanout
+- [ ] Evaluate a selected `virtio-gpu` display path, document 2D scanout
       separately from true accelerated rendering and keep M14.1 fallback.
 - [ ] Specify device queues, buffer allocation, mapping/cache coherence,
       synchronization/fences, resource resets and isolation from untrusted apps.
@@ -248,6 +248,6 @@ AnovaOS's C ABI, and hardware acceleration is not delivered by merely
 accepting a bootloader framebuffer.
 
 M14 must not destabilize the accepted M0–M11 serial, process, VFS, toolchain
-and negative-test gates. Do not fabricate a \`cargo xtask gui-test\` command;
+and negative-test gates. Do not fabricate a `cargo xtask gui-test` command;
 introduce a real test command only along with its working implementation
 and check it on the documented reference configuration.
