@@ -57,6 +57,11 @@ static void shared_file_checks(void) {
     volatile char *b = mmap(NULL, 4096, PROT_READ, MAP_SHARED, fd, 0);
     assert(a != MAP_FAILED && b != MAP_FAILED && a[0] == 'o' && b[0] == 'o');
     assert(pwrite(fd, "N", 1, 0) == 1 && a[0] == 'N' && b[0] == 'N');
+    int readonly = fork(), readonly_status;
+    assert(readonly >= 0);
+    if (!readonly) { a[0] = 'X'; _exit(99); }
+    assert(waitpid(readonly, &readonly_status, 0) == readonly && WIFSIGNALED(readonly_status));
+    assert(WTERMSIG(readonly_status) == SIGSEGV && a[0] == 'N' && b[0] == 'N');
     assert(mprotect((void *)a, 4096, PROT_READ | PROT_WRITE) == -1 && errno == EACCES);
     assert(mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0) == MAP_FAILED && errno == ENOTSUP);
     assert(ftruncate(fd, 4) == -1 && errno == EBUSY);

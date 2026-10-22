@@ -3,6 +3,9 @@
 fn main() {
     let mut registry = itoa::Buffer::new();
     let mut git = itoa_git::Buffer::new();
-    assert_eq!(registry.format(42), git.format(42));
-    println!("[M12:PUBLIC] crates.io=true github=true answer=42");
+    let registry = registry.format(42);
+    let git = git.format(42);
+    assert_eq!(registry, "42");
+    assert_eq!(git, "42");
+    println!("[M12:PUBLIC] crates.io=true github=true answer={registry}");
 }

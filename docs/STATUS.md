@@ -167,6 +167,14 @@ The 2026-10-23 follow-up also checkpoints the pending online test assertions,
 offline rebuild checks and iterative ext2 directory import. Its host checks
 pass; guest online/public acceptance and the full regression matrix remain pending.
 
+Continued local validation now completes the controlled HTTPS registry/Git gate,
+including strict TLS and transport negatives, guest compilation, 49 persisted
+file hashes and a fresh offline rebuild after an independent reboot. Public
+crates.io/GitHub acquisition and guest compilation pass; a corrected host source
+assertion and the public offline reboot still need a full retry. The full
+regression matrix is in progress. R6 remains unaccepted until those checks and
+the latest runner/readonly-fault assertions complete; see validation/M12.
+
 ## Next task
 
 Complete and validate the in-progress M12 online gates before marking R6 accepted.
