@@ -1,3 +1,4 @@
+<!-- Summarize AnovaOS goals, delivery levels, work packages and key architectural decisions. -->
 # 项目大纲
 
 规划日期：2026-10-20。所有功能除特别标明外均为计划，实际状态见 [STATUS](docs/STATUS.md)。
@@ -60,9 +61,23 @@ AnovaOS 是面向个人开发者的自研操作系统。先获得一个可靠的
 - 离线依赖缓存、build.rs、proc-macro、C FFI、错误诊断逐项验收。
 - 先交叉构建“在 AnovaOS 上运行的编译器”，再考虑编译器自举和内核自编译。
 
+### 3.6 Rust 原生图形桌面与三语言 SDK（规划）
+
+- 图形引擎、用户态 compositor、GUI runtime、桌面 shell 均使用 Rust 开发；
+  内核负责显示/输入设备、安全映射、IPC 与进程隔离，不在内核实现窗口管理器。
+- GUI Runtime 提供带版本的稳定 C ABI，对外发布 C SDK、C++ RAII SDK 与 Rust 安全 SDK，
+  三种语言共享一套 API/事件/错误/生命周期语义，不重复开发三套图形系统。
+- M14 按 **M14.1 framebuffer 软件绘制 → M14.2 输入/光标 → M14.3 多窗口合成器
+  → M14.4 GUI Runtime 与 C/C++/Rust SDK → M14.5 可选真实 GPU 加速** 分阶段验收。
+- SDL/Qt、Wayland/X11、Linux GUI 程序兼容、SMP 与指定实机支持，均是独立后续工作；
+  framebuffer 和 virtio-gpu 2D scanout 不等于硬件渲染加速。
+
+完整设计、前置条件与失败用例见 [M14_GUI](docs/M14_GUI.md)；
+验收条件见 [ROADMAP](ROADMAP.md)。以上五阶段均未实现。
+
 ## 4. 推荐实施顺序
 
-详细步骤见 [ROADMAP](ROADMAP.md)。早期按 M0–M9 建立可靠内核和用户态；M10 提供网络与包；M11、M12 完成 C/C++、Rust 系统内开发；M13 打磨 SDK；M14 扩展桌面与硬件；M15 评估可选自举。
+详细步骤见 [ROADMAP](ROADMAP.md)。早期按 M0–M9 建立可靠内核和用户态；M10 提供网络与包；M11、M12 完成 C/C++、Rust 系统内开发；M13 打磨 SDK；M14 按五个子阶段建设 Rust 图形桌面与 C/C++/Rust SDK；多核和实机另行立项；M15 评估可选自举。
 
 为了加快第一次 app 运行，M4 就提供最小 native SDK；无需等到 M13。网络不是离线编译的必需条件，GCC/Rust 也可以先用预置包验证。
 
@@ -76,6 +91,7 @@ AnovaOS 是面向个人开发者的自研操作系统。先获得一个可靠的
 | 先单核、再 SMP | 提前定义并发规则，分步引入竞态 | 调度/锁/中断行为完成单核验证 |
 | Linux 兼容为受测子集 | 以可运行工具推进，不承诺完整实现 Linux | 新软件的实测依赖要求扩展 |
 | 工具链先运行、后自举 | 应用开发比系统完全自举更早有价值 | 内存、磁盘、构建系统足以承担自举 |
+| Rust 图形引擎 + 版本化 C ABI | 单一图形实现对外提供 C、C++、Rust SDK，保持用户态故障隔离 | GUI 协议和三个语言的实际验收发现不可接受的约束 |
 
 ## 6. 风险和应对
 
