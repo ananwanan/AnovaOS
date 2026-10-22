@@ -4,6 +4,7 @@
 mod io;
 mod memory;
 pub(crate) mod signals;
+mod sockets;
 mod terminal;
 pub(crate) mod threads;
 pub(super) use io::io_frame;
@@ -51,6 +52,7 @@ fn stat_bytes(meta: (u64, u32, usize, bool)) -> [u8; 144] {
         2 => 0o040755,
         4 => 0o020666,
         5 => 0o010600,
+        6 => 0o140600,
         _ => {
             if exec {
                 0o100555
@@ -121,6 +123,21 @@ impl Kernel {
     }
     pub(super) fn linux_syscall(&mut self, i: usize) {
         let f = self.process(i).context.frame;
+        if matches!(f.rax, 41..=55)
+            || matches!(f.rax, 0 | 1)
+                && self
+                    .fs
+                    .socket_id(&self.process(i).files, f.rdi)
+                    .ok()
+                    .flatten()
+                    .is_some()
+        {
+            let result = self.socket_syscall(i, &f);
+            if result != WOULD_BLOCK {
+                self.process_mut(i).context.frame.rax = result as u64;
+            }
+            return;
+        }
         if matches!(f.rax, 60 | 231) {
             if f.rax == 231 {
                 self.linux_exit_group(i, Outcome::Exit((f.rdi & 255) as u32));
@@ -258,7 +275,7 @@ impl Kernel {
             self.process_mut(i).context.frame.rax = (-11i64) as u64;
             return;
         }
-        if result == WOULD_BLOCK && matches!(f.rax, 0 | 1 | 20) {
+        if result == WOULD_BLOCK && matches!(f.rax, 0 | 1 | 19 | 20) {
             self.process_mut(i).io = Some(f);
             self.policy.block(i);
             self.metrics.io_blocks += 1;
@@ -354,6 +371,7 @@ impl Kernel {
         p.thread.blocked = None;
         p.thread.saved_mask = None;
         p.io = None;
+        p.network_deadline = None;
         p.wait = None;
         self.fs
             .close_exec(&mut self.processes[i].as_mut().unwrap().files);
@@ -436,6 +454,10 @@ impl Kernel {
                     });
                 }
                 Ok(match f.rax {
+                    32 => {
+                        let target = (0..32).find(|fd| !p.files.contains(*fd)).ok_or(-24)?;
+                        self.fs.dup2(&mut p.files, f.rdi, target).map_err(errno)? as i64
+                    }
                     2 | 257 => {
                         let (address, flags) = if f.rax == 2 {
                             (f.rdi, f.rsi)
@@ -535,6 +557,14 @@ impl Kernel {
                             -9
                         }
                     } // Supported terminal ioctls are dispatched by the outer terminal adapter.
+                    19 => io::readv(
+                        f,
+                        space,
+                        &mut p.files,
+                        &mut p.cwd,
+                        &mut self.fs,
+                        &mut self.terminal,
+                    ),
                     20 => io::writev(
                         f,
                         space,
@@ -662,6 +692,17 @@ impl Kernel {
                         uaccess::to_user(space, UserAddr(f.rdi), &bytes[..n + 1]).map_err(errno)?;
                         n as i64 + 1
                     }
+                    90 => {
+                        if f.rsi != 0o755 {
+                            return Err(-95);
+                        }
+                        let mut bytes = [0; 129];
+                        let n = string(space, f.rdi, &mut bytes)?;
+                        self.fs
+                            .set_executable(p.cwd, core::str::from_utf8(&bytes[..n]).unwrap())
+                            .map_err(errno)?;
+                        0
+                    }
                     80 | 83 | 87 => {
                         let mut bytes = [0; 129];
                         let n = string(space, f.rdi, &mut bytes)?;
@@ -712,11 +753,16 @@ impl Kernel {
                         self.fs.sync().map_err(errno)?;
                         0
                     }
-                    228 if f.rdi == 1 => {
+                    228 if f.rdi <= 1 => {
                         let ticks = apic::ticks();
                         let mut bytes = [0; 16];
-                        bytes[..8].copy_from_slice(&(ticks / 100).to_le_bytes());
-                        bytes[8..].copy_from_slice(&((ticks % 100) * 10_000_000).to_le_bytes());
+                        let (seconds, nanos) = if f.rdi == 0 {
+                            crate::arch::x86_64::clock::realtime().ok_or(-5)?
+                        } else {
+                            (ticks / 100, (ticks % 100) * 10_000_000)
+                        };
+                        bytes[..8].copy_from_slice(&seconds.to_le_bytes());
+                        bytes[8..].copy_from_slice(&nanos.to_le_bytes());
                         uaccess::to_user(space, UserAddr(f.rsi), &bytes).map_err(errno)?;
                         0
                     }

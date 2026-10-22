@@ -68,7 +68,7 @@ struct Bar {
     size: u64,
 }
 
-pub fn discover(mapper: &mut EarlyMapper<'_>) -> Result<Option<VirtioConfig>, i64> {
+pub fn discover(mapper: &mut EarlyMapper<'_>, network: bool) -> Result<Option<VirtioConfig>, i64> {
     let mut buses = [false; 256];
     buses[0] = true;
     let mut found = None;
@@ -107,14 +107,14 @@ pub fn discover(mapper: &mut EarlyMapper<'_>) -> Result<Option<VirtioConfig>, i6
                     }
                     buses[secondary..=subordinate].fill(true);
                 }
-                if id == 0x1042_1af4 {
+                if id == if network { 0x1041_1af4 } else { 0x1042_1af4 } {
                     if found.is_some() {
                         return Err(UNSUPPORTED);
                     }
                     serial::write(format_args!(
-                        "[PCI:BLK] bdf={bus:02x}:{device:02x}.{function} id=1af4:1042\n"
+                        "[PCI:BLK] bdf={bus:02x}:{device:02x}.{function} network={network}\n"
                     ));
-                    found = Some(capabilities(f, mapper)?);
+                    found = Some(capabilities(f, mapper, network)?);
                 }
             }
         }
@@ -125,7 +125,11 @@ pub fn discover(mapper: &mut EarlyMapper<'_>) -> Result<Option<VirtioConfig>, i6
     ));
     Ok(found)
 }
-fn capabilities(f: Function, mapper: &mut EarlyMapper<'_>) -> Result<VirtioConfig, i64> {
+fn capabilities(
+    f: Function,
+    mapper: &mut EarlyMapper<'_>,
+    network: bool,
+) -> Result<VirtioConfig, i64> {
     if f.read(0x0c) & 0x007f_0000 != 0 || f.read(4) & (1 << 20) == 0 {
         return Err(UNSUPPORTED);
     }
@@ -176,7 +180,8 @@ fn capabilities(f: Function, mapper: &mut EarlyMapper<'_>) -> Result<VirtioConfi
     };
     let mut seen = [false; 256];
     let mut cap = (f.read(0x34) & 255) as u8;
-    let mut window = WINDOW;
+    let start = WINDOW + if network { 0x40000 } else { 0 };
+    let mut window = start;
     while cap != 0 {
         if cap < 0x40 || !cap.is_multiple_of(4) || seen[cap as usize] {
             return Err(INVALID_ARGUMENT);
@@ -217,7 +222,7 @@ fn capabilities(f: Function, mapper: &mut EarlyMapper<'_>) -> Result<VirtioConfi
                 }
                 let page = physical & !4095;
                 let span = (physical % 4096 + u64::from(bytes)).next_multiple_of(4096);
-                if window + span > WINDOW + 0x40000 {
+                if window + span > start + 0x40000 {
                     return Err(NO_SPACE);
                 }
                 for off in (0..span).step_by(4096) {

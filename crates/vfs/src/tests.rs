@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Test VFS path/mount boundaries, descriptor ownership, pipe shutdown and capacity rollback.
+//! Test VFS paths, shared file/socket descriptor ownership, pipe shutdown and bounded rollback.
 use super::*;
 use alloc::vec;
 #[test]
@@ -328,4 +328,30 @@ fn directory_peek_does_not_consume_and_device_truncate_does_not_create_storage()
     assert_eq!(fs.metadata_nofollow(ROOT, "/text").unwrap().1, 3);
     assert_eq!(fs.metadata(ROOT, "/text").unwrap().1, 1);
     fs.clear(&mut fds);
+}
+
+#[test]
+fn socket_description_survives_dup_fork_exec_and_shared_thread_close() {
+    let image = image();
+    let mut fs = Vfs::new(&image).unwrap();
+    let mut parent = fs.standard().unwrap();
+    let socket = fs.socket(&mut parent, 7).unwrap();
+    parent.set_close_on_exec(socket, true).unwrap();
+    let alias = fs.dup2(&mut parent, socket, 10).unwrap();
+    fs.set_nonblocking(&parent, alias, true).unwrap();
+    assert_eq!(fs.nonblocking(&parent, socket), Ok(true));
+    let mut child = fs.inherit(&parent).unwrap();
+    fs.close_exec(&mut parent);
+    assert!(!parent.contains(socket));
+    assert_eq!(fs.socket_id(&child, socket), Ok(Some(7)));
+    fs.clear(&mut parent);
+    assert!(fs.socket_live(7));
+    let mut thread = child.share().unwrap();
+    fs.close(&mut thread, alias).unwrap();
+    assert!(!child.contains(alias));
+    fs.clear(&mut child);
+    assert!(fs.socket_live(7));
+    fs.clear(&mut thread);
+    assert!(!fs.socket_live(7));
+    assert_eq!(fs.live_objects(), (0, 0));
 }

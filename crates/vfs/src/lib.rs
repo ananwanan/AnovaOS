@@ -57,6 +57,7 @@ enum Target {
     Node(usize),
     ReadPipe(usize),
     WritePipe(usize),
+    Socket(usize),
 }
 #[derive(Clone, Copy)]
 struct Open {
@@ -553,6 +554,7 @@ impl<'a> Vfs<'a> {
     ) -> Result<(u64, u32, usize, bool), i64> {
         match self.opens[fds.handle(fd)?].unwrap().target {
             Target::Node(n) => self.node_metadata(n),
+            Target::Socket(id) => Ok(((NODE_LIMIT + PIPE_LIMIT + id) as u64, 6, 0, false)),
             Target::ReadPipe(p) | Target::WritePipe(p) => {
                 Ok(((NODE_LIMIT + p) as u64, 5, 0, false))
             }
@@ -590,6 +592,31 @@ impl<'a> Vfs<'a> {
     }
     pub fn pty_lock(&mut self, n: usize, locked: bool) {
         self.pty_unlocked[n] = !locked;
+    }
+    /// Publish an opaque socket in the same shared open-description namespace as files.
+    pub fn socket(&mut self, fds: &mut Descriptors, socket: usize) -> Result<u64, i64> {
+        let fd = fds.free()?;
+        fds.ensure()?;
+        let id = self.allocate(Open {
+            target: Target::Socket(socket),
+            offset: 0,
+            flags: OPEN_READ | OPEN_WRITE,
+            refs: 1,
+        })?;
+        fds.table.as_ref().unwrap().borrow_mut().slots[fd] = Some(id);
+        Ok(fd as u64)
+    }
+    pub fn socket_id(&self, fds: &Descriptors, fd: u64) -> Result<Option<usize>, i64> {
+        Ok(match self.opens[fds.handle(fd)?].unwrap().target {
+            Target::Socket(id) => Some(id),
+            _ => None,
+        })
+    }
+    pub fn socket_live(&self, socket: usize) -> bool {
+        self.opens
+            .iter()
+            .flatten()
+            .any(|o| matches!(o.target, Target::Socket(id) if id == socket))
     }
     pub fn readiness(&self, fds: &Descriptors, fd: u64) -> Result<(bool, bool, bool, bool), i64> {
         let open = self.opens[fds.handle(fd)?].unwrap();

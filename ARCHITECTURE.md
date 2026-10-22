@@ -1,7 +1,7 @@
 <!-- Describe implemented subsystem boundaries and the planned operating-system architecture. -->
 # 架构设计
 
-本文描述目标架构与已实现的 M0–M9 子集：启动、BSP 异常/时钟、内存、隔离用户应用、单核进程/线程、VFS/持久存储和受限 Linux 运行时。后续网络、系统内编译器、SMP 与图形部分仍为规划。当前能力见 [STATUS](docs/STATUS.md)。
+本文描述目标架构与已实现的 M0–M10 子集：启动、BSP 异常/时钟、内存、隔离用户应用、单核进程/线程、VFS/持久存储和受限 Linux 运行时。现已增加受控 IPv4 网络与包管理；系统内编译器、SMP 与图形部分仍为规划。当前能力见 [STATUS](docs/STATUS.md)。
 
 ## 1. 总体结构
 
@@ -277,3 +277,18 @@ loader performs relocation/symbol/TLS work in user space.
 Dynamic fixtures and test transcripts remain distinct from kernel mechanisms.
 See [M9_RUNTIME](docs/M9_RUNTIME.md) for flags, locking/ownership, unsupported
 operations and [validation/M9](docs/validation/M9.md) for observed results.
+
+## M10 implemented network and package boundary
+
+`drivers/network` owns modern virtio-net DMA and separate RX/TX queues;
+`net` integrates pinned no_std smoltcp on the single scheduler clock. Generic
+VFS open descriptions carry opaque socket IDs so fork/dup/exec/close share the
+existing lifetime model. Linux sockaddr/flags/errors and interruptible syscall
+frames stay in `task/linux/sockets`. CMOS UTC supplies checked realtime; LAPIC
+supplies deadlines. Peripheral IRQs remain masked.
+
+DNS, TLS and package policy run in actual guest user processes. The TLS library
+validates CA/name/date, while package locks, ABI/SDK/license checks and alternating
+ext2 slots validate and publish installation state. User data has a separate
+persistent directory. See [M10 profile](docs/M10_NETWORK_PACKAGES.md) for bounds,
+controlled-online scope, build inputs and unchanged power-loss limitations.

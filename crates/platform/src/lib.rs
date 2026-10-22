@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 #![no_std]
-//! Hardware-independent address types and bounded ACPI decoding.
+//! Hardware-independent address types, bounded ACPI decoding and validated UTC calendar arithmetic.
 
 pub mod acpi;
+pub mod clock;
 pub mod power;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

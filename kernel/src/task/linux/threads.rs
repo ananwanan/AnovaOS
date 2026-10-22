@@ -159,6 +159,7 @@ impl Kernel {
             wait: None,
             cwd: parent.cwd,
             io: None,
+            network_deadline: None,
             thread,
         };
         let tid = self.policy.entry(slot).pid;

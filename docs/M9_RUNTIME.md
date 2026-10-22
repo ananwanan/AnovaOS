@@ -153,3 +153,8 @@ Specification inputs include the [Linux AMD64 signal context](https://github.com
 [Linux futex UAPI](https://github.com/torvalds/linux/blob/master/include/uapi/linux/futex.h)
 and [musl 1.2.4 source](https://git.musl-libc.org/cgit/musl/tree/?h=v1.2.4).
 No Linux or musl implementation code is copied into the kernel.
+
+A relocated musl toolchain must retain the shared libc linker input as well as
+libc.a and headers. M10's build verifies that both TLS DSOs declare a real libc.so
+DT_NEEDED dependency. Otherwise -shared can silently pull the static TLS accessor
+from libc.a and fail dynamic TLS at runtime; this environment is now rejected.

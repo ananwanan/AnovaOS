@@ -22,7 +22,15 @@ impl Kernel {
                     let events = u16::from_le_bytes(entry[4..6].try_into().unwrap());
                     let mut result = 0u16;
                     if fd >= 0 {
-                        match self.fs.readiness(&p.files, fd as u64) {
+                        let readiness = self
+                            .fs
+                            .socket_id(&p.files, fd as u64)
+                            .map_err(errno)
+                            .and_then(|id| match id {
+                                Some(id) => self.network.as_ref().ok_or(-100)?.readiness(id),
+                                None => self.fs.readiness(&p.files, fd as u64),
+                            });
+                        match readiness {
                             Err(_) => result = 32,
                             Ok((mut read, mut write, hup, error)) => {
                                 let device = self

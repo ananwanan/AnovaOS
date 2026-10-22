@@ -22,7 +22,7 @@ from its official distribution, then install host utilities:
 
 ```sh
 sudo apt-get update
-sudo apt-get install --no-install-recommends qemu-system-x86 xorriso curl dpkg-dev gcc make musl-tools qemu-user e2fsprogs
+sudo apt-get install --no-install-recommends qemu-system-x86 xorriso curl dpkg-dev gcc make musl-tools qemu-user e2fsprogs openssl python3 binutils
 rustup show active-toolchain
 cargo xtask fetch
 cargo xtask doctor
@@ -198,3 +198,25 @@ Multi-image commands build user space once, retain its SHA-256 snapshot and
 rehash all generated app/runtime/archive outputs before every image reuse.
 Changed/missing outputs fail the command. Separate invocations rebuild normally;
 this avoids repeated BusyBox builds without accepting stale user artifacts.
+
+## M10 controlled peers and package verification
+
+OpenSSL, Python 3 (standard library only) and readelf are required in addition to
+the existing host tools. `cargo xtask apps` fetches the exact Mbed TLS 2.28.10
+commit and builds guest clients; Cargo.lock pins smoltcp. Static/shared musl linker
+inputs must both be installed. Missing shared libc now fails explicitly before
+packaging incorrect TLS DSOs. See [M9 runtime](M9_RUNTIME.md).
+
+```sh
+cargo xtask network-test
+cargo xtask package-test
+cargo xtask run --network --disk build/disks/work.ext2
+```
+
+network-test binds loopback ports 18080–18082. package-test binds 18083 and 18085
+for standard-library Python HTTPS peers, with 18084/18086 reserved as negative
+unbound peers. A collision fails clearly; no host network settings are changed.
+Guest transcript watchdogs, syscall results, actual X.509 error flags and clean
+e2fsck checks determine acceptance. Logs use network.* and packages-*.serial.log
+under build/logs. Test CA private keys remain only in ignored build/compat.
+Read [M10_NETWORK_PACKAGES](M10_NETWORK_PACKAGES.md) before using online features.

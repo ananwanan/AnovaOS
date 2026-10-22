@@ -4,6 +4,8 @@ mod apps;
 mod assets;
 mod disk;
 mod linux;
+mod network;
+mod packages;
 mod purposes;
 mod smoke;
 mod terminal;
@@ -160,14 +162,27 @@ fn execute() -> Result<()> {
             Ok(())
         }
         "run" => {
-            let disk = if args.len() == 3 && args[1] == "--disk" {
-                Some(disk::user_path(&root, &args[2])?)
-            } else if args.len() == 1 {
-                None
-            } else {
-                return Err("Usage: cargo xtask run [--disk build/disks/NAME.ext2]".into());
-            };
-            run(&root, disk.as_deref())
+            let mut disk = None;
+            let mut network = false;
+            let mut options = args.iter().skip(1);
+            while let Some(option) = options.next() {
+                match option.as_str() {
+                    "--network" if !network => network = true,
+                    "--disk" if disk.is_none() => {
+                        disk = Some(disk::user_path(
+                            &root,
+                            options.next().ok_or("Missing disk path")?,
+                        )?)
+                    }
+                    _ => {
+                        return Err(
+                            "Usage: cargo xtask run [--network] [--disk build/disks/NAME.ext2]"
+                                .into(),
+                        );
+                    }
+                }
+            }
+            run(&root, disk.as_deref(), network)
         }
         "root-image" => {
             if args.len() != 2 {
@@ -177,6 +192,8 @@ fn execute() -> Result<()> {
             let path = disk::user_path(&root, &args[1])?;
             disk::create(&root, &path)
         }
+        "package-test" => packages::verify(&root),
+        "network-test" => network::verify(&root),
         "terminal-test" => terminal::verify(&root),
         "persistence-test" => disk::verify(&root),
         "smoke" => {
@@ -251,7 +268,7 @@ fn execute() -> Result<()> {
         }
         "help" | "--help" | "-h" => {
             println!(
-                "AnovaOS host tools\n\n  cargo xtask doctor\n  cargo xtask fetch\n  cargo xtask build\n  cargo xtask image\n  cargo xtask run [--disk build/disks/NAME.ext2]\n  cargo xtask smoke [--case CASE] [--timeout-secs 1..300]\n  cargo xtask verify\n  cargo xtask test-host\n  cargo xtask test-compat\n  cargo xtask trace-compat\n  cargo xtask apps\n  cargo xtask check-apps\n  cargo xtask check-files\n  cargo xtask terminal-test\n  cargo xtask root-image build/disks/NAME.ext2\n  cargo xtask persistence-test\n\nCASE: boot, panic, timeout, invalid-opcode, general-protection, page-fault, double-fault, stack-guard, read-only, no-execute, direct-no-execute, unmapped, oom.\nOutputs stay in build/; run uses disposable OVMF variables and a temporary data disk unless --disk is explicit. Use guest shutdown for persistent images. TCG is mandatory."
+                "AnovaOS host tools\n\n  cargo xtask doctor\n  cargo xtask fetch\n  cargo xtask build\n  cargo xtask image\n  cargo xtask run [--network] [--disk build/disks/NAME.ext2]\n  cargo xtask smoke [--case CASE] [--timeout-secs 1..300]\n  cargo xtask verify\n  cargo xtask test-host\n  cargo xtask test-compat\n  cargo xtask trace-compat\n  cargo xtask apps\n  cargo xtask check-apps\n  cargo xtask check-files\n  cargo xtask network-test\n  cargo xtask package-test\n  cargo xtask terminal-test\n  cargo xtask root-image build/disks/NAME.ext2\n  cargo xtask persistence-test\n\nCASE: boot, panic, timeout, invalid-opcode, general-protection, page-fault, double-fault, stack-guard, read-only, no-execute, direct-no-execute, unmapped, oom.\nOutputs stay in build/; run uses disposable OVMF variables and a temporary data disk unless --disk is explicit. Use guest shutdown for persistent images. TCG is mandatory."
             );
             Ok(())
         }
@@ -340,8 +357,11 @@ fn doctor(root: &Path) -> Result<()> {
         ("curl", vec!["--version"], None),
         ("dpkg-deb", vec!["--version"], None),
         ("gcc", vec!["--version"], None),
+        ("readelf", vec!["--version"], None),
         ("musl-gcc", vec!["--version"], None),
         ("make", vec!["--version"], None),
+        ("openssl", vec!["version"], None),
+        ("python3", vec!["--version"], None),
         ("git", vec!["--version"], None),
         ("tar", vec!["--version"], None),
         ("gzip", vec!["--version"], None),
@@ -605,6 +625,8 @@ fn qemu_disk(
         "none",
         "-nic",
         "none",
+        "-rtc",
+        "base=utc,clock=vm",
         "-no-reboot",
         "-boot",
         "d",
@@ -625,11 +647,14 @@ fn qemu_disk(
     Ok(cmd)
 }
 
-fn run(root: &Path, disk: Option<&Path>) -> Result<()> {
+fn run(root: &Path, disk: Option<&Path>, network: bool) -> Result<()> {
     let iso = image(root, Mode::Normal)?;
     let vars = Temporary::new(root, "run")?;
-    let result =
-        command(qemu_disk(root, &iso, &vars.0, false, disk, false)?.args(["-serial", "stdio"]));
+    let mut cmd = qemu_disk(root, &iso, &vars.0, false, disk, false)?;
+    if network {
+        network::attach(&mut cmd);
+    }
+    let result = command(cmd.args(["-serial", "stdio"]));
     vars.cleanup()?;
     result
 }

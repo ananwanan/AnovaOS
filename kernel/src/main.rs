@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #![no_std]
 #![no_main]
-//! Boot CPU/memory/PCI ownership and run native/Linux workloads with persistent storage and a shell.
+//! Boot CPU/memory/PCI and UTC time, then run native/Linux workloads with persistent storage and a shell.
 
 extern crate alloc;
 
@@ -11,6 +11,7 @@ mod boot;
 mod drivers;
 mod fs;
 mod mm;
+mod net;
 mod serial;
 mod task;
 use arch::x86_64::{acpi, apic, cpu, paging::EarlyMapper, traps};
@@ -90,6 +91,7 @@ pub extern "C" fn _start() -> ! {
 
 extern "C" fn kernel_main(timer_port: u64, timer_mask: u64) -> ! {
     PHASE.store(5, Ordering::Relaxed);
+    arch::x86_64::clock::init();
     mm::verify();
     apic::verify_ticks(anova_platform::acpi::PmTimer {
         port: timer_port as u16,

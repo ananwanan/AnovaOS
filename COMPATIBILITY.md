@@ -122,3 +122,14 @@ M8 的确切构建、syscall 子集与限制见 [M8_LINUX](docs/M8_LINUX.md) 和
 
 Exact build flags, runtime checksum, guest evidence, host trace differences and
 remaining limits are in [M9 validation](docs/validation/M9.md).
+
+## M10 measured additions
+
+The [controlled M10 profile](docs/M10_NETWORK_PACKAGES.md) adds AF_INET client
+TCP/UDP, bind/connect/read/write/sendto/recvfrom, names/shutdown, SO_ERROR and I/O
+timeouts, poll/nonblocking behavior and signal interruption. Actual guest DNS A,
+TLS 1.2 and package clients are tested. File readv, dup and restricted chmod(0755)
+complete their measured runtime needs. Existing musl static/PIE/dynamic hashes
+remain the M9 baseline. This does not establish curl, wget, musl getaddrinfo,
+TCP servers, socket vectored/message APIs, AF_UNIX, IPv6 or arbitrary Linux
+network application support. Unsupported interfaces return real errors.

@@ -5,7 +5,7 @@
 
 用 Rust 从零开发的 x86_64 操作系统，目标是在自己的系统中编辑、编译、调试和运行应用，并逐步兼容部分现有 Linux 软件。
 
-**当前状态：M0–M9 已通过本地 QEMU q35/TCG 验证。原生应用、VFS、管道、init/shell、现代 virtio-blk 和 `/persist` 受限 ext2 已支持源码编辑、sync/fsync、正常关机及重启保留。受限 Linux profile 已运行 musl 1.2.4 静态、静态 PIE 和动态程序，验证 pthread/TLS/futex、真实信号处理与中断/重启、poll、非阻塞 I/O、四组 PTY，以及启动共享库、dlopen 和动态 TLS；保留固定 BusyBox 1.36.1 echo/ls/cat/ash 子集。当前单核，共 32 个进程/线程槽；通用 Linux/glibc、网络及系统内编译器仍未实现，外设 IRQ 保持屏蔽。**
+**当前状态：M0–M10 已通过本地 QEMU q35/TCG 验证。原生应用、VFS、管道、init/shell、现代 virtio-blk 和 `/persist` 受限 ext2 已支持源码编辑、sync/fsync、正常关机及重启保留。受限 Linux profile 已运行 musl 1.2.4 静态、静态 PIE 和动态程序，验证 pthread/TLS/futex、真实信号处理与中断/重启、poll、非阻塞 I/O、四组 PTY，以及启动共享库、dlopen 和动态 TLS；保留固定 BusyBox 1.36.1 echo/ls/cat/ash 子集。当前单核，共 32 个进程/线程槽；M10 新增可选 virtio-net IPv4 TCP/UDP/DNS、可中断 socket、严格证书验证的用户态 TLS，以及锁定软件包的安装、升级、回滚与卸载。通用 Linux/glibc 和系统内编译器仍未实现，外设 IRQ 保持屏蔽。**
 
 项目仓库：[ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS)。
 
@@ -149,3 +149,17 @@ linux-dynamic
 ```
 
 在原生 shell 输入以上命令可启动独立 Linux 用户 ELF，验证 pthread/futex、共享内存、信号、就绪等待和 PTY；linux-dynamic 还会实际装载共享库和动态 TLS。支持范围、资源限制、缺库诊断和作业控制边界见 [M9 运行时](docs/M9_RUNTIME.md) 与 [M9 验证](docs/validation/M9.md)。native v1 和持久盘的 ABI 策略保留各自契约。
+
+## M10 受控网络与软件包
+
+```sh
+cargo xtask network-test
+cargo xtask package-test
+cargo xtask run --network --disk build/disks/work.ext2
+```
+
+系统内使用 `pkg install demo 1`、`pkg status demo`、`pkg install demo 2` 和
+`pkg remove demo`。`/persist/data/demo` 中的用户数据在升级和卸载时保留。
+`dns NAME` 查询 IPv4 A 记录。HTTPS 获取当前仅验收宿主受控仓库和生成的测试 CA。
+具体范围见 [M10 设计](docs/M10_NETWORK_PACKAGES.md) 与
+[验收记录](docs/validation/M10.md)。下一阶段是 M11：真正的系统内 C/C++ 编译。
