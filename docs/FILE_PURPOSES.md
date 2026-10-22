@@ -171,3 +171,26 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `docs/M9_RUNTIME.md` | Exact M9 ownership, flags, limits, unsupported operations, runtime checksum and build/verification contract. |
 | `docs/validation/M9.md` | Measured M9 program hashes, host-trace boundaries, actual guest results and inherited regression evidence. |
 | `xtask/src/transcript.rs` | Capture ordered guest stdout, preserve UART evidence and match raw bytes independently of filesystem snapshots or partial UTF-8. |
+
+## M10 additions
+
+| File | Purpose |
+| --- | --- |
+| `crates/platform/src/clock.rs` | Validate Gregorian UTC dates and Unix epoch conversion, with leap/boundary tests. |
+| `kernel/src/arch/x86_64/clock.rs` | Sample stable binary/BCD CMOS UTC and advance realtime from calibrated monotonic ticks. |
+| `kernel/src/drivers/network.rs` | Own modern virtio-net split queues, frame/DMA bounds, ownership fences and reset/quarantine. |
+| `kernel/src/net/mod.rs` | Integrate bounded smoltcp IPv4 sockets, readiness, fallible buffers and deferred TCP close. |
+| `kernel/src/task/linux/sockets.rs` | Translate checked Linux IPv4 socket calls, pointer layouts, deadlines and interruptible frames. |
+| `user/linux/network.c` | Execute real Ring 3 TCP/UDP/DNS, timeout, pointer, signal and fd-reuse probes. |
+| `user/linux/dns.c` | Resolve bounded DNS A replies with checked compression, randomized IDs, source validation and timeouts. |
+| `user/linux/dns.h` | Share the guest DNS resolver and checked reply-parser interfaces. |
+| `user/linux/pkg.c` | Install/check native packages, validate hashes/ABI/license and maintain persistent alternating commits. |
+| `user/linux/tls.c` | Fetch bounded HTTPS with mandatory CA/name/date verification and exact negative-test reasons. |
+| `user/linux/tls.h` | Share the strict user-space HTTPS acquisition interface. |
+| `xtask/src/network.rs` | Run controlled loopback peers and watchdog-driven real QEMU network acceptance. |
+| `xtask/src/packages.rs` | Pin/build user TLS clients, construct locked packages and verify install/reboot/HTTPS behavior. |
+| `tests/guest/m10_https_peer.py` | Serve controlled TLS 1.2 positive/expired fixtures using only Python's standard library. |
+| `docs/M10_NETWORK_PACKAGES.md` | Define accepted IPv4/socket, DNS, TLS and package contracts and explicit exclusions. |
+| `docs/validation/M10.md` | Record exact M10 build inputs, guest evidence and complete regression results. |
+| `docs/third-party/m10.md` | Record locked network/TLS sources, notices, redistribution and fixture-key boundaries. |
+| `docs/third-party/network-licenses.md` | Preserve upstream license texts for locked network runtime dependencies. |

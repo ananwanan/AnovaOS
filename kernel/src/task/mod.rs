@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Schedule bounded native/Linux processes and shared-root threads with private stacks on one BSP.
-//! User traps only capture state; lifecycle, copying and reclamation run on the kernel root.
+//! User traps capture state; lifecycle, polled networking, copying and reclamation run on the kernel root.
 mod linux;
+pub(crate) fn network_seed(bytes: &mut [u8]) -> Result<(), i64> {
+    linux::random(bytes)
+}
 mod loader;
 #[cfg(feature = "qemu-test")]
 mod validation;
@@ -56,6 +59,7 @@ struct Process {
     wait: Option<(u64, UserAddr)>,
     cwd: usize,
     io: Option<TrapFrame>,
+    network_deadline: Option<u64>,
     thread: linux::threads::Thread,
 }
 static CAPTURE: AtomicPtr<user::Context> = AtomicPtr::new(ptr::null_mut());
@@ -112,6 +116,7 @@ struct Kernel {
     processes: Vec<Option<Process>>,
     metrics: Metrics,
     fs: Vfs<'static>,
+    network: Option<crate::net::Stack>,
     terminal: fs::Terminal,
 }
 impl Kernel {
@@ -126,6 +131,7 @@ impl Kernel {
             processes,
             metrics: Metrics::default(),
             fs: Vfs::new(boot::initramfs()).map_err(|_| anova_memory::Error::OutOfMemory)?,
+            network: None,
             terminal: fs::Terminal::new().map_err(|_| anova_memory::Error::OutOfMemory)?,
         })
     }
@@ -199,6 +205,7 @@ impl Kernel {
                 wait: None,
                 cwd,
                 io: None,
+                network_deadline: None,
                 thread: linux::threads::Thread::new(self.policy.entry(i).pid),
             })
         })();
@@ -261,6 +268,7 @@ impl Kernel {
                 wait: None,
                 cwd,
                 io: None,
+                network_deadline: None,
                 thread: linux::threads::Thread::new(self.policy.entry(i).pid),
             })
         })();
@@ -441,6 +449,14 @@ impl Kernel {
                             ));
                             crate::halt();
                         }
+                        if let Some(net) = self.network.take()
+                            && let Err(error) = net.stop()
+                        {
+                            serial::emergency(format_args!(
+                                "[POWER:FAIL] network reset error={error}\n"
+                            ));
+                            crate::halt();
+                        }
                         crate::arch::x86_64::acpi::poweroff();
                     }
                     Err(error) => {
@@ -482,11 +498,24 @@ impl Kernel {
                             } else {
                                 PERSONALITY
                             };
-                            let args = [request.name(), request.argument()];
-                            let args = if linux && request.argument().is_empty() {
-                                &args[..1]
+                            // Native v1 carries one opaque argument; Linux argv needs separate words.
+                            // Rich quoting remains the Linux shell's responsibility.
+                            let native_args = [request.name(), request.argument()];
+                            let mut linux_args = [""; 16];
+                            linux_args[0] = request.name();
+                            let words = request.argument().split_ascii_whitespace();
+                            let count = words.clone().count();
+                            if linux && count > 15 {
+                                self.process_mut(i).context.frame.rax = INVALID_ARGUMENT as u64;
+                                return;
+                            }
+                            for (slot, word) in linux_args[1..].iter_mut().zip(words) {
+                                *slot = word;
+                            }
+                            let args = if linux {
+                                &linux_args[..count + 1]
                             } else {
-                                &args[..]
+                                &native_args[..]
                             };
                             if f.rax == SYS_SPAWN {
                                 self.add_personality(
@@ -547,12 +576,19 @@ impl Kernel {
         let mut previous = None;
         let mut preempted = false;
         loop {
+            if let Some(net) = self.network.as_mut() {
+                net.collect(|id| self.fs.socket_live(id));
+                net.poll();
+            }
             self.terminal.poll();
             self.linux_wake();
             for i in 0..CAPACITY {
                 if self.policy.entry(i).state == State::Blocked {
                     let p = self.process(i);
                     if p.io.as_ref().is_some_and(|f| {
+                        if self.fs.socket_id(&p.files, f.rdi).ok().flatten().is_some() {
+                            return self.socket_ready(i, f);
+                        }
                         fs::ready(
                             &linux::io_frame(*f, p.image.as_ref().unwrap().linux),
                             &p.files,
@@ -779,6 +815,10 @@ fn run(bytes: &[u8], args: &[&str], pid: u64) -> Result<Outcome, loader::LoadErr
             serial::write(format_args!(
                 "[DISK:REJECT] mount error={error}; /persist unavailable\n"
             ));
+        }
+        if args.first() == Some(&"/bin/init") {
+            kernel.network =
+                crate::net::Stack::attach().map_err(|_| anova_memory::Error::OutOfMemory)?;
         }
         let linux = args
             .first()

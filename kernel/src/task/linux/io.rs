@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Adapt blocked Linux I/O frames and preserve completed writev bytes across later faults.
+//! Adapt blocked Linux I/O frames and preserve completed readv/writev bytes across later faults.
 //! User copies run only with the caller's address space pinned by the BSP scheduler.
 use crate::{
     arch::x86_64::traps::TrapFrame,
@@ -17,25 +17,39 @@ const IOV_BYTES: usize = 16;
 
 pub fn io_frame(mut frame: TrapFrame, linux: bool) -> TrapFrame {
     if linux {
-        frame.rax = if frame.rax == 0 { SYS_READ } else { SYS_WRITE };
+        frame.rax = if matches!(frame.rax, 0 | 19) {
+            SYS_READ
+        } else {
+            SYS_WRITE
+        };
     }
     frame
 }
 
-pub(in crate::task) fn writev(
+fn vector_io(
     frame: &TrapFrame,
     space: &UserSpace,
     files: &mut Descriptors,
     cwd: &mut usize,
     vfs: &mut Vfs<'_>,
     terminal: &mut Terminal,
+    writing: bool,
 ) -> i64 {
+    if vfs
+        .socket_id(files, frame.rdi)
+        .map_err(errno)
+        .ok()
+        .flatten()
+        .is_some()
+    {
+        return -95;
+    }
     if frame.rdx > IOV_LIMIT as u64 {
         return EINVAL;
     }
     let mut total = 0;
     let result = (|| -> Result<(), i64> {
-        vfs.device(files, frame.rdi, true).map_err(errno)?;
+        vfs.device(files, frame.rdi, writing).map_err(errno)?;
         let mut vectors = [0; IOV_LIMIT * IOV_BYTES];
         let vectors = &mut vectors[..frame.rdx as usize * IOV_BYTES];
         if !vectors.is_empty() {
@@ -56,7 +70,7 @@ pub(in crate::task) fn writev(
             }
         }
         let mut native = *frame;
-        native.rax = SYS_WRITE;
+        native.rax = if writing { SYS_WRITE } else { SYS_READ };
         for pair in vectors.chunks_exact(IOV_BYTES) {
             native.rsi = u64::from_le_bytes(pair[..8].try_into().unwrap());
             let length = u64::from_le_bytes(pair[8..].try_into().unwrap());
@@ -65,7 +79,7 @@ pub(in crate::task) fn writev(
             }
             native.rdx = length.min(MAX_WRITE as u64);
             let count = fs::syscall(&native, space, files, cwd, vfs, terminal)
-                .expect("Native write is implemented");
+                .expect("Native vectored I/O is implemented");
             if count < 0 {
                 return Err(if count == WOULD_BLOCK {
                     WOULD_BLOCK
@@ -85,4 +99,26 @@ pub(in crate::task) fn writev(
         Err(_) if total > 0 => total,
         Err(error) => error,
     }
+}
+
+pub(in crate::task) fn readv(
+    frame: &TrapFrame,
+    space: &UserSpace,
+    files: &mut Descriptors,
+    cwd: &mut usize,
+    vfs: &mut Vfs<'_>,
+    terminal: &mut Terminal,
+) -> i64 {
+    vector_io(frame, space, files, cwd, vfs, terminal, false)
+}
+
+pub(in crate::task) fn writev(
+    frame: &TrapFrame,
+    space: &UserSpace,
+    files: &mut Descriptors,
+    cwd: &mut usize,
+    vfs: &mut Vfs<'_>,
+    terminal: &mut Terminal,
+) -> i64 {
+    vector_io(frame, space, files, cwd, vfs, terminal, true)
 }

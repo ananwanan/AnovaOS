@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Build native Rust/C and explicit Linux runtime fixtures with separate user target/linker flags.
+//! Build native/Linux, DNS/TLS/package fixtures with separate target flags and explicit initramfs policy.
 //! Validate every ELF and record its explicit ABI identity and SHA-256 before packing initramfs.
 use super::*;
 use sha2::{Digest, Sha256};
@@ -215,6 +215,7 @@ pub fn build(root: &Path, clippy: bool) -> Result<()> {
     }
     linux::build(root, &apps)?;
     linux::build_m9(root, &apps)?;
+    packages::build(root, &apps)?;
     initramfs(&apps)?;
     remember_snapshot(root, &apps)?;
     println!("Verified native Rust/C ELF outputs in {}", apps.display());
@@ -224,7 +225,9 @@ pub fn build(root: &Path, clippy: bool) -> Result<()> {
 /// Pack the bounded project-owned archive; names and permissions are explicit image policy.
 fn initramfs(apps: &Path) -> Result<()> {
     let mut entries: Vec<(u8, String, Vec<u8>)> = Vec::new();
-    for path in ["/bin", "/etc", "/tmp", "/dev", "/persist", "/linux", "/lib"] {
+    for path in [
+        "/bin", "/etc", "/tmp", "/dev", "/persist", "/linux", "/lib", "/repo",
+    ] {
         entries.push((2, path.into(), Vec::new()));
     }
     for name in NAMES {
@@ -259,6 +262,10 @@ fn initramfs(apps: &Path) -> Result<()> {
         entries.push((3, format!("/linux/{name}"), b"busybox".to_vec()));
     }
     for name in [
+        "dns",
+        "pkg",
+        "tls-test",
+        "network-test",
         "linux-probe",
         "linux-musl",
         "linux-threads",
@@ -272,6 +279,29 @@ fn initramfs(apps: &Path) -> Result<()> {
             fs::read(apps.join(format!("{name}.elf")))?,
         ));
     }
+    for name in [
+        "pkg-ca.pem",
+        "untrusted-ca.pem",
+        "mbedtls.LICENSE",
+        "network.LICENSE",
+    ] {
+        entries.push((1, format!("/etc/{name}"), fs::read(apps.join(name))?));
+    }
+    for name in [
+        "INDEX",
+        "demo-1.apkg",
+        "demo-2.apkg",
+        "corrupt.apkg",
+        "traversal.apkg",
+        "dependency.apkg",
+    ] {
+        entries.push((1, format!("/repo/{name}"), fs::read(apps.join(name))?));
+    }
+    entries.push((
+        1,
+        "/etc/resolv.conf".into(),
+        b"nameserver 10.0.2.3\noptions attempts:1 timeout:2\n".to_vec(),
+    ));
     for file in ["ld-musl-x86_64.so.1", "libm9.so", "libm9extra.so"] {
         entries.push((
             if file.starts_with("ld-") { 5 } else { 1 },

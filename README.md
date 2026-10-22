@@ -7,15 +7,16 @@ An x86_64 operating system built from scratch in Rust. The goal is to edit,
 compile, debug, and run applications inside AnovaOS itself, while gradually
 supporting selected existing Linux software.
 
-**Current status: M0–M9 are locally verified on QEMU q35/TCG. Native apps,
+**Current status: M0–M10 are locally verified on QEMU q35/TCG. Native apps,
 VFS, pipes, init/shell, modern virtio-blk and checked ext2 storage at `/persist`
 include source editing, sync/fsync and clean ACPI shutdown/reboot persistence.
 The bounded Linux profile runs musl 1.2.4 static, static PIE and dynamic programs,
 pthread/TLS/futex tests, real signal handlers and restart/interruption, poll,
 nonblocking I/O and four PTY pairs. Startup shared libraries and dlopen with TLS
 are tested alongside the pinned BusyBox 1.36.1 echo/ls/cat/ash profile.
-There are 32 total process/thread slots on one CPU. General Linux/glibc support,
-networking and guest compilers remain future work; device IRQs stay masked.**
+There are 32 total process/thread slots on one CPU. M10 adds opt-in virtio-net IPv4 TCP/UDP/DNS, interruptible sockets,
+verified user-space TLS and locked package installation, upgrades, rollback and removal.
+General Linux/glibc support and guest compilers remain future work; device IRQs stay masked.**
 
 Repository: [ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS).
 
@@ -93,6 +94,8 @@ development language and formatting guide is in English.
 | [docs/M8_LINUX.md](docs/M8_LINUX.md) | Static Linux ABI, pinned musl/BusyBox builds and supported CLI profile |
 | [docs/M9_RUNTIME.md](docs/M9_RUNTIME.md) | Threads, signals, terminals, dynamic musl and ownership limits |
 | [docs/validation/M9.md](docs/validation/M9.md) | Runtime hashes, host comparison, QEMU acceptance and regressions |
+| [docs/M10_NETWORK_PACKAGES.md](docs/M10_NETWORK_PACKAGES.md) | Controlled IPv4 sockets, DNS, TLS and persistent package contracts |
+| [docs/validation/M10.md](docs/validation/M10.md) | Network, package, TLS, reboot and regression evidence |
 | [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) | Mandatory owner requirements, including file-purpose explanations |
 | [docs/FILE_PURPOSES.md](docs/FILE_PURPOSES.md) | Purpose of every repository file |
 | [docs/STATUS.md](docs/STATUS.md) | Current implementation status and next steps |
@@ -167,7 +170,7 @@ cargo xtask run --disk build/disks/work.ext2 # Reuse that image; shutdown cleanl
 ```
 
 These commands now exist in the host `xtask` package. Images, caches, logs, and
-disposable firmware variable copies stay in `build/`. Normal runs use a temporary data disk and no network. GitHub Actions is configured to run the same checks; its status
+disposable firmware variable copies stay in `build/`. Normal runs use a temporary data disk; networking is opt-in with `--network`. GitHub Actions is configured to run the same checks; its status
 is reported separately from [local validation](docs/validation/M9.md).
 
 ## Next steps
@@ -211,3 +214,18 @@ loads actual shared objects and dynamic TLS. See [M9 runtime profile](docs/M9_RU
 and [M9 validation](docs/validation/M9.md) for supported flags, resource limits,
 missing-library diagnostics and remaining job-control limitations. Native v1 and
 the persistent disk ABI policy keep their existing contracts.
+
+## M10 controlled networking and packages
+
+```sh
+cargo xtask network-test
+cargo xtask package-test
+cargo xtask run --network --disk build/disks/work.ext2
+```
+
+Inside the guest use `pkg install demo 1`, `pkg status demo`, `pkg install demo 2`
+and `pkg remove demo`. Data under `/persist/data/demo` survives upgrades and removal.
+`dns NAME` resolves IPv4 A records. HTTPS acquisition is currently restricted to
+the controlled host repository with its generated test CA. See the
+[M10 profile](docs/M10_NETWORK_PACKAGES.md) for exact commands and limitations.
+The next milestone is M11: real guest-hosted C/C++ compilation.

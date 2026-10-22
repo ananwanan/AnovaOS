@@ -42,10 +42,26 @@ impl Kernel {
         }
     }
     pub(in crate::task) fn linux_bad_return(&mut self, i: usize) {
+        let f = self.process(i).context.frame;
+        serial::write(format_args!(
+            "[LINUX:BAD_RETURN] tid={} rip={:#x} rsp={:#x}\n",
+            self.policy.entry(i).pid,
+            f.rip,
+            f.rsp
+        ));
         self.queue_signal(i, 11);
         self.policy.ready(i);
     }
     pub(in crate::task) fn linux_exception(&mut self, i: usize, f: &TrapFrame, address: u64) {
+        serial::write(format_args!(
+            "[LINUX:FAULT] tid={} vector={} error={:#x} rip={:#x} rsp={:#x} address={:#x}\n",
+            self.policy.entry(i).pid,
+            f.vector,
+            f.error,
+            f.rip,
+            f.rsp,
+            address
+        ));
         let signal = match f.vector {
             0 | 16 | 19 => 8,
             1 | 3 => 5,
@@ -296,6 +312,7 @@ impl Kernel {
         }
         let p = self.process_mut(i);
         let interrupted = p.io.is_some() || p.wait.is_some() || p.thread.blocked.is_some();
+        p.network_deadline = None;
         let original = p.io.take().unwrap_or(p.context.frame);
         if interrupted {
             p.wait = None;
@@ -316,7 +333,8 @@ impl Kernel {
             }
             p.thread.blocked = None;
             p.context.frame = original;
-            if action.flags & RESTART != 0 && matches!(original.rax, 0 | 1 | 20 | 61) {
+            if action.flags & RESTART != 0 && matches!(original.rax, 0 | 1 | 19 | 20 | 44 | 45 | 61)
+            {
                 p.context.frame.rip = p.context.frame.rip.checked_sub(2).ok_or(11u32)?;
             } else {
                 p.context.frame.rax = (-4i64) as u64;

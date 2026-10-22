@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Build pinned BusyBox and musl runtime fixtures, package shared libraries and trace host behavior.
+//! Build pinned BusyBox/musl/socket fixtures, verify real shared libc linkage and trace host behavior.
 //! Keep source/license/config evidence beside generated binaries; never import BusyBox into the kernel.
 use super::*;
 use sha2::{Digest, Sha256};
@@ -92,6 +92,10 @@ pub fn build(root: &Path, apps: &Path) -> Result<()> {
     let bytes = fs::read(source.join("busybox"))?;
     anova_elf::parse_linux(&bytes).map_err(|e| format!("Unsupported BusyBox ELF: {e:?}"))?;
     fs::write(apps.join("busybox.elf"), &bytes)?;
+    fs::set_permissions(
+        apps.join("busybox.elf"),
+        fs::metadata(source.join("busybox"))?.permissions(),
+    )?;
     fs::copy(source.join("LICENSE"), apps.join("busybox.LICENSE"))?;
     fs::copy(&config_path, work.join("busybox.config"))?;
     let mut manifest = fs::OpenOptions::new()
@@ -147,6 +151,23 @@ pub fn build(root: &Path, apps: &Path) -> Result<()> {
 
 /// Build musl thread/signal/TTY probes and real dynamic-loader/TLS inputs independently of native apps.
 pub fn build_m9(root: &Path, apps: &Path) -> Result<()> {
+    command(
+        Command::new("musl-gcc")
+            .args([
+                "-static",
+                "-no-pie",
+                "-O2",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                "-fcf-protection=none",
+                "-Wl,--build-id=none",
+            ])
+            .arg(root.join("user/linux/network.c"))
+            .arg(root.join("user/linux/dns.c"))
+            .arg("-o")
+            .arg(apps.join("network-test.elf")),
+    )?;
     for name in ["libm9.so", "libm9extra.so"] {
         command(
             Command::new("musl-gcc")
@@ -165,10 +186,24 @@ pub fn build_m9(root: &Path, apps: &Path) -> Result<()> {
                 .arg(apps.join(name)),
         )?;
     }
+    // A relocated musl toolchain can have headers/static archives but no shared libc linker input.
+    // Reject that environment: silently linking libc.a into a TLS DSO breaks dynamic TLS.
+    for name in ["libm9.so", "libm9extra.so"] {
+        let dynamic = Command::new("readelf")
+            .arg("-d")
+            .arg(apps.join(name))
+            .output()?;
+        if !dynamic.status.success()
+            || !String::from_utf8(dynamic.stdout)?.contains("Shared library: [libc.so]")
+        {
+            return Err("musl shared-library linker input is missing; install musl-dev with its matching shared libc (see M9_RUNTIME.md)".into());
+        }
+    }
     let runtime = env::var_os("ANOVA_MUSL_LIBC")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("/usr/lib/x86_64-linux-musl/libc.so"));
     checked_file(&runtime)?;
+    let runtime_permissions = fs::metadata(&runtime)?.permissions();
     let runtime = fs::read(runtime)?;
     if format!("{:x}", Sha256::digest(&runtime))
         != "6e8ff8ad02f4a3a0b70029577e2eb9df8f6526aea302a60a8d649874d6fa45ea"
@@ -178,6 +213,7 @@ pub fn build_m9(root: &Path, apps: &Path) -> Result<()> {
         );
     }
     fs::write(apps.join("ld-musl-x86_64.so.1"), runtime)?;
+    fs::set_permissions(apps.join("ld-musl-x86_64.so.1"), runtime_permissions)?;
     for (name, flags) in [
         ("linux-threads", vec!["-static", "-no-pie"]),
         (

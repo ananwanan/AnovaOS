@@ -24,6 +24,8 @@ anova-sched = { path = "../crates/sched" }
 anova-vfs = { path = "../crates/vfs" }
 anova-storage = { path = "../crates/storage" }
 
+smoltcp = { version = "=0.12.0", default-features = false, features = ["alloc", "medium-ethernet", "proto-ipv4", "socket-tcp", "socket-udp"] }
+
 [features]
 qemu-test = []
 test-panic = ["qemu-test"]

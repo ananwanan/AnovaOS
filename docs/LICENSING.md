@@ -83,3 +83,13 @@ verified by xtask before packaging. The M9 C probes and TLS shared objects are
 first-party Apache-2.0 sources. Dynamic linkage does not import musl or BusyBox
 implementation code into the kernel. Preserve the existing BusyBox exact-source
 bundle and musl notices when distributing the ISO.
+
+## M10 network and TLS distribution
+
+See [M10 input boundaries](third-party/m10.md) and the preserved
+[network dependency licenses](third-party/network-licenses.md). The pinned
+smoltcp BSD-0-Clause stack is kernel-linked; its enabled transitive notices are
+included at /etc/network.LICENSE. Mbed TLS is unmodified and user-linked under
+its Apache-2.0 option; /etc/mbedtls.LICENSE preserves its upstream license.
+The generated demo package includes LICENSE and declares its native SDK/ABI.
+Test CA private keys are never included in the image or application packages.

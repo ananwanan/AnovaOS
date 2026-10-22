@@ -1,7 +1,7 @@
 <!-- Track milestone dependencies, implementation checklists and acceptance criteria. -->
 # 开发路线与阶段验收
 
-日期：2026-10-22。**M0–M9 已通过本地 q35/TCG 验收；M10–M15 尚未实现，外设 IRQ 路由启用待对应驱动。** 证据见 [M9 验证记录](docs/validation/M9.md) 与 [STATUS](docs/STATUS.md)。[FIRST_TASK](docs/FIRST_TASK.md) 记录 M0/M1 原始实现顺序；当前 M2 边界见 [CPU 基线](docs/M2_CPU.md)。
+日期：2026-10-22。**M0–M10 已通过本地 q35/TCG 验收；M11–M15 尚未实现，外设 IRQ 路由启用待对应驱动。** 证据见 [M9 验证记录](docs/validation/M9.md) 与 [STATUS](docs/STATUS.md)。[FIRST_TASK](docs/FIRST_TASK.md) 记录 M0/M1 原始实现顺序；当前 M2 边界见 [CPU 基线](docs/M2_CPU.md)。
 
 ## 阶段总览
 
@@ -17,7 +17,7 @@
 | M7 | 源码和应用可持久保存 | M6 | 本地验收通过；单块组 ext2、正常关机保证 |
 | M8 | 首批静态 Linux CLI 程序 | M6、M7 | 本地验收通过；受限静态 CLI profile |
 | M9 | 线程、信号、动态 musl | M8 | 本地验收通过；受限运行时与 PTY profile |
-| M10 | 网络和受控包安装 | M7、M9 | 未开始 |
+| M10 | 网络和受控包安装 | M7、M9 | 本地受控 IPv4/TLS/包验收通过 |
 | M11 | 系统内 GCC/G++ 应用开发 | M7–M9；可先离线 | 未开始 |
 | M12 | 系统内 Rust/Cargo 应用开发 | M11、M9；联网可后补 | 未开始 |
 | M13 | 可发布的 SDK 与应用包 | M4 基础 SDK、M11/M12 | 未开始 |
@@ -166,13 +166,21 @@ persistent-file mmap and glibc remain outside this accepted profile.
 
 ## M10：网络与包环境
 
-- [ ] virtio-net，优先复用适合 `no_std` 的协议栈并验证内核集成。
-- [ ] IP、UDP/TCP、DNS、socket 阻塞/非阻塞行为和时间源。
-- [ ] 先本地仓库和离线包，再联网安装；锁定依赖、校验包内容。
-- [ ] TLS 放在合适的用户态库，准备 CA 与正确时间；禁止跳过证书验证。
-- [ ] 软件包清单、安装路径、许可证、升级/失败回滚和用户数据保留。
+- [x] virtio-net，优先复用适合 `no_std` 的协议栈并验证内核集成。
+- [x] IP、UDP/TCP、DNS、socket 阻塞/非阻塞行为和时间源。
+- [x] 先本地仓库和离线包，再联网安装；锁定依赖、校验包内容。
+- [x] TLS 放在合适的用户态库，准备 CA 与正确时间；禁止跳过证书验证。
+- [x] 软件包清单、安装路径、许可证、升级/失败回滚和用户数据保留。
 
 退出条件：受控网络对端的收发/超时/DNS 测试通过；离线包可安装、升级与卸载；在线能力按实测范围另报。联网能力不是离线 GCC 验收的门槛。
+
+Implemented scope: [M10_NETWORK_PACKAGES](docs/M10_NETWORK_PACKAGES.md), evidence
+[validation/M10](docs/validation/M10.md). The accepted network is opt-in, polled
+IPv4 client TCP/UDP plus a bounded user-space DNS A resolver. Packages use native
+SDK v1, whole-archive/per-file locks, alternating persistent slots and preserved
+user data. TLS is verified with controlled CA/name/date positives and negatives.
+Public repositories, general Linux networking, arbitrary package dependencies and
+crash-safe ext2 transactions are not claimed.
 
 ## M11：系统内 C/C++ 应用开发
 

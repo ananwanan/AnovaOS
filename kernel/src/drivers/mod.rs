@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Prepare PCI mappings before page-table import, then own a polled modern virtio block device.
+//! Prepare isolated block/network PCI handoffs before page-table import and attach polled ext2 storage.
+pub mod network;
 pub mod pci;
 pub mod virtio;
 use crate::{
@@ -19,7 +20,8 @@ static PREPARED: Prepared = Prepared(UnsafeCell::new(None));
 
 pub fn prepare(mapper: &mut EarlyMapper<'_>, timer: PmTimer) {
     assert_eq!(cpu::flags() & (1 << 9), 0, "PCI preparation requires IF=0");
-    match pci::discover(mapper) {
+    network::prepare(mapper, timer);
+    match pci::discover(mapper, false) {
         Ok(config) => {
             // SAFETY: Sole BSP boot writer; the handoff is consumed once in attach().
             unsafe {

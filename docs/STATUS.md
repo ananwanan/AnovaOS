@@ -1,9 +1,9 @@
 <!-- Record locally verified subsystem capabilities, runtime limits and the next development task. -->
 # Implementation status
 
-Recorded 2026-10-22 (Asia/Shanghai). M9 baseline: `7e3123d` on dev, after the
-M8 merge. Task branch: feat/m9-runtime. See [M9 profile](M9_RUNTIME.md) and
-[validation/M9.md](validation/M9.md) for the exact builds, tests and exclusions.
+Recorded 2026-10-22 (Asia/Shanghai). M10 baseline: `cbab786` on dev, after
+the M9 merge. Task branch: feat/m10-network-packages. See
+[M10 profile](M10_NETWORK_PACKAGES.md) and [validation/M10.md](validation/M10.md).
 Remote CI and publication are separate from local acceptance.
 
 ## Implemented and locally verified
@@ -42,9 +42,20 @@ Remote CI and publication are separate from local acceptance.
   actual complete heap exhaustion verifies fork/spawn rollback and failed exec
   retention with exact page/heap recovery. Futex backing identities never reuse
   a freed allocation's key. No user reference or lock survives a switch.
+- M10: opt-in modern virtio-net with separately owned RX/TX DMA, smoltcp 0.12.0,
+  bounded IPv4 TCP/UDP client sockets, VFS fd inheritance, nonblocking/poll,
+  timeouts, signals, UDP pointer/MTU negatives, bounded reuse and reset teardown.
+- User-space DNS A with actual controlled replies, compression/ID/source bounds
+  and timeouts; validated CMOS UTC and monotonic deadlines.
+- User-space Mbed TLS 2.28.10, actual HTTPS and mandatory CA/hostname/date checks;
+  negative tests inspect the real X.509 reason. Test keys never enter images.
+- Actual native package install/upgrade/remove, archive/per-file SHA-256,
+  ABI/SDK/license/path validation, inactive-slot failure rollback, clean reboot
+  retention, installed ELF execution and preserved user data. Online acquisition
+  is restricted to the controlled host peer and generated test CA.
 - DEV-001 remains mandatory: English purpose headers plus the checked
   [file inventory](FILE_PURPOSES.md). Exact command results are in validation/M9.
-- 74 host tests, host/kernel/user Clippy, formatting and all 13 QEMU scenarios
+- 76 host tests, host/kernel/user Clippy, formatting and all 13 QEMU scenarios
   pass. Ordinary UART and persistence/error sessions consume ordered stdout
   directly; diagnostic-log snapshots cannot invalidate their matching cursors.
 
@@ -58,7 +69,8 @@ Remote CI and publication are separate from local acceptance.
 | ext2 | Normal shutdown persistence; no journal, atomic save or power-loss guarantee |
 | Full terminal jobs, alternate signal stacks, realtime queues, robust/PI futexes | Not implemented or verified |
 | COW, persistent-file mmap/writeback, ASLR, SMP, GUI and physical hardware | Not implemented or verified |
-| Networking, general Linux/glibc, guest GCC/G++ or rustc/Cargo | Not implemented or verified |
+| M10 IPv4 client networking and controlled native packages/TLS | Locally accepted within M10_NETWORK_PACKAGES |
+| General Linux networking/glibc, public package repositories, guest GCC/G++ or rustc/Cargo | Not implemented or verified |
 | External IRQs, asynchronous block I/O, hotplug and boot-memory reclamation | Not implemented |
 
 The BSP polls block I/O with a two-second deadline; long kernel I/O delays tasks
@@ -68,8 +80,9 @@ The editor's truncate/write save is not atomic. M9 does not change these limits.
 
 ## Next task
 
-M10: virtio-net, a bounded network/socket implementation and controlled package
-inputs, starting with local peers and offline packages. M11/M12 still require
-real guest-hosted toolchains; running cross-built ELFs is not guest compilation.
-Preserve M9 runtime tests, the static CLI profile, source-purpose requirements,
-storage negatives and exact ownership/reclamation gates.
+M11: real guest-hosted GCC/G++, assembler/linker and a matching libc/CRT/sysroot,
+starting with an offline edit/compile/link/run/reboot loop. Revisit current heap,
+file-size and namespace limits against the actual compiler trace. Cross-built
+ELFs alone do not establish guest compilation. Preserve all M9 runtime and
+M10 network/package/TLS tests, file purposes, storage negatives and exact
+ownership/reclamation gates.

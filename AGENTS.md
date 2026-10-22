@@ -5,7 +5,15 @@
 
 这是 Rust 编写的 x86_64 自研操作系统。最终用户应能在系统自己的终端中编辑源码、使用 GCC/G++/Rust/Cargo 编译、链接并运行应用，同时逐步运行经过验证的现有 Linux 软件。
 
-当前 M0–M9 已通过本地 QEMU TCG 验证。原生进程、VFS、init/shell、virtio-blk、受限 ext2 `/persist`、文本编辑、sync/fsync 和正常关机/重启已实现。M9 还验证 musl 1.2.4 静态、静态 PIE、动态 ELF、pthread/TLS/futex、信号栈帧/返回、中断/重启、poll、非阻塞 I/O 和四组 PTY。**单核，共 32 个进程/线程槽；内核不可抢占；tmpfs 易失；ext2 无日志和断电恢复、单文件最多 1 MiB；无 SMP、网络、通用 Linux/glibc 或 guest 编译器；引导保留区未回收，堆固定 2 MiB。** 外设 IRQ 仍屏蔽，CI 远端结果单独记录。先读 [M9_RUNTIME](docs/M9_RUNTIME.md)、[STATUS](docs/STATUS.md)、[M8_LINUX](docs/M8_LINUX.md)、[M7_STORAGE](docs/M7_STORAGE.md) 和 [开发需求](docs/REQUIREMENTS.md)，再检查真实代码与 git 状态。
+当前 M0–M10 已通过本地 QEMU TCG 验证。原生进程、VFS、init/shell、virtio-blk、受限 ext2 `/persist`、文本编辑、sync/fsync 和正常关机/重启已实现。M9 还验证 musl 1.2.4 静态、静态 PIE、动态 ELF、pthread/TLS/futex、信号栈帧/返回、中断/重启、poll、非阻塞 I/O 和四组 PTY。**单核，共 32 个进程/线程槽；内核不可抢占；tmpfs 易失；ext2 无日志和断电恢复、单文件最多 1 MiB；无 SMP、通用 Linux/glibc 或 guest 编译器；引导保留区未回收，堆固定 2 MiB。** 外设 IRQ 仍屏蔽，CI 远端结果单独记录。先读 [M9_RUNTIME](docs/M9_RUNTIME.md)、[STATUS](docs/STATUS.md)、[M8_LINUX](docs/M8_LINUX.md)、[M7_STORAGE](docs/M7_STORAGE.md) 和 [开发需求](docs/REQUIREMENTS.md)，再检查真实代码与 git 状态。
+
+M10 adds opt-in, polled virtio-net IPv4 TCP/UDP sockets, bounded user-space DNS,
+strict user-space TLS and checksum-locked native package install/upgrade/rollback/
+remove with user data retained. Read [M10 profile](docs/M10_NETWORK_PACKAGES.md)
+and [validation](docs/validation/M10.md). Public Internet package repositories,
+TCP servers, general Linux networking and package dependency solvers remain outside
+this accepted controlled profile. M11 is next. Preserve both new commands
+`cargo xtask network-test` and `cargo xtask package-test` alongside every M9 gate.
 
 本文件是后续 Codex 开发规范。用户明确指令优先；已有修改应保留。日常、可逆的实现选择可自主完成，不因普通阶段切换反复请求确认。
 
