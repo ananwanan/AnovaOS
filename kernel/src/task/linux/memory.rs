@@ -59,6 +59,17 @@ impl Kernel {
             if f.rdi & 4095 != 0 {
                 return Err(-22);
             }
+            if perms.is_some_and(|p| p.writable)
+                && self
+                    .process(i)
+                    .image
+                    .as_ref()
+                    .unwrap()
+                    .space
+                    .has_file_pages(f.rdi, end)
+            {
+                return Err(-13);
+            }
             self.process_mut(i)
                 .image
                 .as_mut()
@@ -90,7 +101,7 @@ impl Kernel {
         // Linux MAP_STACK is a hint; the same eager mapping and guard protections apply.
         if f.r10 & !0x21033 != 0
             || !matches!(f.r10 & 3, 1 | 2)
-            || (shared && (!anonymous || fixed))
+            || (shared && fixed)
             || f.r9 & 4095 != 0
         {
             return Err(-22);
@@ -113,8 +124,20 @@ impl Kernel {
         if anonymous && (f.r8 != u64::MAX || f.r9 != 0) {
             return Err(-22);
         }
+        if shared && !anonymous && f.rdx & 2 != 0 {
+            return Err(-95);
+        }
         let files = &self.processes[i].as_ref().unwrap().files;
-        let data = if anonymous {
+        let file = if shared && !anonymous {
+            Some(
+                self.fs
+                    .shared_file_mapping(files, f.r8, f.r9, size)
+                    .map_err(errno)?,
+            )
+        } else {
+            None
+        };
+        let data = if anonymous || file.is_some() {
             None
         } else {
             Some(
@@ -124,6 +147,12 @@ impl Kernel {
             )
         };
         let image = self.process_mut(i).image.as_mut().unwrap();
+        if file.is_some() {
+            image
+                .space
+                .reserve_file_pages((size / 4096) as usize)
+                .map_err(|_| -12)?;
+        }
         let start = if fixed {
             if f.rdi & 4095 != 0 || f.rdi < START || end > END {
                 return Err(-22);
@@ -164,6 +193,12 @@ impl Kernel {
         }
         if shared {
             image.space.share_mapping(start, start + size);
+        }
+        if let Some(file) = file {
+            image
+                .space
+                .bind_file_pages(start, size, f.r9 as usize, file);
+            image.space.refresh_file_pages();
         }
         image
             .space

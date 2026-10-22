@@ -15,6 +15,11 @@ pub(in crate::task) enum Blocked {
         frame: TrapFrame,
         deadline: Option<u64>,
     },
+    Select {
+        frame: TrapFrame,
+        sets: [u32; 3],
+        deadline: Option<u64>,
+    },
     Sleep {
         deadline: u64,
         remaining: u64,
@@ -496,6 +501,13 @@ impl Kernel {
                         None
                     }
                 }
+                Some(Blocked::Select {
+                    frame,
+                    sets,
+                    deadline,
+                }) => self
+                    .select_result(i, &frame, sets, deadline)
+                    .unwrap_or_else(Some),
                 _ => None,
             };
             if let Some(result) = result {

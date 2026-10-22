@@ -148,6 +148,16 @@ files = {str(p.relative_to(vendored)): digest(p) for p in sorted(vendored.rglob(
 (vendored/'.cargo-checksum.json').write_text(json.dumps({'files': files, 'package': vendor['sha256']})+'\n')
 copy(root/'ports/rust/inputs.json', stage/'licenses/inputs.json')
 copy(root/'docs/third-party/m12.md', stage/'licenses/PROFILE.md')
+ca = config['ca_bundle']
+for item, destination in [(ca, 'certs/ca-certificates.crt'),
+                          (ca['license'], 'licenses/certs/MPL-2.0.txt')]:
+    bundle = cache/item['name']
+    if not bundle.exists():
+        subprocess.run(['curl', '--fail', '--location', '--proto', '=https', '--tlsv1.2',
+                        '--max-time', '120', item['url'], '-o', str(bundle)], check=True)
+    if bundle.is_symlink() or not bundle.is_file() or digest(bundle) != item['sha256']:
+        raise RuntimeError('CA bundle or license checksum mismatch: '+item['name'])
+    copy(bundle, stage/destination)
 final_stage.parent.mkdir(parents=True, exist_ok=True)
 previous = Path(installation.name)/'previous'
 if final_stage.exists():

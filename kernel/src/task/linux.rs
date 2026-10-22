@@ -3,10 +3,12 @@
 //! Translate wire formats at this boundary; generic VFS, native ABI and scheduling remain independent.
 mod io;
 mod memory;
+mod select;
 pub(crate) mod signals;
 mod sockets;
 mod terminal;
 pub(crate) mod threads;
+mod time;
 pub(super) use io::io_frame;
 
 use super::*;
@@ -48,7 +50,7 @@ fn string(
     })
 }
 
-fn stat_bytes(meta: (u64, u32, usize, bool), permissions: u16, modified: u64) -> [u8; 144] {
+fn stat_bytes(meta: (u64, u32, usize, bool), permissions: u16, times: [u64; 3]) -> [u8; 144] {
     let (inode, kind, size, exec) = meta;
     let mut b = [0; 144];
     let mode: u32 = match kind {
@@ -68,10 +70,10 @@ fn stat_bytes(meta: (u64, u32, usize, bool), permissions: u16, modified: u64) ->
     b[8..16].copy_from_slice(&inode.to_le_bytes());
     b[16..24].copy_from_slice(&1u64.to_le_bytes());
     b[24..28].copy_from_slice(&((mode & !0o777) | u32::from(permissions)).to_le_bytes());
-    b[88..96].copy_from_slice(&(modified / 1_000_000_000).to_le_bytes());
-    b[96..104].copy_from_slice(&(modified % 1_000_000_000).to_le_bytes());
-    b[104..112].copy_from_slice(&(modified / 1_000_000_000).to_le_bytes());
-    b[112..120].copy_from_slice(&(modified % 1_000_000_000).to_le_bytes());
+    for (at, time) in [72, 88, 104].into_iter().zip(times) {
+        b[at..at + 8].copy_from_slice(&(time / 1_000_000_000).to_le_bytes());
+        b[at + 8..at + 16].copy_from_slice(&(time % 1_000_000_000).to_le_bytes());
+    }
     b[48..56].copy_from_slice(&(size as u64).to_le_bytes());
     b[56..64].copy_from_slice(&4096u64.to_le_bytes());
     b[64..72].copy_from_slice(&(size as u64).div_ceil(512).to_le_bytes());
@@ -144,6 +146,11 @@ impl Kernel {
     }
     pub(super) fn linux_syscall(&mut self, i: usize) {
         let f = self.process(i).context.frame;
+        if matches!(f.rax, 261 | 280) {
+            let result = self.linux_timestamps(i, &f).unwrap_or_else(|e| e);
+            self.process_mut(i).context.frame.rax = result as u64;
+            return;
+        }
         if matches!(f.rax, 41..=55)
             || matches!(f.rax, 0 | 1)
                 && self
@@ -182,6 +189,11 @@ impl Kernel {
         }
         if f.rax == 202 {
             let result = self.linux_futex(i, &f).unwrap_or_else(|e| e);
+            self.process_mut(i).context.frame.rax = result as u64;
+            return;
+        }
+        if f.rax == 23 {
+            let result = self.linux_select(i, &f).unwrap_or_else(|e| e);
             self.process_mut(i).context.frame.rax = result as u64;
             return;
         }
@@ -749,11 +761,11 @@ impl Kernel {
                                 output,
                             )
                         };
-                        let (permissions, modified) = self.fs.attributes(meta.0);
+                        let (permissions, _) = self.fs.attributes(meta.0);
                         uaccess::to_user(
                             space,
                             UserAddr(output),
-                            &stat_bytes(meta, permissions, modified),
+                            &stat_bytes(meta, permissions, self.fs.times(meta.0)),
                         )
                         .map_err(errno)?;
                         0

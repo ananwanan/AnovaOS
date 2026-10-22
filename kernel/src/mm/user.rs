@@ -6,6 +6,8 @@ use alloc::vec::Vec;
 use anova_abi::UserAddr;
 use anova_memory::shared::Shared;
 use core::cell::RefCell;
+mod file_mapping;
+use file_mapping::FilePage;
 
 // Trap capture returns to the separate 256 KiB scheduler stack before deep exec/ELF work.
 const STACK_BYTES: u64 = 64 * 1024;
@@ -55,6 +57,7 @@ struct OwnedSpace {
     tables: Option<PageTables>,
     pages: Vec<(VirtAddr, Shared<UserFrame>)>,
     next_mapping: u64,
+    file_pages: Vec<FilePage>,
 }
 
 struct UserFrame {
@@ -193,6 +196,14 @@ impl UserSpace {
         permissions: Option<Permissions>,
     ) -> Result<(), Error> {
         let mut space = self.0.borrow_mut();
+        if permissions.is_some_and(|p| p.writable)
+            && space
+                .file_pages
+                .iter()
+                .any(|p| (start..end).contains(&p.address.0))
+        {
+            return Err(Error::InvalidRange);
+        }
         if end
             .checked_sub(start)
             .and_then(|len| UserAddr(start).checked_end(len as usize))
@@ -256,6 +267,7 @@ impl OwnedSpace {
                 tables: Some(manager.tables.new_user(&mut store)?),
                 pages: Vec::new(),
                 next_mapping: 0,
+                file_pages: Vec::new(),
             })
         })
     }
@@ -278,6 +290,10 @@ impl OwnedSpace {
     /// Eager fork copy: duplicate every leaf and permission; drop rolls back partial OOM.
     pub fn clone_eager(&self) -> Result<Self, Error> {
         let mut child = Self::new()?;
+        child
+            .file_pages
+            .try_reserve_exact(self.file_pages.len())
+            .map_err(|_| Error::OutOfMemory)?;
         for (address, source) in &self.pages {
             let (permissions, accessible) = MEMORY.with(|slot| {
                 let manager = slot.as_mut().expect("Memory not initialized");
@@ -330,6 +346,7 @@ impl OwnedSpace {
                 })?;
             }
         }
+        child.file_pages.extend(self.file_pages.iter().cloned());
         Ok(child)
     }
 
@@ -444,6 +461,7 @@ impl OwnedSpace {
                 .unmap(VirtAddr(address), &mut store)?;
             Ok::<_, Error>(())
         })?;
+        self.file_pages.retain(|p| p.address.0 != address);
         self.pages.swap_remove(index);
         Ok(())
     }

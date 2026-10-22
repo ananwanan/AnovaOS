@@ -83,7 +83,7 @@ pub fn cross(root: &Path) -> Result<()> {
 pub fn image(root: &Path) -> Result<PathBuf> {
     image_profile(root, true)
 }
-fn image_profile(root: &Path, c_toolchain: bool) -> Result<PathBuf> {
+pub(super) fn image_profile(root: &Path, c_toolchain: bool) -> Result<PathBuf> {
     apps::build(root, false)?;
     command(
         Command::new("python3")
@@ -146,6 +146,7 @@ fn image_profile(root: &Path, c_toolchain: bool) -> Result<PathBuf> {
     )?;
     toolchain::append(&mut bytes, 5, "/bin/rustc", &fs::read(wrapper)?);
     toolchain::append(&mut bytes, 3, "/bin/cargo", b"rustc");
+    toolchain::append(&mut bytes, 3, "/bin/cargo-online", b"rustc");
     let mut archive =
         anova_vfs::archive::Archive::new(&bytes).map_err(|e| format!("Rust archive: {e}"))?;
     while archive
@@ -379,22 +380,21 @@ pub fn verify(root: &Path) -> Result<()> {
     )?;
     Ok(())
 }
-fn send(steps: &mut Vec<(String, Vec<u8>)>, marker: &str, command: &str) {
+pub(super) fn send(steps: &mut Vec<(String, Vec<u8>)>, marker: &str, command: &str) {
     steps.push((marker.into(), command.as_bytes().to_vec()));
 }
-fn success(steps: &mut Vec<(String, Vec<u8>)>, command: &str) {
+pub(super) fn success(steps: &mut Vec<(String, Vec<u8>)>, command: &str) {
     send(steps, "anova> ", command);
     send(steps, "anova> ", "status\r");
     send(steps, "[SHELL:STATUS] code=0", "");
 }
-fn edit(steps: &mut Vec<(String, Vec<u8>)>, name: &str, source: &str) -> Result<()> {
+pub(super) fn edit(steps: &mut Vec<(String, Vec<u8>)>, name: &str, source: &str) -> Result<()> {
     if source.lines().any(|line| line.len() > 250) {
         return Err("Rust editor fixture line too long".into());
     }
     let command = format!("edit {name}\r");
     send(steps, "anova> ", &command);
     // These fixed source edits preserve line counts, including the deliberately invalid macro call.
-    let mut input = String::new();
     if steps
         .iter()
         .filter(|(_, b)| b.as_slice() == command.as_bytes())
@@ -402,11 +402,17 @@ fn edit(steps: &mut Vec<(String, Vec<u8>)>, name: &str, source: &str) -> Result<
         > 1
     {
         for _ in source.lines() {
-            input.push_str("d 1\r");
+            send(steps, "edit> ", "d 1\r");
         }
     }
-    input.push_str(&format!("a\r{}.\rw\r", source.replace('\n', "\r")));
-    send(steps, "AnovaOS line editor:", &input);
+    send(steps, "edit> ", "a\r");
+    let mut echoed = String::from("a\r\n");
+    for line in source.lines() {
+        send(steps, &echoed, &format!("{line}\r"));
+        echoed = format!("{line}\r\n");
+    }
+    send(steps, &echoed, ".\r");
+    send(steps, "edit> ", "w\r");
     send(steps, "[EDIT:SAVED] fsync=ok", "q\r");
     Ok(())
 }

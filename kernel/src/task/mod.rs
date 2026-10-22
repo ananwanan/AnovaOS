@@ -620,6 +620,11 @@ impl Kernel {
         let mut previous = None;
         let mut preempted = false;
         loop {
+            if let Err(error) = self.fs.collect_mappings() {
+                serial::write(format_args!(
+                    "[FS:FAIL] mapped inode cleanup error={error}\n"
+                ));
+            }
             if let Some(net) = self.network.as_mut() {
                 net.collect(|id| self.fs.socket_live(id));
                 net.poll();
@@ -746,6 +751,11 @@ impl Kernel {
             CAPTURE.store(&mut capture, Ordering::Release);
             let top = p.stack.as_ref().expect("Missing kernel stack").top();
             traps::set_kernel_stack(top);
+            p.image
+                .as_ref()
+                .expect("Missing image")
+                .space
+                .refresh_file_pages();
             p.context
                 .run(p.image.as_ref().expect("Missing image").space.root().0, top);
             CAPTURE.store(ptr::null_mut(), Ordering::Release);

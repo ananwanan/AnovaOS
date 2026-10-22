@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Launch isolated Rust/Cargo tools with static apps and PIC libraries for the offline macro graph.
+// Launch isolated Rust tools and opt-in online Cargo with persistent caches and verified TLS.
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,7 +9,8 @@
 int main(int argc, char **argv) {
     const char *name = strrchr(argv[0], '/');
     name = name ? name + 1 : argv[0];
-    int cargo = strcmp(name, "cargo") == 0;
+    int online = strcmp(name, "cargo-online") == 0;
+    int cargo = online || strcmp(name, "cargo") == 0;
     int types = 0, macro_type = 0, library_type = 0;
     for (int k = 1; k < argc; ++k) {
         const char *kind = NULL;
@@ -30,12 +31,13 @@ int main(int argc, char **argv) {
     setenv("LC_ALL", "C", 1);
     setenv("LD_LIBRARY_PATH", "/rs/lib:/lib", 1);
     setenv("RUSTC", "/bin/rustc", 1);
-    setenv("CARGO_HOME", "/tmp/cargo-home", 1);
+    setenv("CARGO_HOME", online ? "/persist/cargo-home" : "/tmp/cargo-home", 0);
     setenv("CARGO_BUILD_JOBS", "1", 1);
     setenv("CARGO_INCREMENTAL", "0", 1);
     setenv("CARGO_TERM_COLOR", "never", 1);
     setenv("CARGO_TERM_PROGRESS_WHEN", "never", 1);
-    setenv("CARGO_NET_OFFLINE", "true", 1);
+    setenv("CARGO_NET_OFFLINE", online ? "false" : "true", 0);
+    setenv("SSL_CERT_FILE", "/rs/certs/ca-certificates.crt", 0);
     setenv("RUST_BACKTRACE", "0", 1);
     args[n++] = cargo ? "/rs/bin/cargo" : "/rs/bin/rustc";
     if (!cargo) {

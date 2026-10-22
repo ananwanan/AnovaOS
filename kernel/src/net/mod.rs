@@ -98,6 +98,9 @@ impl Stack {
                 if socket.may_send() {
                     entry.connecting = false;
                     entry.connected = true;
+                    // Establishment stays bounded at three seconds; application-level transfer
+                    // deadlines must be able to expire before an idle established TCP transport.
+                    socket.set_timeout(Some(Duration::from_secs(30)));
                 } else if !socket.is_open() {
                     entry.connecting = false;
                     entry.error = if apic::ticks().saturating_sub(entry.started) >= 300 {

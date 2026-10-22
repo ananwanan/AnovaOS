@@ -19,6 +19,16 @@
       "sha256": "38490d575786f4688e83b357baeb022d8dde0ace2cb8c1357e060c76644fc56a"
     }
   ],
+  "ca_bundle": {
+    "name": "cacert-2026-10-20.pem",
+    "url": "https://curl.se/ca/cacert-2026-10-20.pem",
+    "sha256": "796f1389bfea13c0ed78f663b765baaff54a508e5483786bd6ece73c5e3e3cbe",
+    "license": {
+      "name": "MPL-2.0.txt",
+      "url": "https://www.mozilla.org/media/MPL/2.0/index.txt",
+      "sha256": "3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04"
+    }
+  },
   "vendor": {
     "name": "itoa",
     "version": "1.0.15",

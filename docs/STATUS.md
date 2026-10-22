@@ -146,7 +146,27 @@ bounds recorded here. Native limits remain separate.
   heap, 1 MiB writable files and Linux stacks, 256 KiB scheduler stack and
   retained boot memory remain bounded. See M12_RUST for exact scope.
 
+## M12 online Cargo checkpoint — not accepted
+
+The current work in progress adds `rust-online-test` for controlled HTTPS sparse
+registry/Git acquisition and negative transport cases, plus `rust-public-test`
+for public crates.io/GitHub sources. Runtime changes include bounded select,
+explicit file timestamps and readonly shared-file mappings with retained inode
+identity. These additions are checkpointed separately from the accepted offline
+profile; neither online gate has a completed successful result yet.
+
+Checkpoint checks passed 83 host tests and file-purpose coverage. The existing
+latest cross-test transcript covers select/signal interruption, shared-map
+coherence/lifetime/OOM and timestamp boundaries followed by clean shutdown.
+The earlier online attempt downloaded a registry dependency but failed while
+setting its extracted mtime; the timestamp implementation and tests are now
+present. Online end-to-end validation and the full regression matrix remain
+pending. See [M12 validation](validation/M12.md).
+
 ## Next task
+
+Complete and validate the in-progress M12 online gates before marking R6 accepted.
+The next milestone after that acceptance remains M13.
 
 M13: version the application SDK, manifest, package and developer experience
 around the verified C/C++/Rust toolchains. Preserve every previous runtime,

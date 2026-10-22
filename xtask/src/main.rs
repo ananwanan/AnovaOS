@@ -8,6 +8,8 @@ mod network;
 mod packages;
 mod purposes;
 mod rust;
+mod rust_online;
+mod rust_public;
 mod smoke;
 mod terminal;
 mod toolchain;
@@ -213,6 +215,8 @@ fn execute() -> Result<()> {
         "rust-runtime-test" => rust::runtime(&root),
         "rust-image" => rust::image(&root).map(|_| ()),
         "rust-test" => rust::verify(&root),
+        "rust-online-test" => rust_online::verify(&root),
+        "rust-public-test" => rust_public::verify(&root),
         "network-test" => network::verify(&root),
         "terminal-test" => terminal::verify(&root),
         "persistence-test" => disk::verify(&root),
@@ -288,7 +292,7 @@ fn execute() -> Result<()> {
         }
         "help" | "--help" | "-h" => {
             println!(
-                "AnovaOS host tools\n\n  cargo xtask doctor\n  cargo xtask fetch\n  cargo xtask build\n  cargo xtask image\n  cargo xtask run [--network] [--toolchain | --rust] [--disk build/disks/NAME.ext2]\n  cargo xtask smoke [--case CASE] [--timeout-secs 1..300]\n  cargo xtask verify\n  cargo xtask test-host\n  cargo xtask test-compat\n  cargo xtask trace-compat\n  cargo xtask apps\n  cargo xtask check-apps\n  cargo xtask check-files\n  cargo xtask network-test\n  cargo xtask package-test\n  cargo xtask toolchain-build\n  cargo xtask toolchain-image\n  cargo xtask toolchain-test\n  cargo xtask rust-build\n  cargo xtask rust-image\n  cargo xtask rust-cross-test\n  cargo xtask rust-runtime-test\n  cargo xtask rust-test\n  cargo xtask terminal-test\n  cargo xtask root-image [--linux] build/disks/NAME.ext2\n  cargo xtask persistence-test\n\nCASE: boot, panic, timeout, invalid-opcode, general-protection, page-fault, double-fault, stack-guard, read-only, no-execute, direct-no-execute, unmapped, oom.\nOutputs stay in build/; run uses disposable OVMF variables and a temporary data disk unless --disk is explicit. Use guest shutdown for persistent images. TCG is mandatory."
+                "AnovaOS host tools\n\n  cargo xtask doctor\n  cargo xtask fetch\n  cargo xtask build\n  cargo xtask image\n  cargo xtask run [--network] [--toolchain | --rust] [--disk build/disks/NAME.ext2]\n  cargo xtask smoke [--case CASE] [--timeout-secs 1..300]\n  cargo xtask verify\n  cargo xtask test-host\n  cargo xtask test-compat\n  cargo xtask trace-compat\n  cargo xtask apps\n  cargo xtask check-apps\n  cargo xtask check-files\n  cargo xtask network-test\n  cargo xtask package-test\n  cargo xtask toolchain-build\n  cargo xtask toolchain-image\n  cargo xtask toolchain-test\n  cargo xtask rust-build\n  cargo xtask rust-image\n  cargo xtask rust-cross-test\n  cargo xtask rust-runtime-test\n  cargo xtask rust-test\n  cargo xtask rust-online-test\n  cargo xtask rust-public-test\n  cargo xtask terminal-test\n  cargo xtask root-image [--linux] build/disks/NAME.ext2\n  cargo xtask persistence-test\n\nCASE: boot, panic, timeout, invalid-opcode, general-protection, page-fault, double-fault, stack-guard, read-only, no-execute, direct-no-execute, unmapped, oom.\nOutputs stay in build/; run uses disposable OVMF variables and a temporary data disk unless --disk is explicit. Use guest shutdown for persistent images. TCG is mandatory."
             );
             Ok(())
         }

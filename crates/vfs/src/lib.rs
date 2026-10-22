@@ -5,6 +5,7 @@
 extern crate alloc;
 pub mod archive;
 pub mod fd;
+pub mod file_mapping;
 #[cfg(test)]
 mod tests;
 use alloc::borrow::Cow;
@@ -12,6 +13,7 @@ use alloc::vec::Vec;
 use anova_abi::*;
 use anova_storage::ext2::Ext2;
 pub use fd::Descriptors;
+use file_mapping::MappedFile;
 
 pub const ROOT: usize = 0;
 // Leave room for PTY/library nodes and the independent real heap-exhaustion workload.
@@ -57,6 +59,9 @@ struct Node<'a> {
     inode: Option<u32>,
     permissions: u16,
     modified: u64,
+    accessed: u64,
+    changed: u64,
+    mapping: Option<MappedFile>,
 }
 /// Internal directory names are independent of the fixed-size native v1 wire record.
 pub struct DirectoryEntry {
@@ -96,6 +101,7 @@ pub struct Vfs<'a> {
     linux: [bool; NODE_LIMIT],
     pty_unlocked: [bool; 4],
     clock: u64,
+    mapping_cache: bool,
 }
 fn slots<T>(n: usize, mut f: impl FnMut() -> T) -> Result<Vec<T>, i64> {
     let mut v = Vec::new();
@@ -117,6 +123,9 @@ impl<'a> Vfs<'a> {
             inode: None,
             permissions: 0o755,
             modified: 0,
+            accessed: 0,
+            changed: 0,
+            mapping: None,
         });
         let mut fs = Self {
             nodes,
@@ -126,6 +135,7 @@ impl<'a> Vfs<'a> {
             linux: [false; NODE_LIMIT],
             pty_unlocked: [false; 4],
             clock: 0,
+            mapping_cache: false,
         };
         let mut input = archive::Archive::new(archive)?;
         while let Some(entry) = input.entry()? {
@@ -235,6 +245,8 @@ impl<'a> Vfs<'a> {
             self.nodes[node].inode = Some(entry.inode);
             self.nodes[node].permissions = info.permissions;
             self.nodes[node].modified = u64::from(info.modified) * 1_000_000_000;
+            self.nodes[node].accessed = u64::from(info.accessed) * 1_000_000_000;
+            self.nodes[node].changed = u64::from(info.changed) * 1_000_000_000;
             if info.directory {
                 self.import_disk(disk, node, entry.inode, depth + 1)?;
             }
@@ -245,6 +257,7 @@ impl<'a> Vfs<'a> {
         if self.nodes.len() < NODE_LIMIT
             || self.nodes.iter().enumerate().any(|(i, n)| {
                 !n.linked
+                    && !n.mapping.as_ref().is_some_and(MappedFile::active)
                     && !self
                         .opens
                         .iter()
@@ -258,6 +271,7 @@ impl<'a> Vfs<'a> {
         }
     }
     pub fn sync(&mut self) -> Result<(), i64> {
+        self.collect_mappings()?;
         match &mut self.disk {
             Some(disk) => disk.sync(),
             None => Ok(()),
@@ -274,6 +288,49 @@ impl<'a> Vfs<'a> {
             .get(inode as usize)
             .map_or((0o600, 0), |n| (n.permissions, n.modified))
     }
+    pub fn times(&self, inode: u64) -> [u64; 3] {
+        self.nodes
+            .get(inode as usize)
+            .map_or([0; 3], |n| [n.accessed, n.modified, n.changed])
+    }
+    /// Set checked regular-file/directory timestamps; persistent ext2 stores whole seconds.
+    pub fn set_times(
+        &mut self,
+        inode: u64,
+        accessed: Option<u64>,
+        modified: Option<u64>,
+    ) -> Result<(), i64> {
+        let node = self.nodes.get_mut(inode as usize).ok_or(INVALID_ARGUMENT)?;
+        if accessed.is_none() && modified.is_none() {
+            return Ok(());
+        }
+        if !matches!(node.mount, Mount::Tmpfs | Mount::Ext2) {
+            return Err(READ_ONLY);
+        }
+        let seconds = |time: u64| u32::try_from(time / 1_000_000_000).map_err(|_| INVALID_ARGUMENT);
+        if let Some(number) = node.inode {
+            self.disk.as_mut().ok_or(IO_ERROR)?.set_times(
+                number,
+                accessed.map(seconds).transpose()?,
+                modified.map(seconds).transpose()?,
+            )?;
+        }
+        let precision = |time| {
+            if node.mount == Mount::Ext2 {
+                time / 1_000_000_000 * 1_000_000_000
+            } else {
+                time
+            }
+        };
+        if let Some(time) = accessed {
+            node.accessed = precision(time);
+        }
+        if let Some(time) = modified {
+            node.modified = precision(time);
+        }
+        node.changed = precision(self.clock);
+        Ok(())
+    }
     pub fn fsync(&mut self, files: &Descriptors, fd: u64) -> Result<(), i64> {
         let open = self.opens[files.handle(fd)?].unwrap();
         match open.target {
@@ -282,6 +339,7 @@ impl<'a> Vfs<'a> {
         }
     }
     pub fn shutdown(&mut self) -> Result<(), i64> {
+        self.collect_mappings()?;
         if self.nodes.iter().any(|n| n.inode.is_some() && !n.linked) {
             return Err(IO_ERROR);
         }
@@ -390,6 +448,7 @@ impl<'a> Vfs<'a> {
         data: Data<'a>,
         mount: Mount,
     ) -> Result<usize, i64> {
+        self.collect_mappings()?;
         if name.is_empty()
             || name.len() > NAME_BYTES
             || name == "."
@@ -421,10 +480,14 @@ impl<'a> Vfs<'a> {
             inode: None,
             permissions,
             modified: self.clock,
+            accessed: self.clock,
+            changed: self.clock,
+            mapping: None,
         };
         // Unlinked nodes remain alive until their final open description is closed.
         let reusable = self.nodes.iter().enumerate().position(|(i, n)| {
             !n.linked
+                && !n.mapping.as_ref().is_some_and(MappedFile::active)
                 && !self
                     .opens
                     .iter()
@@ -626,6 +689,10 @@ impl<'a> Vfs<'a> {
             .iter()
             .flatten()
             .any(|o| matches!(o.target, Target::Node(n) if n == node))
+            && !self.nodes[node]
+                .mapping
+                .as_ref()
+                .is_some_and(MappedFile::active)
         {
             if let Some(number) = self.nodes[node].inode.take() {
                 self.disk
@@ -658,6 +725,10 @@ impl<'a> Vfs<'a> {
             .iter()
             .flatten()
             .any(|o| matches!(o.target, Target::Node(n) if n == node))
+            && !self.nodes[node]
+                .mapping
+                .as_ref()
+                .is_some_and(MappedFile::active)
         {
             if let Some(number) = self.nodes[node].inode.take() {
                 self.disk
@@ -706,6 +777,10 @@ impl<'a> Vfs<'a> {
                 .iter()
                 .flatten()
                 .any(|o| matches!(o.target, Target::Node(n) if n == target))
+                && !self.nodes[target]
+                    .mapping
+                    .as_ref()
+                    .is_some_and(MappedFile::active)
             {
                 if let Some(inode) = self.nodes[target].inode.take() {
                     self.disk
@@ -828,6 +903,13 @@ impl<'a> Vfs<'a> {
             return Err(INVALID_ARGUMENT);
         };
         let inode = self.nodes[node].inode;
+        if self.nodes[node]
+            .mapping
+            .as_ref()
+            .is_some_and(|m| m.active() && length < m.length())
+        {
+            return Err(BUSY);
+        }
         match &mut self.nodes[node].data {
             Data::Mutable(bytes) => {
                 if length > FILE_BYTES {
@@ -851,6 +933,10 @@ impl<'a> Vfs<'a> {
             _ => return Err(READ_ONLY),
         }
         self.nodes[node].modified = self.clock;
+        self.nodes[node].changed = self.clock;
+        if let Some(mapping) = &self.nodes[node].mapping {
+            mapping.resize(length);
+        }
         Ok(())
     }
     pub fn executable(&self, cwd: usize, path: &str) -> Result<&'a [u8], i64> {
@@ -966,6 +1052,76 @@ impl<'a> Vfs<'a> {
             _ => unreachable!(),
         }
         Ok(Cow::Owned(bytes))
+    }
+    /// Readonly shared maps retain file identity and observe later successful descriptor writes.
+    /// Shrinking a live mapped file and writable shared maps remain outside this bounded profile.
+    pub fn shared_file_mapping(
+        &mut self,
+        fds: &Descriptors,
+        fd: u64,
+        offset: u64,
+        size: u64,
+    ) -> Result<MappedFile, i64> {
+        let open = self.opens[fds.handle(fd)?].ok_or(BAD_DESCRIPTOR)?;
+        if open.flags & OPEN_READ == 0 {
+            return Err(BAD_DESCRIPTOR);
+        }
+        let Target::Node(node) = open.target else {
+            return Err(INVALID_ARGUMENT);
+        };
+        let (kind, length, _) = {
+            let (_, kind, length, executable) = self.node_metadata(node)?;
+            (kind, length, executable)
+        };
+        if kind != 1 || length > FILE_BYTES {
+            return Err(UNSUPPORTED);
+        }
+        if offset >= length as u64
+            || offset
+                .checked_add(size)
+                .is_none_or(|end| end > (length as u64).next_multiple_of(4096))
+        {
+            return Err(INVALID_ARGUMENT);
+        }
+        if self.nodes[node].mapping.is_none() {
+            let bytes = self.mapping_bytes(fds, fd, 0, length as u64)?;
+            self.nodes[node].mapping = Some(MappedFile::new(&bytes)?);
+        }
+        self.mapping_cache = true;
+        Ok(self.nodes[node].mapping.as_ref().unwrap().clone())
+    }
+    /// Drop unreferenced caches and reclaim unlinked inodes after their last mapping disappears.
+    pub fn collect_mappings(&mut self) -> Result<(), i64> {
+        if !self.mapping_cache {
+            return Ok(());
+        }
+        self.mapping_cache = false;
+        for node in 0..self.nodes.len() {
+            let Some(mapping) = &self.nodes[node].mapping else {
+                continue;
+            };
+            if mapping.active() {
+                self.mapping_cache = true;
+                continue;
+            }
+            self.nodes[node].mapping = None;
+            if !self.nodes[node].linked
+                && !self
+                    .opens
+                    .iter()
+                    .flatten()
+                    .any(|o| matches!(o.target, Target::Node(n) if n == node) && o.refs != 0)
+            {
+                if let Some(inode) = self.nodes[node].inode.take() {
+                    self.disk
+                        .as_mut()
+                        .ok_or(IO_ERROR)?
+                        .release_unlinked(inode)?;
+                }
+                self.nodes[node].data = Data::Mutable(Vec::new());
+            }
+        }
+        Ok(())
     }
     pub fn pty_present(&self, n: usize, master: bool) -> bool {
         self.opens.iter().flatten().any(|o|match o.target {
@@ -1201,6 +1357,13 @@ impl<'a> Vfs<'a> {
             }
         }
         if flags & OPEN_TRUNCATE != 0 {
+            if self.nodes[node]
+                .mapping
+                .as_ref()
+                .is_some_and(MappedFile::active)
+            {
+                return Err(BUSY);
+            }
             let inode = self.nodes[node].inode;
             if let Data::Mutable(ref mut bytes) = self.nodes[node].data {
                 bytes.clear();
@@ -1214,6 +1377,10 @@ impl<'a> Vfs<'a> {
                 return Err(INVALID_ARGUMENT);
             }
             self.nodes[node].modified = self.clock;
+            self.nodes[node].changed = self.clock;
+            if let Some(mapping) = &self.nodes[node].mapping {
+                mapping.resize(0);
+            }
         }
         let id = self.allocate(Open {
             target: Target::Node(node),
@@ -1272,7 +1439,11 @@ impl<'a> Vfs<'a> {
                             && o.is_some_and(
                                 |o| matches!(o.target, Target::Node(node) if node == n),
                             )
-                    }) {
+                    }) && !self.nodes[n]
+                        .mapping
+                        .as_ref()
+                        .is_some_and(MappedFile::active)
+                    {
                         if let Some(number) = self.nodes[n].inode.take() {
                             cleanup = self.disk.as_mut().ok_or(IO_ERROR)?.release_unlinked(number);
                         }
@@ -1535,6 +1706,10 @@ impl<'a> Vfs<'a> {
                         self.opens[id].as_mut().unwrap().offset = offset + count;
                         *size = (*size).max(offset + count);
                         self.nodes[n].modified = self.clock;
+                        self.nodes[n].changed = self.clock;
+                        if let Some(mapping) = &self.nodes[n].mapping {
+                            mapping.write(offset, &input[..count]);
+                        }
                         return Ok(count);
                     }
                     Data::Mutable(bytes) => {
@@ -1556,6 +1731,10 @@ impl<'a> Vfs<'a> {
                         bytes[offset..end].copy_from_slice(input);
                         self.opens[id].as_mut().unwrap().offset = end;
                         self.nodes[n].modified = self.clock;
+                        self.nodes[n].changed = self.clock;
+                        if let Some(mapping) = &self.nodes[n].mapping {
+                            mapping.write(offset, input);
+                        }
                         return Ok(input.len());
                     }
                     Data::Device(Device::Null) => return Ok(input.len()),

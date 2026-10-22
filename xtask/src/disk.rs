@@ -395,6 +395,24 @@ pub(super) fn session_timeout(
     poweroff: bool,
     seconds: u64,
 ) -> Result<()> {
+    session_network(
+        root, iso, disk, name, readonly, fault, exchanges, poweroff, seconds, false,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn session_network(
+    root: &Path,
+    iso: &Path,
+    disk: &Path,
+    name: &str,
+    readonly: bool,
+    fault: Option<&str>,
+    exchanges: &[(&str, &[u8])],
+    poweroff: bool,
+    seconds: u64,
+    network: bool,
+) -> Result<()> {
     let logs = directory(root, "logs")?;
     let serial = logs.join(format!("{name}.serial.log"));
     let diagnostic = logs.join(format!("{name}.qemu.log"));
@@ -405,6 +423,9 @@ pub(super) fn session_timeout(
         fs::write(vars.0.join("blkdebug.conf"), fault)?;
     }
     let mut cmd = qemu_disk(root, iso, &vars.0, false, Some(disk), readonly)?;
+    if network {
+        network::attach(&mut cmd);
+    }
     cmd.args(["-serial", "stdio"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

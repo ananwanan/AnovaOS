@@ -30,6 +30,8 @@ pub struct Inode {
     pub executable: bool,
     pub permissions: u16,
     pub modified: u32,
+    pub accessed: u32,
+    pub changed: u32,
     raw: [u8; 128],
 }
 pub struct Entry {
@@ -129,6 +131,30 @@ impl Ext2 {
             let mode = u16_at(&inode.raw, 0) & !0o777;
             put16(&mut inode.raw, 0, mode | permissions);
             s.store_inode(&inode)
+        })
+    }
+    /// Persist explicit access/modify seconds without the ordinary write path replacing mtime.
+    pub fn set_times(
+        &mut self,
+        number: u32,
+        accessed: Option<u32>,
+        modified: Option<u32>,
+    ) -> Result<(), i64> {
+        self.mutate(|s| {
+            let inode = s.inode(number)?;
+            let offset = (inode.number as usize - 1) * 128;
+            let address = s.inode_table + (offset / BLOCK) as u32;
+            s.begin()?;
+            let mut block = buffer()?;
+            s.read_block(address, &mut block)?;
+            if let Some(time) = accessed {
+                put32(&mut *block, offset % BLOCK + 8, time);
+            }
+            if let Some(time) = modified {
+                put32(&mut *block, offset % BLOCK + 16, time);
+            }
+            put32(&mut *block, offset % BLOCK + 12, s.clock);
+            s.write_block(address, &block)
         })
     }
     pub fn create(&mut self, parent: u32, name: &str, directory: bool) -> Result<u32, i64> {
@@ -354,6 +380,8 @@ impl Ext2 {
             executable: mode & 0o111 != 0,
             permissions: mode & 0o777,
             modified: u32_at(&raw, 16),
+            accessed: u32_at(&raw, 8),
+            changed: u32_at(&raw, 12),
             raw,
         })
     }
@@ -653,6 +681,8 @@ impl Ext2 {
             executable: false,
             permissions: if directory { 0o755 } else { 0o644 },
             modified: self.clock,
+            accessed: self.clock,
+            changed: self.clock,
             raw: [0; 128],
         };
         put16(
@@ -665,6 +695,7 @@ impl Ext2 {
             },
         );
         put16(&mut inode.raw, 26, if directory { 2 } else { 1 });
+        put32(&mut inode.raw, 8, self.clock);
         if directory {
             let data = self.allocate_block()?;
             let mut block = buffer()?;

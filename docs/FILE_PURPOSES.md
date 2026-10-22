@@ -248,3 +248,20 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `tests/guest/m12/plain/Cargo.toml` | Define an independent dependency-free offline Cargo acceptance project. |
 | `tests/guest/m12/plain/Cargo.lock` | Cargo-generated lock for the dependency-free guest project; do not hand-edit. |
 | `tests/guest/m12/plain/src/main.rs` | Run an actual guest-built dependency-free Cargo executable and check its output. |
+
+## M12 online Cargo continuation
+
+| File | Purpose |
+| --- | --- |
+| `docs/M12_NETWORK.md` | Describe the in-progress online Cargo commands, runtime limits, trust inputs and independent acceptance gates. |
+| `xtask/src/rust_online.rs` | Verify real guest HTTPS sparse-registry/Git acquisition, strict transport failures and offline reboot cache reuse. |
+| `tests/guest/m12_online_peer.py` | Serve deterministic source archives and revision-locked Git smart HTTP with real TLS trust/name/date and transfer-failure fixtures. |
+| `tests/guest/m12/online/main.rs` | Run separately downloaded registry and Git dependencies in the guest-built application. |
+| `tests/guest/m12/online/Cargo.toml.in` | Instantiate the online guest project with an exact registry version and the generated full Git revision. |
+| `xtask/src/rust_public.rs` | Verify public crates.io/GitHub source acquisition, pinned revisions, actual guest compilation and offline reboot reuse. |
+| `tests/guest/m12/public/Cargo.toml` | Pin independent public registry and Git copies of itoa without vendor replacement. |
+| `tests/guest/m12/public/main.rs` | Run public dependencies linked into the actual guest-built executable. |
+| `kernel/src/task/linux/select.rs` | Implement checked select descriptor sets, true readiness, finite waits, remaining time and interruptible blocking. |
+| `kernel/src/task/linux/time.rs` | Adapt utimensat/futimesat, dirfd/descriptor paths, NOW/OMIT and checked timestamp precision. |
+| `kernel/src/mm/user/file_mapping.rs` | Pin readonly shared-file mappings and refresh changed VFS bytes with physical-page and fork ownership. |
+| `crates/vfs/src/file_mapping.rs` | Retain bounded shared-file bytes and version successful writes independently of descriptor lifetime. |

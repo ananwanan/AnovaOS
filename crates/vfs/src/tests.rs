@@ -1,7 +1,60 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Test VFS paths, shared file/socket descriptor ownership, pipe shutdown and bounded rollback.
+//! Test VFS paths, shared file/socket/mapping ownership, pipe shutdown and bounded rollback.
 use super::*;
 use alloc::vec;
+#[test]
+fn shared_file_maps_observe_writes_and_pin_removed_replaced_inodes() {
+    let image = image();
+    let mut fs = Vfs::new(&image).unwrap();
+    let mut fds = Descriptors::default();
+    let fd = fs
+        .open(
+            &mut fds,
+            ROOT,
+            "/tmp/mapped",
+            OPEN_CREATE | OPEN_READ | OPEN_WRITE,
+        )
+        .unwrap();
+    fs.write(&fds, fd, b"original").unwrap();
+    let identity = fs.metadata(ROOT, "/tmp/mapped").unwrap().0;
+    let mapping = fs.shared_file_mapping(&fds, fd, 0, 4096).unwrap();
+    assert_eq!(fs.seek(&fds, fd, 0, 1), Ok(8));
+    let version = mapping.version();
+    fs.write_at(&fds, fd, 2, b"XY").unwrap();
+    let mut bytes = [0; 16];
+    mapping.copy_into(0, &mut bytes);
+    assert_eq!(&bytes[..8], b"orXYinal");
+    assert_ne!(mapping.version(), version);
+    assert_eq!(fs.set_len(&fds, fd, 4), Err(BUSY));
+    assert_eq!(
+        fs.open(&mut fds, ROOT, "/tmp/mapped", OPEN_WRITE | OPEN_TRUNCATE),
+        Err(BUSY)
+    );
+    fs.set_len(&fds, fd, 12).unwrap();
+    fs.write_at(&fds, fd, 10, b"Z").unwrap();
+    mapping.copy_into(0, &mut bytes);
+    assert_eq!(&bytes[8..12], b"\0\0Z\0");
+    fs.close(&mut fds, fd).unwrap();
+    fs.unlink(ROOT, "/tmp/mapped").unwrap();
+    fs.collect_mappings().unwrap();
+    let replacement = fs
+        .open(
+            &mut fds,
+            ROOT,
+            "/tmp/mapped",
+            OPEN_CREATE | OPEN_READ | OPEN_WRITE,
+        )
+        .unwrap();
+    fs.write(&fds, replacement, b"replacement").unwrap();
+    assert_ne!(identity, fs.metadata(ROOT, "/tmp/mapped").unwrap().0);
+    mapping.copy_into(0, &mut bytes);
+    assert_eq!(&bytes[..8], b"orXYinal");
+    drop(mapping);
+    fs.collect_mappings().unwrap();
+    fs.set_len(&fds, replacement, 0).unwrap();
+    fs.clear(&mut fds);
+    assert_eq!(fs.live_objects(), (0, 0));
+}
 #[test]
 fn removed_directories_retain_open_identity_and_reclaim_after_final_close() {
     let image = image();

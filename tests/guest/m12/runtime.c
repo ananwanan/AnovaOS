@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Verify bounded names/directories/packets, return faults, signals, detached exit and file ownership.
+// Verify bounded filesystem/IPC ownership, alternate signals, select readiness and interrupted waits.
 #define _GNU_SOURCE
 #include <assert.h>
 #include <errno.h>
@@ -16,6 +16,7 @@
 #include <sys/syscall.h>
 #include <sys/mman.h>
 #include <sys/socket.h>
+#include <sys/select.h>
 #include <sys/stat.h>
 #include <poll.h>
 #include <sys/wait.h>
@@ -25,6 +26,127 @@
 static unsigned char alternate[32768];
 static volatile sig_atomic_t handled;
 static atomic_int detached_tid, detached_ready;
+static volatile sig_atomic_t selected_signal;
+static void select_handler(int signal) { (void)signal; selected_signal = 1; }
+static void timestamp_checks(void) {
+    int fd = open("timestamp-file", O_CREAT | O_RDWR | O_TRUNC, 0600);
+    assert(fd >= 0 && write(fd, "T", 1) == 1);
+    struct timespec times[2] = {{.tv_sec = 1234, .tv_nsec = 123}, {.tv_sec = 5678, .tv_nsec = 456}};
+    assert(futimens(fd, times) == 0);
+    struct stat value;
+    assert(fstat(fd, &value) == 0 && value.st_atim.tv_sec == 1234 && value.st_mtim.tv_sec == 5678);
+    times[0].tv_nsec = UTIME_OMIT; times[1].tv_sec = 6789;
+    assert(utimensat(AT_FDCWD, "timestamp-file", times, 0) == 0);
+    assert(fstat(fd, &value) == 0 && value.st_atim.tv_sec == 1234 && value.st_mtim.tv_sec == 6789);
+    assert(syscall(SYS_utimensat, fd, NULL, (void *)1, 0) == -1 && errno == EFAULT);
+    times[1].tv_nsec = 1000000000;
+    assert(futimens(fd, times) == -1 && errno == EINVAL);
+    times[1].tv_nsec = UTIME_NOW;
+    assert(futimens(fd, times) == 0);
+    assert(fstat(fd, &value) == 0 && value.st_atim.tv_sec == 1234 && value.st_mtim.tv_sec > 6789);
+    struct timeval old[2] = {{.tv_sec = 111}, {.tv_sec = 222}};
+    assert(syscall(SYS_futimesat, fd, NULL, old) == 0);
+    assert(fstat(fd, &value) == 0 && value.st_atim.tv_sec == 111 && value.st_mtim.tv_sec == 222);
+    assert(close(fd) == 0 && unlink("timestamp-file") == 0);
+    puts("[M12:TIMES] real-atime-mtime NOW OMIT bad-pointer invalid-nsec");
+}
+static void shared_file_checks(void) {
+    int fd = open("mapped-file", O_CREAT | O_RDWR | O_TRUNC, 0600);
+    assert(fd >= 0 && write(fd, "original", 8) == 8);
+    volatile char *a = mmap(NULL, 4096, PROT_READ, MAP_SHARED, fd, 0);
+    volatile char *b = mmap(NULL, 4096, PROT_READ, MAP_SHARED, fd, 0);
+    assert(a != MAP_FAILED && b != MAP_FAILED && a[0] == 'o' && b[0] == 'o');
+    assert(pwrite(fd, "N", 1, 0) == 1 && a[0] == 'N' && b[0] == 'N');
+    assert(mprotect((void *)a, 4096, PROT_READ | PROT_WRITE) == -1 && errno == EACCES);
+    assert(mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0) == MAP_FAILED && errno == ENOTSUP);
+    assert(ftruncate(fd, 4) == -1 && errno == EBUSY);
+    assert(ftruncate(fd, 16) == 0 && a[10] == 0 && pwrite(fd, "G", 1, 10) == 1 && a[10] == 'G');
+    int child = fork(), status;
+    assert(child >= 0);
+    if (!child) { _exit(pwrite(fd, "C", 1, 0) != 1 || a[0] != 'C'); }
+    assert(waitpid(child, &status, 0) == child && status == 0 && a[0] == 'C' && b[0] == 'C');
+    assert(close(fd) == 0 && unlink("mapped-file") == 0 && a[0] == 'C');
+    fd = open("mapped-file", O_CREAT | O_RDWR | O_TRUNC, 0600);
+    assert(fd >= 0 && write(fd, "other", 5) == 5 && a[0] == 'C');
+    assert(close(fd) == 0 && unlink("mapped-file") == 0);
+    assert(munmap((void *)a, 4096) == 0 && munmap((void *)b, 4096) == 0);
+    void *pressure[16];
+    int count;
+    for (count = 0; count != 16; ++count) {
+        char name[32]; snprintf(name, sizeof name, "map-pressure-%d", count);
+        fd = open(name, O_CREAT | O_RDWR | O_TRUNC, 0600);
+        assert(fd >= 0 && write(fd, "P", 1) == 1);
+        pressure[count] = mmap(NULL, 4096, PROT_READ, MAP_SHARED, fd, 0);
+        int failure = errno;
+        assert(close(fd) == 0 && unlink(name) == 0);
+        if (pressure[count] == MAP_FAILED) { assert(failure == ENOMEM); break; }
+    }
+    assert(count > 0 && count < 16);
+    for (int k = 0; k != count; ++k) {
+        assert(*(volatile char *)pressure[k] == 'P' && munmap(pressure[k], 4096) == 0);
+    }
+    fd = open("map-reuse", O_CREAT | O_RDWR | O_TRUNC, 0600);
+    assert(fd >= 0 && write(fd, "R", 1) == 1);
+    a = mmap(NULL, 4096, PROT_READ, MAP_SHARED, fd, 0);
+    assert(a != MAP_FAILED && a[0] == 'R');
+    assert(munmap((void *)a, 4096) == 0 && close(fd) == 0 && unlink("map-reuse") == 0);
+    puts("[M12:FILEMAP] coherent-readonly fork unlinked-inode real-OOM reuse");
+}
+static void select_checks(void) {
+    int pair[2];
+    assert(pipe(pair) == 0);
+    fd_set readfds, writefds;
+    FD_ZERO(&readfds); FD_ZERO(&writefds);
+    FD_SET(pair[0], &readfds); FD_SET(pair[1], &writefds);
+    struct timeval timeout = {0};
+    assert(syscall(SYS_select, pair[1] + 1, &readfds, &writefds, NULL, &timeout) == 1);
+    assert(!FD_ISSET(pair[0], &readfds) && FD_ISSET(pair[1], &writefds));
+    FD_ZERO(&readfds); FD_SET(31, &readfds);
+    assert(syscall(SYS_select, 32, &readfds, NULL, NULL, &timeout) == -1 && errno == EBADF);
+    assert(FD_ISSET(31, &readfds));
+    assert(syscall(SYS_select, 33, NULL, NULL, NULL, &timeout) == -1 && errno == EINVAL);
+    assert(syscall(SYS_select, 1, (void *)1, NULL, NULL, &timeout) == -1 && errno == EFAULT);
+    assert(syscall(SYS_select, 0, NULL, NULL, NULL, (void *)1) == -1 && errno == EFAULT);
+    timeout.tv_usec = 1000000;
+    assert(syscall(SYS_select, 0, NULL, NULL, NULL, &timeout) == -1 && errno == EINVAL);
+    struct timespec before, after;
+    assert(clock_gettime(CLOCK_MONOTONIC, &before) == 0);
+    timeout = (struct timeval){.tv_usec = 20000};
+    assert(syscall(SYS_select, 0, NULL, NULL, NULL, &timeout) == 0);
+    assert(clock_gettime(CLOCK_MONOTONIC, &after) == 0);
+    assert((after.tv_sec - before.tv_sec) * 1000000000LL + after.tv_nsec - before.tv_nsec >= 20000000);
+    assert(timeout.tv_sec == 0 && timeout.tv_usec == 0);
+    int child = fork(), status;
+    assert(child >= 0);
+    if (!child) { usleep(30000); _exit(write(pair[1], "S", 1) != 1); }
+    FD_ZERO(&readfds); FD_SET(pair[0], &readfds); timeout = (struct timeval){.tv_sec = 2};
+    assert(syscall(SYS_select, pair[0] + 1, &readfds, NULL, NULL, &timeout) == 1);
+    char byte;
+    assert(FD_ISSET(pair[0], &readfds) && read(pair[0], &byte, 1) == 1 && byte == 'S');
+    assert(waitpid(child, &status, 0) == child && status == 0);
+    struct sigaction action = {.sa_handler = select_handler, .sa_flags = SA_RESTART}, old;
+    sigemptyset(&action.sa_mask);
+    assert(sigaction(SIGUSR2, &action, &old) == 0);
+    for (int poll_wait = 0; poll_wait != 2; ++poll_wait) {
+        selected_signal = 0;
+        child = fork(); assert(child >= 0);
+        if (!child) { usleep(30000); _exit(kill(getppid(), SIGUSR2) != 0); }
+        FD_ZERO(&readfds); FD_SET(pair[0], &readfds); timeout = (struct timeval){.tv_sec = 2};
+        long result;
+        if (poll_wait) {
+            struct pollfd fd = {.fd = pair[0], .events = POLLIN};
+            result = poll(&fd, 1, 2000);
+        } else result = syscall(SYS_select, pair[0] + 1, &readfds, NULL, NULL, &timeout);
+        assert(result == -1 && errno == EINTR && selected_signal);
+        assert(FD_ISSET(pair[0], &readfds));
+        assert(waitpid(child, &status, 0) == child && status == 0);
+    }
+    assert(sigaction(SIGUSR2, &old, NULL) == 0 && close(pair[1]) == 0);
+    timeout = (struct timeval){0};
+    assert(syscall(SYS_select, pair[0] + 1, &readfds, NULL, NULL, &timeout) == 1);
+    assert(read(pair[0], &byte, 1) == 0 && close(pair[0]) == 0);
+    puts("[M12:SELECT] readiness timeout bad-fd pointers EOF select-poll-EINTR");
+}
 static void *detached(void *unused) {
     (void)unused;
     atomic_store(&detached_tid, (int)syscall(SYS_gettid));
@@ -185,6 +307,9 @@ int main(void) {
     assert(unlink("rename-b") == 0);
     stack.ss_flags = SS_DISABLE;
     assert(sigaltstack(&stack, NULL) == 0);
+    select_checks();
+    shared_file_checks();
+    timestamp_checks();
     puts("[M12:RUNTIME] altstack delivery return negatives rename open-inode locks");
     return 0;
 }

@@ -393,12 +393,21 @@ impl Kernel {
         let original =
             p.io.take()
                 .or(match p.thread.blocked {
-                    Some(threads::Blocked::FileLock { frame }) => Some(frame),
+                    Some(threads::Blocked::FileLock { frame })
+                    | Some(threads::Blocked::Poll { frame, .. })
+                    | Some(threads::Blocked::Select { frame, .. }) => Some(frame),
                     _ => None,
                 })
                 .unwrap_or(p.context.frame);
         if interrupted {
             p.wait = None;
+            if let Some(threads::Blocked::Select {
+                frame, deadline, ..
+            }) = p.thread.blocked
+            {
+                let _ =
+                    super::select::remaining(&p.image.as_ref().unwrap().space, frame.r8, deadline);
+            }
             if let Some(super::threads::Blocked::Sleep {
                 deadline,
                 remaining,
