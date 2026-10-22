@@ -347,9 +347,9 @@ pub fn reached_oom(log: &str, code: Option<i32>) -> bool {
     };
     code == Some(35)
         && before.contains("[MM:READY]")
-        && after.contains("[MM:OOM] size=4194304")
+        && after.contains("[MM:OOM] size=33554432 align=1 used=0 capacity=16777216")
         && after.contains("[PANIC]")
-        && after.contains("memory allocation of 4194304 bytes failed")
+        && after.contains("memory allocation of 33554432 bytes failed")
         && !log.contains("[TEST:PASS]")
         && !log.contains("[EXCEPTION]")
 }
@@ -459,9 +459,13 @@ mod tests {
                 Err(Failure::Markers)
             );
         }
-        let log = "[MM:READY]\n[TEST:INJECT] oom\n[MM:OOM] size=4194304 align=1 used=0 capacity=2097152\n[PANIC] memory allocation of 4194304 bytes failed";
+        let log = "[MM:READY]\n[TEST:INJECT] oom\n[MM:OOM] size=33554432 align=1 used=0 capacity=16777216\n[PANIC] memory allocation of 33554432 bytes failed";
         assert!(reached_oom(log, Some(35)));
         assert!(!reached_oom(log, Some(33)));
+        assert!(!reached_oom(
+            &log.replace("capacity=16777216", "capacity=2097152"),
+            Some(35)
+        ));
         assert!(!reached_oom(
             &log.replace("memory allocation of", "unrelated panic"),
             Some(35)

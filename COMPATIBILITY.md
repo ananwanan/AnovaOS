@@ -80,8 +80,8 @@ musl 和 glibc 是不同的用户态组合。不能混用不匹配的解释器�
 | BusyBox 1.36.1 受限静态构建 | M8 | echo/ls/cat、指定 sh 管道重定向及退出码 | q35/TCG 本地通过；其他 applet 未验证 |
 | 动态 musl 1.2.4 小程序 | M9 | PT_INTERP、共享库、dlopen、动态 TLS | q35/TCG 本地通过；受限 profile |
 | musl 静态/静态 PIE/动态 pthread 样例 | M9 | 线程同步、join、futex、信号返回、poll、PTY | q35/TCG 本地通过；完整边界见 M9_RUNTIME |
-| make 与基础构建工具 | M11 | 子进程、文件时间、失败传播 | 计划 |
-| GCC/G++ 受控构建包 | M11 | guest 内编译/链接 C 与 C++ | 计划 |
+| GNU make 4.4.1 与 binutils 2.37 | M11 | 子进程、文件时间、无改动/选择性增量构建 | q35/TCG 本地通过；离线 profile |
+| GCC/G++ 11.2.0 受控构建包 | M11 | guest 内编译/链接 C 与 C++、异常和线程 | q35/TCG 本地通过；完整边界见 M11_TOOLCHAIN |
 | Rust `std` app | M12 前期 | Vec/String、参数、文件 I/O | 计划 |
 | rustc/Cargo 受控构建包 | M12 | guest 内 Rust 与离线依赖 | 计划 |
 | SQLite CLI 等可移植工具 | M13 后按需 | 数据写入、锁、持久化 | 计划 |
@@ -133,3 +133,18 @@ complete their measured runtime needs. Existing musl static/PIE/dynamic hashes
 remain the M9 baseline. This does not establish curl, wget, musl getaddrinfo,
 TCP servers, socket vectored/message APIs, AF_UNIX, IPv6 or arbitrary Linux
 network application support. Unsupported interfaces return real errors.
+
+## Verified M11 offline compiler profile
+
+| Software | Verified behavior | Remaining limits |
+| --- | --- | --- |
+| GCC/G++ 11.2.0 | Actual guest C/C++ compile/assemble/link; C argv/stdio/malloc/files/multiple sources; C++17 string/vector/RAII/exceptions/std::thread | Small static applications; no general project, LTO/OpenMP/sanitizer or self-bootstrap claim |
+| GNU binutils 2.37 | Guest assembler, linker and collect2 pipeline; static ELF output and unresolved-symbol failure | Other utilities/targets and dynamic application toolchains unverified |
+| GNU make 4.4.1 | Real shell/child compilation, no-op and selective incremental build | Serial fork configuration; arbitrary build scripts unverified |
+| musl 1.2.4 and libgcc/libstdc++ 11.2.0 | Matching source-built CRT/headers/archives in `/tc`; generated C/C++ runtime tests | No glibc compatibility claim |
+
+Linux disk personality is explicitly inherited from its `.anova-abi` manifest.
+M11 adds real vfork parent suspension, private file snapshots, mode/umask and
+resource-query support; optional unsupported compiler probes return ENOSYS.
+Exact bounds and exclusions: [M11_TOOLCHAIN](docs/M11_TOOLCHAIN.md).
+Actual logs and file hashes: [M11 acceptance](docs/validation/M11.md).

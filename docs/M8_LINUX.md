@@ -4,7 +4,8 @@
 This is the historical M8 profile. [M9_RUNTIME](M9_RUNTIME.md) supersedes its
 single-thread, custom-signal, terminal and dynamic-loading limitations. Current
 Linux identity is linux.x86_64.v1; the native ABI remains independent.
-
+M11 adds offline guest C/C++ development and supersedes startup, ELF and
+memory capacities; see [M11_TOOLCHAIN](M11_TOOLCHAIN.md) for current bounds.
 
 M8 runs a deliberately bounded Linux AMD64 personality alongside native v1.
 Acceptance evidence is in [validation/M8.md](validation/M8.md). This is not a

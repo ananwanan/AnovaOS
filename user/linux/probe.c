@@ -62,9 +62,9 @@ void probe_main(u64 *stack) {
     long guard=C(2,path,0x242,0644);
     CHECK(guard>=0 && C(3,guard,0,0)==0 && C(87,path,0,0)==0);
     CHECK(C(59,"/bin/linux-probe",q+4096,0)==-14);
-    const char *excess[18];
-    for(unsigned i=0;i<17;++i) excess[i]="x";
-    excess[17]=0;
+    const char *excess[66];
+    for(unsigned i=0;i<65;++i) excess[i]="x";
+    excess[65]=0;
     CHECK(C(59,"/bin/linux-probe",excess,0)==-7);
     char *payload=(void*)q;
     payload[0]='V'; payload[1]='W';

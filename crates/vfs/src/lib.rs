@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #![no_std]
-//! Bounded memory/ext2 mounts, shared descriptors, pipes, PTY lifetimes and immutable file mappings.
+//! Bounded memory/ext2 mounts, shared descriptors, pipes, PTYs and private file snapshots.
 //! One non-preemptible owner serializes all mutations; no hardware, locks or user pointers.
 extern crate alloc;
 pub mod archive;
@@ -15,11 +15,11 @@ pub use fd::Descriptors;
 
 pub const ROOT: usize = 0;
 // Leave room for PTY/library nodes and the independent real heap-exhaustion workload.
-pub const NODE_LIMIT: usize = 128;
+pub const NODE_LIMIT: usize = 2048;
 pub const OPEN_LIMIT: usize = 128;
 pub const PIPE_LIMIT: usize = 16;
 pub const PIPE_BYTES: usize = 1024;
-pub const FILE_BYTES: usize = 64 * 1024;
+pub const FILE_BYTES: usize = 1024 * 1024;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mount {
     Initramfs,
@@ -51,6 +51,8 @@ struct Node<'a> {
     linked: bool,
     data: Data<'a>,
     inode: Option<u32>,
+    permissions: u16,
+    modified: u64,
 }
 #[derive(Clone, Copy)]
 enum Target {
@@ -80,6 +82,7 @@ pub struct Vfs<'a> {
     disk: Option<Ext2>,
     linux: [bool; NODE_LIMIT],
     pty_unlocked: [bool; 4],
+    clock: u64,
 }
 fn slots<T>(n: usize, mut f: impl FnMut() -> T) -> Result<Vec<T>, i64> {
     let mut v = Vec::new();
@@ -99,6 +102,8 @@ impl<'a> Vfs<'a> {
             linked: true,
             data: Data::Directory,
             inode: None,
+            permissions: 0o755,
+            modified: 0,
         });
         let mut fs = Self {
             nodes,
@@ -107,6 +112,7 @@ impl<'a> Vfs<'a> {
             disk: None,
             linux: [false; NODE_LIMIT],
             pty_unlocked: [false; 4],
+            clock: 0,
         };
         let mut input = archive::Archive::new(archive)?;
         while let Some(entry) = input.entry()? {
@@ -168,9 +174,14 @@ impl<'a> Vfs<'a> {
             let number = self.nodes[manifest].inode.ok_or(INVALID_FILESYSTEM)?;
             let mut bytes = [0; 32];
             let n = disk.read(number, 0, &mut bytes)?;
-            if &bytes[..n] != b"anova.native.v1\n" {
+            if !matches!(&bytes[..n], b"anova.native.v1\n" | b"linux.x86_64.v1\n") {
                 return Err(INVALID_FILESYSTEM);
             }
+            let linux = &bytes[..n] == b"linux.x86_64.v1\n";
+            for policy in &mut self.linux[before..self.nodes.len()] {
+                *policy = linux;
+            }
+            self.linux[root] = linux;
             Ok(())
         })();
         if let Err(e) = result {
@@ -209,6 +220,8 @@ impl<'a> Vfs<'a> {
             };
             let node = self.insert(parent, name, data, Mount::Ext2)?;
             self.nodes[node].inode = Some(entry.inode);
+            self.nodes[node].permissions = info.permissions;
+            self.nodes[node].modified = u64::from(info.modified) * 1_000_000_000;
             if info.directory {
                 self.import_disk(disk, node, entry.inode, depth + 1)?;
             }
@@ -236,6 +249,17 @@ impl<'a> Vfs<'a> {
             Some(disk) => disk.sync(),
             None => Ok(()),
         }
+    }
+    pub fn set_clock(&mut self, nanos: u64) {
+        self.clock = nanos;
+        if let Some(disk) = self.disk.as_mut() {
+            disk.set_clock((nanos / 1_000_000_000) as u32);
+        }
+    }
+    pub fn attributes(&self, inode: u64) -> (u16, u64) {
+        self.nodes
+            .get(inode as usize)
+            .map_or((0o600, 0), |n| (n.permissions, n.modified))
     }
     pub fn fsync(&mut self, files: &Descriptors, fd: u64) -> Result<(), i64> {
         let open = self.opens[files.handle(fd)?].unwrap();
@@ -274,7 +298,38 @@ impl<'a> Vfs<'a> {
         {
             *executable = true;
         }
+        self.nodes[node].permissions |= 0o111;
         Ok(())
+    }
+    fn chmod_node(&mut self, node: usize, permissions: u16) -> Result<(), i64> {
+        if permissions & !0o777 != 0 {
+            return Err(UNSUPPORTED);
+        }
+        let inode = self.nodes[node].inode;
+        match self.nodes[node].data {
+            Data::Persistent {
+                ref mut executable, ..
+            } => {
+                self.disk
+                    .as_mut()
+                    .ok_or(IO_ERROR)?
+                    .set_permissions(inode.unwrap(), permissions)?;
+                *executable = permissions & 0o111 != 0;
+            }
+            Data::Mutable(_) => {}
+            _ => return Err(READ_ONLY),
+        }
+        self.nodes[node].permissions = permissions;
+        Ok(())
+    }
+    pub fn chmod(&mut self, cwd: usize, path: &str, permissions: u16) -> Result<(), i64> {
+        self.chmod_node(self.resolve(cwd, path)?, permissions)
+    }
+    pub fn fchmod(&mut self, fds: &Descriptors, fd: u64, permissions: u16) -> Result<(), i64> {
+        let Target::Node(n) = self.opens[fds.handle(fd)?].unwrap().target else {
+            return Err(INVALID_ARGUMENT);
+        };
+        self.chmod_node(n, permissions)
     }
     pub fn load_executable(&mut self, cwd: usize, path: &str) -> Result<Cow<'a, [u8]>, i64> {
         let node = self.resolve(cwd, path)?;
@@ -335,6 +390,14 @@ impl<'a> Vfs<'a> {
         }
         let mut label = [0; 64];
         label[..name.len()].copy_from_slice(name.as_bytes());
+        let permissions = match &data {
+            Data::Directory => 0o755,
+            Data::Device(_) => 0o666,
+            Data::Link(_) => 0o777,
+            Data::Borrowed(_, true) => 0o555,
+            Data::Borrowed(_, false) => 0o444,
+            _ => 0o644,
+        };
         let node = Node {
             parent,
             name: label,
@@ -343,6 +406,8 @@ impl<'a> Vfs<'a> {
             linked: true,
             data,
             inode: None,
+            permissions,
+            modified: self.clock,
         };
         // Unlinked nodes remain alive until their final open description is closed.
         let reusable = self.nodes.iter().enumerate().position(|(i, n)| {
@@ -355,8 +420,10 @@ impl<'a> Vfs<'a> {
         });
         if let Some(i) = reusable {
             self.nodes[i] = node;
+            self.linux[i] = self.linux[parent];
             Ok(i)
         } else if self.nodes.len() < NODE_LIMIT {
+            self.linux[self.nodes.len()] = self.linux[parent];
             self.nodes.push(node);
             Ok(self.nodes.len() - 1)
         } else {
@@ -525,6 +592,17 @@ impl<'a> Vfs<'a> {
     pub fn metadata(&self, cwd: usize, path: &str) -> Result<(u64, u32, usize, bool), i64> {
         self.node_metadata(self.resolve(cwd, path)?)
     }
+    pub fn writable(&self, cwd: usize, path: &str) -> Result<bool, i64> {
+        let n = self.resolve(cwd, path)?;
+        Ok(matches!(self.nodes[n].mount, Mount::Tmpfs | Mount::Ext2))
+    }
+    pub fn read_link(&self, cwd: usize, path: &str) -> Result<&'a str, i64> {
+        let (parent, name) = self.parent(cwd, path)?;
+        match self.nodes[self.child(parent, name).ok_or(NOT_FOUND)?].data {
+            Data::Link(target) => Ok(target),
+            _ => Err(INVALID_ARGUMENT),
+        }
+    }
     pub fn metadata_nofollow(
         &self,
         cwd: usize,
@@ -561,14 +639,14 @@ impl<'a> Vfs<'a> {
         }
     }
 
-    /// Return immutable initramfs backing for a private executable mapping, independent of fd offset.
+    /// Snapshot private file mappings independently of the open offset; no writeback is implied.
     pub fn mapping_bytes(
-        &self,
+        &mut self,
         fds: &Descriptors,
         fd: u64,
         offset: u64,
         length: u64,
-    ) -> Result<&'a [u8], i64> {
+    ) -> Result<Cow<'a, [u8]>, i64> {
         let open = self.opens[fds.handle(fd)?].unwrap();
         if open.flags & OPEN_READ == 0 {
             return Err(BAD_DESCRIPTOR);
@@ -576,14 +654,41 @@ impl<'a> Vfs<'a> {
         let Target::Node(node) = open.target else {
             return Err(INVALID_ARGUMENT);
         };
-        let Data::Borrowed(bytes, _) = self.nodes[node].data else {
-            return Err(UNSUPPORTED);
-        };
         let start = usize::try_from(offset).map_err(|_| INVALID_ARGUMENT)?;
-        if start > bytes.len() {
+        let size = self.node_metadata(node)?.2;
+        if start > size {
             return Err(INVALID_ARGUMENT);
         }
-        Ok(&bytes[start..bytes.len().min(start.saturating_add(length as usize))])
+        let end = size.min(start.saturating_add(length as usize));
+        if let Data::Borrowed(bytes, _) = self.nodes[node].data {
+            return Ok(Cow::Borrowed(&bytes[start..end]));
+        }
+        if !matches!(
+            self.nodes[node].data,
+            Data::Mutable(_) | Data::Persistent { .. }
+        ) {
+            return Err(UNSUPPORTED);
+        }
+        let mut bytes = Vec::new();
+        bytes
+            .try_reserve_exact(end - start)
+            .map_err(|_| NO_MEMORY)?;
+        bytes.resize(end - start, 0);
+        match &self.nodes[node].data {
+            Data::Mutable(data) => bytes.copy_from_slice(&data[start..end]),
+            Data::Persistent { .. } => {
+                let n = self.disk.as_mut().ok_or(IO_ERROR)?.read(
+                    self.nodes[node].inode.unwrap(),
+                    start,
+                    &mut bytes,
+                )?;
+                if n != bytes.len() {
+                    return Err(IO_ERROR);
+                }
+            }
+            _ => unreachable!(),
+        }
+        Ok(Cow::Owned(bytes))
     }
     pub fn pty_present(&self, n: usize, master: bool) -> bool {
         self.opens.iter().flatten().any(|o|match o.target {
@@ -765,6 +870,7 @@ impl<'a> Vfs<'a> {
             } else if !matches!(self.nodes[node].data, Data::Device(_)) {
                 return Err(INVALID_ARGUMENT);
             }
+            self.nodes[node].modified = self.clock;
         }
         let id = self.allocate(Open {
             target: Target::Node(node),
@@ -1027,6 +1133,7 @@ impl<'a> Vfs<'a> {
                         )?;
                         self.opens[id].as_mut().unwrap().offset = offset + count;
                         *size = (*size).max(offset + count);
+                        self.nodes[n].modified = self.clock;
                         return Ok(count);
                     }
                     Data::Mutable(bytes) => {
@@ -1047,6 +1154,7 @@ impl<'a> Vfs<'a> {
                         }
                         bytes[offset..end].copy_from_slice(input);
                         self.opens[id].as_mut().unwrap().offset = end;
+                        self.nodes[n].modified = self.clock;
                         return Ok(input.len());
                     }
                     Data::Device(Device::Null) => return Ok(input.len()),

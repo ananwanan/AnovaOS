@@ -1,3 +1,4 @@
+<!-- Define development branches, repository entry points and contribution conventions. -->
 # GitHub 仓库与协作
 
 项目仓库：[ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS)。日常开发和 Pull Request 目标使用 `dev`，`main` 保留阶段验收后的稳定快照。仓库由项目所有者创建，目前为公开仓库；日常提交保持已有可见性和权限。
@@ -19,7 +20,7 @@ git clone --branch dev git@github.com:ananwanan/AnovaOS.git
 
 ## 开始开发
 
-先读取根目录 [AGENTS.md](../AGENTS.md) 与 [当前状态](STATUS.md)。M0–M6 已有本地验收，当前边界见 [M6_FILESYSTEM.md](M6_FILESYSTEM.md)，下一批推进 M7。后续每个新增/修改文件必须遵守 [DEV-001](REQUIREMENTS.md) 的用途说明要求。
+先读取根目录 [AGENTS.md](../AGENTS.md) 与 [当前状态](STATUS.md)。M0–M11 已有本地验收，当前开发环境边界见 [M11_TOOLCHAIN.md](M11_TOOLCHAIN.md)，下一批推进 M12 系统内 Rust/Cargo。后续每个新增/修改文件必须遵守 [DEV-001](REQUIREMENTS.md) 的用途说明要求。
 
 文档使用 `AnovaOS` 作为项目名称。将来的自定义 target 名称只是候选本地标识，不能据此宣称已有上游编译器支持。
 

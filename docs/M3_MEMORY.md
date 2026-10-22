@@ -1,4 +1,9 @@
+<!-- Define the original M3 frame/table/heap ownership baseline and its validation boundaries. -->
 # M3 memory ownership and allocation
+
+This is the original M3 baseline. [M11_TOOLCHAIN](M11_TOOLCHAIN.md) supersedes
+the heap address/capacity and scheduler/user-stack bounds below; ownership,
+reservation, guard and rollback invariants still apply.
 
 M3 targets the single q35/TCG BSP with four-level paging. It adds real frame
 allocation/release, a fully owned page-table hierarchy, a guarded execution

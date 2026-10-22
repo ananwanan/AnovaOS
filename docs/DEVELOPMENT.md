@@ -220,3 +220,22 @@ Guest transcript watchdogs, syscall results, actual X.509 error flags and clean
 e2fsck checks determine acceptance. Logs use network.* and packages-*.serial.log
 under build/logs. Test CA private keys remain only in ignored build/compat.
 Read [M10_NETWORK_PACKAGES](M10_NETWORK_PACKAGES.md) before using online features.
+
+## Offline guest C/C++ development (M11)
+
+`cargo xtask toolchain-build` constructs locked GCC/G++, binutils, make and the
+matching musl/CRT/C++ sysroot from source. It needs Python 3.12+, GCC/G++, make,
+m4, bison, flex and texinfo in addition to the base prerequisites.
+`ANOVA_BUILD_JOBS=1..8` controls build parallelism (default 6).
+`cargo xtask toolchain-image` packs the separately verified development ISO;
+`cargo xtask toolchain-test` runs the real UART edit/build/run/reboot acceptance.
+
+```sh
+cargo xtask root-image --linux build/disks/devel.ext2
+cargo xtask run --toolchain --disk build/disks/devel.ext2
+```
+
+Use a clean guest shutdown to retain sources and binaries. Development runs
+use 1 GiB RAM, one CPU, a read-only `/tc` and a Linux-personality data disk;
+plain `run` keeps the smaller base image. See [M11_TOOLCHAIN](M11_TOOLCHAIN.md)
+for editor commands, tested features, input hashes and unsupported operations.

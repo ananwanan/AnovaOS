@@ -292,3 +292,19 @@ validates CA/name/date, while package locks, ABI/SDK/license checks and alternat
 ext2 slots validate and publish installation state. User data has a separate
 persistent directory. See [M10 profile](docs/M10_NETWORK_PACKAGES.md) for bounds,
 controlled-online scope, build inputs and unchanged power-loss limitations.
+
+## M11 implemented development boundary
+
+The optional development archive mounts the source-built GCC/G++/binutils/make
+profile and matching musl/CRT/C++ sysroot at `/tc`. Guest launchers select the
+tested static application configuration. Linux disks declare personality in
+their manifest, including new files; native policy remains explicit.
+
+The kernel supplies suspended-parent vfork, private regular-file snapshots,
+checked larger ELF/argument/memory bounds, file modes and UTC modification times.
+All compilation still occurs in isolated guest processes; the host constructs
+tools and independently inspects persisted guest outputs. Memory remains eager,
+single-core and bounded; the development heap is 16 MiB and scheduler stack is
+256 KiB. Development Rust builds use opt-level 1 with debug information.
+See [M11_TOOLCHAIN](docs/M11_TOOLCHAIN.md) for ownership and limits and
+[M11 evidence](docs/validation/M11.md) for actual acceptance.

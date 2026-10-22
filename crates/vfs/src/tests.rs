@@ -228,7 +228,8 @@ fn descriptor_and_inode_exhaustion_roll_back_and_reuse_without_leaks() {
     loop {
         let mut name = [b'x'; 63];
         name[0] = (n % 26) as u8 + b'a';
-        name[1] = (n / 26) as u8 + b'a';
+        name[1] = ((n / 26) % 26) as u8 + b'a';
+        name[2] = (n / (26 * 26)) as u8 + b'a';
         let path = core::str::from_utf8(&name).unwrap();
         let cwd = fs.resolve(ROOT, "/tmp").unwrap();
         match fs.mkdir(cwd, path) {
@@ -354,4 +355,35 @@ fn socket_description_survives_dup_fork_exec_and_shared_thread_close() {
     fs.clear(&mut thread);
     assert!(!fs.socket_live(7));
     assert_eq!(fs.live_objects(), (0, 0));
+}
+
+#[test]
+fn private_snapshots_preserve_offsets_modes_and_modification_times() {
+    let image = image();
+    let mut fs = Vfs::new(&image).unwrap();
+    let mut files = fs.standard().unwrap();
+    fs.set_clock(1_000_000_010);
+    let fd = fs
+        .open(
+            &mut files,
+            ROOT,
+            "/tmp/object",
+            OPEN_CREATE | OPEN_READ | OPEN_WRITE,
+        )
+        .unwrap();
+    fs.fchmod(&files, fd, 0o600).unwrap();
+    fs.write(&files, fd, b"object-one").unwrap();
+    let inode = fs.metadata(ROOT, "/tmp/object").unwrap().0;
+    assert_eq!(fs.attributes(inode), (0o600, 1_000_000_010));
+    let mapping = fs.mapping_bytes(&files, fd, 0, 4096).unwrap();
+    assert_eq!(fs.seek(&files, fd, 0, 1), Ok(10));
+    fs.set_clock(2_000_000_020);
+    fs.seek(&files, fd, 0, 0).unwrap();
+    fs.write(&files, fd, b"object-two").unwrap();
+    fs.chmod(ROOT, "/tmp/object", 0o755).unwrap();
+    assert_eq!(&*mapping, b"object-one");
+    assert_eq!(fs.attributes(inode), (0o755, 2_000_000_020));
+    assert_eq!(fs.mapping_bytes(&files, fd, 11, 1), Err(INVALID_ARGUMENT));
+    assert_eq!(fs.fchmod(&files, fd, 0o4755), Err(UNSUPPORTED));
+    fs.close(&mut files, fd).unwrap();
 }

@@ -44,7 +44,7 @@ fn string(space: &mm::user::UserSpace, address: u64, bytes: &mut [u8; 129]) -> R
     })
 }
 
-fn stat_bytes(meta: (u64, u32, usize, bool)) -> [u8; 144] {
+fn stat_bytes(meta: (u64, u32, usize, bool), permissions: u16, modified: u64) -> [u8; 144] {
     let (inode, kind, size, exec) = meta;
     let mut b = [0; 144];
     let mode: u32 = match kind {
@@ -63,7 +63,11 @@ fn stat_bytes(meta: (u64, u32, usize, bool)) -> [u8; 144] {
     };
     b[8..16].copy_from_slice(&inode.to_le_bytes());
     b[16..24].copy_from_slice(&1u64.to_le_bytes());
-    b[24..28].copy_from_slice(&mode.to_le_bytes());
+    b[24..28].copy_from_slice(&((mode & !0o777) | u32::from(permissions)).to_le_bytes());
+    b[88..96].copy_from_slice(&(modified / 1_000_000_000).to_le_bytes());
+    b[96..104].copy_from_slice(&(modified % 1_000_000_000).to_le_bytes());
+    b[104..112].copy_from_slice(&(modified / 1_000_000_000).to_le_bytes());
+    b[112..120].copy_from_slice(&(modified % 1_000_000_000).to_le_bytes());
     b[48..56].copy_from_slice(&(size as u64).to_le_bytes());
     b[56..64].copy_from_slice(&4096u64.to_le_bytes());
     b[64..72].copy_from_slice(&(size as u64).div_ceil(512).to_le_bytes());
@@ -178,8 +182,30 @@ impl Kernel {
             self.process_mut(i).context.frame.rax = 0;
             return;
         }
-        if f.rax == 57 {
-            let result = self.fork(i).map_or_else(errno, |pid| pid as i64);
+        if f.rax == 95 {
+            let old = self.process(i).thread.umask;
+            let group = self.process(i).thread.tgid;
+            for p in self
+                .processes
+                .iter_mut()
+                .flatten()
+                .filter(|p| p.thread.tgid == group)
+            {
+                p.thread.umask = f.rdi as u16 & 0o777;
+            }
+            self.process_mut(i).context.frame.rax = u64::from(old);
+            return;
+        }
+        if matches!(f.rax, 57 | 58) {
+            let vfork = f.rax == 58;
+            let result = self.fork_space(i, vfork).map_or_else(errno, |pid| {
+                if vfork {
+                    let identity = self.process(i).image.as_ref().unwrap().space.identity();
+                    self.process_mut(i).thread.vfork_child = Some((pid, identity));
+                    self.policy.block(i);
+                }
+                pid as i64
+            });
             self.process_mut(i).context.frame.rax = result as u64;
             return;
         }
@@ -319,6 +345,7 @@ impl Kernel {
             )
             .map_err(|e| match e {
                 loader::LoadError::Memory(_) => -12i64,
+                loader::LoadError::Elf(anova_elf::Error::Arguments) => -7i64,
                 loader::LoadError::Interpreter(error) => error,
                 _ => -8i64,
             })?;
@@ -454,6 +481,52 @@ impl Kernel {
                     });
                 }
                 Ok(match f.rax {
+                    97 | 302 => {
+                        let (resource, output) = if f.rax == 97 {
+                            (f.rdi, f.rsi)
+                        } else {
+                            if f.rdi != 0 && f.rdi != p.thread.tgid {
+                                return Err(-3);
+                            }
+                            if f.rdx != 0 {
+                                return Err(-95);
+                            }
+                            (f.rsi, f.r10)
+                        };
+                        let bound: u64 = match resource {
+                            0 => u64::MAX,
+                            1 | 2 => u64::MAX,
+                            3 => 1024 * 1024,
+                            4 => 0,
+                            6 => CAPACITY as u64,
+                            7 => 32,
+                            _ => return Err(-22),
+                        };
+                        if output != 0 {
+                            let mut bytes = [0; 16];
+                            bytes[..8].copy_from_slice(&bound.to_le_bytes());
+                            bytes[8..].copy_from_slice(&bound.to_le_bytes());
+                            uaccess::to_user(space, UserAddr(output), &bytes).map_err(errno)?;
+                        } else if f.rax == 97 {
+                            return Err(-14);
+                        }
+                        0
+                    }
+                    89 => {
+                        if f.rdx == 0 {
+                            return Err(-22);
+                        }
+                        let mut bytes = [0; 129];
+                        let n = string(space, f.rdi, &mut bytes)?;
+                        let target = self
+                            .fs
+                            .read_link(p.cwd, core::str::from_utf8(&bytes[..n]).unwrap())
+                            .map_err(errno)?;
+                        let count = target.len().min(f.rdx as usize);
+                        uaccess::to_user(space, UserAddr(f.rsi), &target.as_bytes()[..count])
+                            .map_err(errno)?;
+                        count as i64
+                    }
                     32 => {
                         let target = (0..32).find(|fd| !p.files.contains(*fd)).ok_or(-24)?;
                         self.fs.dup2(&mut p.files, f.rdi, target).map_err(errno)? as i64
@@ -471,13 +544,11 @@ impl Kernel {
                         let n = string(space, address, &mut bytes)?;
                         let flags = open_flags(flags & !(0x800 | 0x100))?;
                         let path = core::str::from_utf8(&bytes[..n]).unwrap();
-                        if flags & OPEN_CREATE != 0
-                            && self.fs.metadata(p.cwd, path) == Err(NOT_FOUND)
-                        {
-                            let mode = if f.rax == 2 { f.rdx } else { f.r10 };
-                            if mode & !0o022 != 0o644 {
-                                return Err(-95);
-                            }
+                        let created = flags & OPEN_CREATE != 0
+                            && self.fs.metadata(p.cwd, path) == Err(NOT_FOUND);
+                        let mode = if f.rax == 2 { f.rdx } else { f.r10 };
+                        if created && mode & !0o777 != 0 {
+                            return Err(-95);
                         }
                         let fd = self
                             .fs
@@ -488,6 +559,13 @@ impl Kernel {
                                 flags,
                             )
                             .map_err(errno)?;
+                        if created
+                            && let Err(e) =
+                                self.fs.fchmod(&p.files, fd, mode as u16 & !p.thread.umask)
+                        {
+                            self.fs.close(&mut p.files, fd).map_err(errno)?;
+                            return Err(errno(e));
+                        }
                         let linux_flags = if f.rax == 2 { f.rsi } else { f.rdx };
                         p.files
                             .set_close_on_exec(fd, linux_flags & 0x80000 != 0)
@@ -546,8 +624,13 @@ impl Kernel {
                                 output,
                             )
                         };
-                        uaccess::to_user(space, UserAddr(output), &stat_bytes(meta))
-                            .map_err(errno)?;
+                        let (permissions, modified) = self.fs.attributes(meta.0);
+                        uaccess::to_user(
+                            space,
+                            UserAddr(output),
+                            &stat_bytes(meta, permissions, modified),
+                        )
+                        .map_err(errno)?;
                         0
                     }
                     16 => {
@@ -583,7 +666,12 @@ impl Kernel {
                             .fs
                             .metadata(p.cwd, core::str::from_utf8(&bytes[..n]).unwrap())
                             .map_err(errno)?;
-                        if f.rsi & 2 != 0 {
+                        if f.rsi & 2 != 0
+                            && !self
+                                .fs
+                                .writable(p.cwd, core::str::from_utf8(&bytes[..n]).unwrap())
+                                .map_err(errno)?
+                        {
                             return Err(-13);
                         }
                         if f.rsi & 1 != 0 && !meta.3 {
@@ -692,15 +780,25 @@ impl Kernel {
                         uaccess::to_user(space, UserAddr(f.rdi), &bytes[..n + 1]).map_err(errno)?;
                         n as i64 + 1
                     }
-                    90 => {
-                        if f.rsi != 0o755 {
+                    90 | 91 => {
+                        if f.rsi & !0o777 != 0 {
                             return Err(-95);
                         }
-                        let mut bytes = [0; 129];
-                        let n = string(space, f.rdi, &mut bytes)?;
-                        self.fs
-                            .set_executable(p.cwd, core::str::from_utf8(&bytes[..n]).unwrap())
-                            .map_err(errno)?;
+                        if f.rax == 91 {
+                            self.fs
+                                .fchmod(&p.files, f.rdi, f.rsi as u16)
+                                .map_err(errno)?;
+                        } else {
+                            let mut bytes = [0; 129];
+                            let n = string(space, f.rdi, &mut bytes)?;
+                            self.fs
+                                .chmod(
+                                    p.cwd,
+                                    core::str::from_utf8(&bytes[..n]).unwrap(),
+                                    f.rsi as u16,
+                                )
+                                .map_err(errno)?;
+                        }
                         0
                     }
                     80 | 83 | 87 => {

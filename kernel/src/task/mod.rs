@@ -235,6 +235,9 @@ impl Kernel {
             .load_executable(ROOT, core::str::from_utf8(&path[..5 + name.len()]).unwrap())
     }
     fn fork(&mut self, parent: usize) -> Result<u64, i64> {
+        self.fork_space(parent, false)
+    }
+    fn fork_space(&mut self, parent: usize, share: bool) -> Result<u64, i64> {
         let i = self.policy.insert(self.process(parent).thread.tgid)?;
         let result = (|| {
             let stack = mm::user::KernelStack::new(i).map_err(|_| NO_MEMORY)?;
@@ -251,7 +254,11 @@ impl Kernel {
                     *image.actions.borrow(),
                 ))
                 .map_err(|_| NO_MEMORY)?,
-                space: image.space.clone_eager().map_err(|_| NO_MEMORY)?,
+                space: if share {
+                    image.space.share()
+                } else {
+                    image.space.clone_eager().map_err(|_| NO_MEMORY)?
+                },
                 entry: image.entry,
                 stack: image.stack,
             };
@@ -276,6 +283,7 @@ impl Kernel {
             Ok(mut process) => {
                 process.thread.pgid = self.process(parent).thread.pgid;
                 process.thread.sid = self.process(parent).thread.sid;
+                process.thread.umask = self.process(parent).thread.umask;
                 self.processes[i] = Some(process);
                 self.metrics.forks += 1;
                 Ok(self.policy.entry(i).pid)
@@ -403,6 +411,9 @@ impl Kernel {
         valid
     }
     fn syscall(&mut self, i: usize) {
+        if let Some((seconds, nanos)) = crate::arch::x86_64::clock::realtime() {
+            self.fs.set_clock(seconds * 1_000_000_000 + nanos);
+        }
         if self.process(i).image.as_ref().unwrap().linux {
             self.linux_syscall(i);
             return;
@@ -640,6 +651,10 @@ impl Kernel {
             }
             previous = Some(i);
             preempted = false;
+            if self.process(i).thread.vfork_child.is_some() {
+                self.policy.block(i);
+                continue;
+            }
             if let Some(signal) = self.linux_pending(i) {
                 match self.deliver_signal(i, signal) {
                     Ok(true) => {}

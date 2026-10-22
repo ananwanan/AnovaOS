@@ -7,7 +7,7 @@ use anova_abi::UserAddr;
 use anova_memory::shared::Shared;
 use core::cell::RefCell;
 
-// Trap capture returns to the separate 128 KiB scheduler stack before deep exec/ELF work.
+// Trap capture returns to the separate 256 KiB scheduler stack before deep exec/ELF work.
 const STACK_BYTES: u64 = 64 * 1024;
 const GUARD: u64 = MANAGED_BASE + 0x100_0000;
 const STRIDE: u64 = STACK_BYTES + 2 * PAGE_SIZE;
@@ -113,11 +113,7 @@ impl UserSpace {
         self.0.borrow().accessible(address, length, write, execute)
     }
     pub fn mapped(&self, address: u64) -> bool {
-        self.0
-            .borrow()
-            .pages
-            .iter()
-            .any(|(v, _)| v.0 == address & !4095)
+        self.0.borrow().mapped(address)
     }
     pub fn share_mapping(&mut self, start: u64, end: u64) {
         for (address, frame) in &mut self.0.borrow_mut().pages {
@@ -153,9 +149,11 @@ impl UserSpace {
         permissions: Option<Permissions>,
     ) -> Result<(), Error> {
         let mut space = self.0.borrow_mut();
-        if (start..end)
-            .step_by(4096)
-            .any(|a| !space.pages.iter().any(|(v, _)| v.0 == a))
+        if end
+            .checked_sub(start)
+            .and_then(|len| UserAddr(start).checked_end(len as usize))
+            != Some(end)
+            || (start..end).step_by(4096).any(|a| !space.mapped(a))
         {
             return Err(Error::NotMapped);
         }
@@ -219,6 +217,17 @@ impl OwnedSpace {
 
     pub fn root(&self) -> PhysAddr {
         self.tables.as_ref().expect("Closed user space").root()
+    }
+
+    fn mapped(&self, address: u64) -> bool {
+        MEMORY.with(|slot| {
+            let manager = slot.as_mut().expect("Memory not initialized");
+            self.tables
+                .as_ref()
+                .unwrap()
+                .query(VirtAddr(address), &manager.store())
+                .is_ok()
+        })
     }
 
     /// Eager fork copy: duplicate every leaf and permission; drop rolls back partial OOM.
@@ -395,11 +404,11 @@ impl OwnedSpace {
     }
     /// Eager anonymous mapping with complete leaf rollback on partial allocation failure.
     pub fn map_anonymous(&mut self, start: u64, end: u64) -> Result<(), Error> {
-        if start & 4095 != 0 || end & 4095 != 0 || start >= end || end - start > 8 * 1024 * 1024 {
+        if start & 4095 != 0 || end & 4095 != 0 || start >= end || end - start > 128 * 1024 * 1024 {
             return Err(Error::InvalidRange);
         }
         for page in (start..end).step_by(4096) {
-            if self.pages.iter().any(|(v, _)| v.0 == page) {
+            if self.mapped(page) {
                 return Err(Error::InvalidRange);
             }
         }
@@ -414,7 +423,7 @@ impl OwnedSpace {
         Ok(())
     }
 
-    /// Loader-only initialization through owned physical backing, before activation.
+    /// Initialize owned user backing while the scheduler is stopped on the kernel root.
     pub fn initialize(&self, address: u64, bytes: &[u8]) -> Result<(), Error> {
         if UserAddr(address).checked_end(bytes.len()).is_none() {
             return Err(Error::InvalidRange);
@@ -426,16 +435,16 @@ impl OwnedSpace {
                 let virtual_address = address + done as u64;
                 let base = virtual_address & !(PAGE_SIZE - 1);
                 let frame = self
-                    .pages
-                    .iter()
-                    .find(|(v, _)| v.0 == base)
-                    .ok_or(Error::NotMapped)?
-                    .1
-                    .address;
+                    .tables
+                    .as_ref()
+                    .unwrap()
+                    .query(VirtAddr(base), &manager.store())?
+                    .physical;
                 let offset = (virtual_address - base) as usize;
                 let count = (bytes.len() - done).min(PAGE_SIZE as usize - offset);
-                // SAFETY: pages lists exclusively owned, live RAM; initialization runs
-                // before Ring 3, bytes cannot alias these private physical pages.
+                // SAFETY: the checked lower-root range maps live user-owned RAM. The
+                // scheduler is stopped on the kernel root, including for shared vfork
+                // roots; the kernel-owned source bytes cannot alias these user pages.
                 unsafe {
                     core::ptr::copy_nonoverlapping(
                         bytes.as_ptr().add(done),

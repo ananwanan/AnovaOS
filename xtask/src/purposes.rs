@@ -28,7 +28,7 @@ pub fn check(root: &Path) -> Result<()> {
         let file = root.join(path);
         if matches!(
             file.extension().and_then(|value| value.to_str()),
-            Some("md" | "lock")
+            Some("md" | "lock" | "json")
         ) || matches!(*path, "LICENSE" | "NOTICE")
         {
             continue;

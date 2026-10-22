@@ -168,7 +168,7 @@ impl Tty {
                 }
                 self.length = 0;
             }
-            32..=126 if self.length < 255 => {
+            b'\t' | 32..=126 if self.length < 255 => {
                 self.line[self.length] = b;
                 self.length += 1;
                 if echo {

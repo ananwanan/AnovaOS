@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Gate purposes, native/Linux runtime, storage, controlled networking/packages and complete regressions.
+# Gate purposes, native/Linux runtime, storage/network regressions and source-built guest compilers.
 name: Bare-metal boot
 
 on:
@@ -69,3 +69,36 @@ jobs:
           path: build/logs/
           if-no-files-found: ignore
 
+
+  guest-toolchain:
+    needs: boot
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Install compiler construction and guest test utilities
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 xorriso curl dpkg-dev gcc g++ make musl-tools e2fsprogs openssl python3 m4 bison flex texinfo
+      - name: Load the pinned Rust toolchain
+        run: rustup show active-toolchain
+      - name: Fetch verified boot inputs
+        run: cargo xtask fetch
+      - name: Build the locked GCC, sysroot and make from source
+        env:
+          ANOVA_BUILD_JOBS: 2
+        run: cargo xtask toolchain-build
+      - name: Verify guest C/C++, incremental make, negative builds and reboot retention
+        run: cargo xtask toolchain-test
+      - name: Upload compiler build and guest evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: guest-toolchain-evidence
+          path: |
+            build/logs/
+            build/toolchain/rebuild/*.log
+            build/toolchain/package.sha256
+            build/toolchain/stage.sha256
+            build/toolchain/archive.sha256
+          if-no-files-found: ignore

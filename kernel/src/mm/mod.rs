@@ -35,10 +35,11 @@ const MANAGED_BASE: u64 = 0xffff_d000_0000_0000;
 pub const STACK_GUARD: u64 = MANAGED_BASE + 0x10000;
 const STACK_BOTTOM: u64 = STACK_GUARD + PAGE_SIZE;
 // Debug builds retain bounded ELF/exec frames on the scheduler continuation.
-const STACK_BYTES: u64 = 128 * 1024;
+const STACK_BYTES: u64 = 256 * 1024;
 const STACK_TOP: u64 = STACK_BOTTOM + STACK_BYTES;
-const HEAP_BASE: u64 = MANAGED_BASE + 0x20_0000;
-const HEAP_BYTES: usize = 2 * 1024 * 1024;
+// Keep the larger compiler metadata heap disjoint from tests and task stacks.
+const HEAP_BASE: u64 = MANAGED_BASE + 0x2000_0000;
+const HEAP_BYTES: usize = 16 * 1024 * 1024;
 const TEST_BASE: u64 = MANAGED_BASE + 0x80_0000;
 #[cfg(feature = "qemu-test")]
 const ROLLBACK_BASE: u64 = MANAGED_BASE + (1 << 39);

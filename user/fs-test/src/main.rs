@@ -181,7 +181,7 @@ fn limits() {
         rt::unlink("/tmp/reuse").unwrap();
     }
     let fd = rt::open("/tmp/big", OPEN_WRITE | OPEN_CREATE).unwrap();
-    for _ in 0..16 {
+    for _ in 0..256 {
         rt::write_all(fd, &[b'L'; 4096]).unwrap();
     }
     assert_eq!(rt::write_fd(fd, b"x"), Err(NO_SPACE));
@@ -203,7 +203,7 @@ fn heap_pressure() {
         .unwrap();
         count += 1;
         let mut offset = 0;
-        for _ in 0..16 {
+        for _ in 0..256 {
             match rt::write_fd(fd, &[b'O'; 4096]) {
                 Ok(n) => {
                     assert_eq!(n, 4096);

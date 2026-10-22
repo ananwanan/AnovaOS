@@ -1,3 +1,4 @@
+<!-- Explain toolchain machine roles, implemented guest C/C++ development and future Rust/Cargo stages. -->
 # 从交叉编译到系统内开发
 
 ## 1. 先分清三个机器角色
@@ -76,7 +77,7 @@ native 用户 target 的 code model、red zone、FPU/SSE 与链接布局需要�
 
 ### 4.4 M11 受测用例
 
-以下命令仅表示将来的 guest 验收目标，当前尚不可运行：
+M11 now implements the controlled offline guest profile in [M11_TOOLCHAIN](M11_TOOLCHAIN.md). The following commands run inside its development image:
 
 ```sh
 gcc main.c -o hello-c
@@ -87,7 +88,7 @@ make
 ```
 
 - C：stdio、参数、文件读写、malloc、多个源文件、编译错误的非零退出。
-- C++：string/vector、RAII；随后加入异常、线程、标准库 I/O。
+- C++: string/vector, RAII, exception unwinding and a real worker thread are tested; broader standard-library use remains per-program.
 - 构建链：子工具定位、头文件搜索、临时文件清理、增量构建和链接失败诊断。
 - 所有源码在 guest 编辑保存，二进制在 guest 生成，重启后仍可执行。
 

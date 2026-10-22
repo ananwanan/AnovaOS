@@ -7,7 +7,7 @@ An x86_64 operating system built from scratch in Rust. The goal is to edit,
 compile, debug, and run applications inside AnovaOS itself, while gradually
 supporting selected existing Linux software.
 
-**Current status: M0–M10 are locally verified on QEMU q35/TCG. Native apps,
+**Current status: M0–M11 are locally verified on QEMU q35/TCG. Native apps,
 VFS, pipes, init/shell, modern virtio-blk and checked ext2 storage at `/persist`
 include source editing, sync/fsync and clean ACPI shutdown/reboot persistence.
 The bounded Linux profile runs musl 1.2.4 static, static PIE and dynamic programs,
@@ -16,7 +16,9 @@ nonblocking I/O and four PTY pairs. Startup shared libraries and dlopen with TLS
 are tested alongside the pinned BusyBox 1.36.1 echo/ls/cat/ash profile.
 There are 32 total process/thread slots on one CPU. M10 adds opt-in virtio-net IPv4 TCP/UDP/DNS, interruptible sockets,
 verified user-space TLS and locked package installation, upgrades, rollback and removal.
-General Linux/glibc support and guest compilers remain future work; device IRQs stay masked.**
+M11 adds an optional offline GCC/G++/make development image: C/C++ applications
+compile and run inside the guest, with exceptions, threads and reboot retention verified.
+General Linux/glibc and guest Rust/Cargo remain future work; device IRQs stay masked.**
 
 Repository: [ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS).
 
@@ -96,6 +98,8 @@ development language and formatting guide is in English.
 | [docs/validation/M9.md](docs/validation/M9.md) | Runtime hashes, host comparison, QEMU acceptance and regressions |
 | [docs/M10_NETWORK_PACKAGES.md](docs/M10_NETWORK_PACKAGES.md) | Controlled IPv4 sockets, DNS, TLS and persistent package contracts |
 | [docs/validation/M10.md](docs/validation/M10.md) | Network, package, TLS, reboot and regression evidence |
+| [docs/M11_TOOLCHAIN.md](docs/M11_TOOLCHAIN.md) | Offline guest GCC/G++/make, sysroot, bounds and edit/build/run workflow |
+| [docs/validation/M11.md](docs/validation/M11.md) | Source-built tools, guest C/C++/make, negatives and reboot evidence |
 | [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) | Mandatory owner requirements, including file-purpose explanations |
 | [docs/FILE_PURPOSES.md](docs/FILE_PURPOSES.md) | Purpose of every repository file |
 | [docs/STATUS.md](docs/STATUS.md) | Current implementation status and next steps |
@@ -171,13 +175,14 @@ cargo xtask run --disk build/disks/work.ext2 # Reuse that image; shutdown cleanl
 
 These commands now exist in the host `xtask` package. Images, caches, logs, and
 disposable firmware variable copies stay in `build/`. Normal runs use a temporary data disk; networking is opt-in with `--network`. GitHub Actions is configured to run the same checks; its status
-is reported separately from [local validation](docs/validation/M9.md).
+is reported separately from [local validation](docs/validation/M11.md).
 
 ## Next steps
 
-M8/M9 provide an explicit Linux syscall personality, selected static CLI tests
-and a bounded musl threading/signal/terminal/dynamic runtime. The current disk/editor bounds are in [M7 storage](docs/M7_STORAGE.md). See
-[current status](docs/STATUS.md) and [roadmap](ROADMAP.md).
+M12 will add guest Rust/Cargo development on top of the accepted offline C/C++
+environment. The current compiler and resource bounds are in
+[M11 toolchain](docs/M11_TOOLCHAIN.md). See [current status](docs/STATUS.md)
+and [roadmap](ROADMAP.md).
 
 ## License
 
@@ -228,4 +233,20 @@ and `pkg remove demo`. Data under `/persist/data/demo` survives upgrades and rem
 `dns NAME` resolves IPv4 A records. HTTPS acquisition is currently restricted to
 the controlled host repository with its generated test CA. See the
 [M10 profile](docs/M10_NETWORK_PACKAGES.md) for exact commands and limitations.
-The next milestone is M11: real guest-hosted C/C++ compilation.
+The next milestone is M12: guest Rust/Cargo application development.
+
+## M11 offline C/C++ development
+
+```sh
+cargo xtask toolchain-build
+cargo xtask toolchain-image
+cargo xtask root-image --linux build/disks/devel.ext2
+cargo xtask run --toolchain --disk build/disks/devel.ext2
+cargo xtask toolchain-test
+```
+
+The optional development image uses 1 GiB RAM. In its guest shell, save source
+with `edit`, then use `gcc`, `g++ -std=c++17 -pthread`, and `make` under `/persist`.
+C stdio/files/malloc/argv and multi-file builds, C++ string/vector/RAII/exceptions/
+threads, make incremental builds and clean reboot retention are tested. See the
+[M11 profile](docs/M11_TOOLCHAIN.md) and [acceptance evidence](docs/validation/M11.md).

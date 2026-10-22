@@ -5,12 +5,12 @@ use super::*;
 use anova_storage::{BlockDevice, SECTOR, check_range, ext2::Ext2};
 use std::io::{Read, Seek, SeekFrom, Write};
 
-struct Image {
+pub(super) struct Image {
     file: File,
     sectors: u64,
 }
 impl Image {
-    fn open(path: &Path) -> Result<Self> {
+    pub(super) fn open(path: &Path) -> Result<Self> {
         let metadata = fs::symlink_metadata(path)?;
         if !metadata.file_type().is_file() || !metadata.len().is_multiple_of(SECTOR as u64) {
             return Err("Disk image must be a sector-aligned regular file".into());
@@ -48,6 +48,9 @@ impl BlockDevice for Image {
     }
 }
 pub fn create(root: &Path, path: &Path) -> Result<()> {
+    create_profile(root, path, false)
+}
+pub(super) fn create_profile(root: &Path, path: &Path, linux: bool) -> Result<()> {
     output_path(path)?;
     let file = fs::OpenOptions::new()
         .write(true)
@@ -87,9 +90,20 @@ pub fn create(root: &Path, path: &Path) -> Result<()> {
         .map_err(|e| format!("New ext2 profile rejected: {e}"))?;
     let result = (|| -> std::result::Result<(), i64> {
         let abi = disk.create(2, ".anova-abi", false)?;
-        disk.write(abi, 0, b"anova.native.v1\n")?;
+        disk.write(
+            abi,
+            0,
+            if linux {
+                b"linux.x86_64.v1\n"
+            } else {
+                b"anova.native.v1\n"
+            },
+        )?;
         let src = disk.create(2, "src", true)?;
         let bin = disk.create(2, "bin", true)?;
+        if linux {
+            return disk.shutdown();
+        }
         let source = disk.create(src, "hello.c", false)?;
         disk.write(
             source,
@@ -354,7 +368,7 @@ fn inspect_saved(root: &Path, path: &Path) -> Result<()> {
 }
 
 #[allow(clippy::too_many_arguments)] // One explicit scenario description; not a guest-facing API.
-fn session(
+pub(super) fn session(
     root: &Path,
     iso: &Path,
     disk: &Path,
@@ -363,6 +377,23 @@ fn session(
     fault: Option<&str>,
     exchanges: &[(&str, &[u8])],
     poweroff: bool,
+) -> Result<()> {
+    session_timeout(
+        root, iso, disk, name, readonly, fault, exchanges, poweroff, 60,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn session_timeout(
+    root: &Path,
+    iso: &Path,
+    disk: &Path,
+    name: &str,
+    readonly: bool,
+    fault: Option<&str>,
+    exchanges: &[(&str, &[u8])],
+    poweroff: bool,
+    seconds: u64,
 ) -> Result<()> {
     let logs = directory(root, "logs")?;
     let serial = logs.join(format!("{name}.serial.log"));
@@ -395,6 +426,16 @@ fn session(
             output.finish()?;
         }
         let text = output.text();
+        if step < exchanges.len() && exchanges[step].0 == "[SHELL:STATUS] code=0" {
+            let tail = String::from_utf8_lossy(text.as_bytes().get(cursor..).unwrap_or_default());
+            if tail.contains("[SHELL:STATUS] code=") && !tail.contains("[SHELL:STATUS] code=0") {
+                return Err(format!(
+                    "{name}: command failed at step {step}; see {}",
+                    serial.display()
+                )
+                .into());
+            }
+        }
         if [
             "[PANIC]",
             "[EXCEPTION]",
@@ -437,7 +478,7 @@ fn session(
             output.finish()?;
             break output.text().into_owned();
         }
-        if start.elapsed() > Duration::from_secs(60) {
+        if start.elapsed() > Duration::from_secs(seconds) {
             return Err(
                 format!("{name}: timed out at step {step}; see {}", serial.display()).into(),
             );

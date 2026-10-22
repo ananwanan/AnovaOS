@@ -5,7 +5,7 @@
 
 用 Rust 从零开发的 x86_64 操作系统，目标是在自己的系统中编辑、编译、调试和运行应用，并逐步兼容部分现有 Linux 软件。
 
-**当前状态：M0–M10 已通过本地 QEMU q35/TCG 验证。原生应用、VFS、管道、init/shell、现代 virtio-blk 和 `/persist` 受限 ext2 已支持源码编辑、sync/fsync、正常关机及重启保留。受限 Linux profile 已运行 musl 1.2.4 静态、静态 PIE 和动态程序，验证 pthread/TLS/futex、真实信号处理与中断/重启、poll、非阻塞 I/O、四组 PTY，以及启动共享库、dlopen 和动态 TLS；保留固定 BusyBox 1.36.1 echo/ls/cat/ash 子集。当前单核，共 32 个进程/线程槽；M10 新增可选 virtio-net IPv4 TCP/UDP/DNS、可中断 socket、严格证书验证的用户态 TLS，以及锁定软件包的安装、升级、回滚与卸载。通用 Linux/glibc 和系统内编译器仍未实现，外设 IRQ 保持屏蔽。**
+**当前状态：M0–M11 已通过本地 QEMU q35/TCG 验证。原生应用、VFS、管道、init/shell、现代 virtio-blk 和 `/persist` 受限 ext2 已支持源码编辑、sync/fsync、正常关机及重启保留。受限 Linux profile 已运行 musl 1.2.4 静态、静态 PIE 和动态程序，验证 pthread/TLS/futex、真实信号处理与中断/重启、poll、非阻塞 I/O、四组 PTY，以及启动共享库、dlopen 和动态 TLS；保留固定 BusyBox 1.36.1 echo/ls/cat/ash 子集。当前单核，共 32 个进程/线程槽；M10 新增可选 virtio-net IPv4 TCP/UDP/DNS、可中断 socket、严格证书验证的用户态 TLS，以及锁定软件包的安装、升级、回滚与卸载。M11 新增可选离线 GCC/G++/make 开发镜像，已验证系统内编译运行 C/C++、异常、线程及重启保留。通用 Linux/glibc 和系统内 Rust/Cargo 仍未实现，外设 IRQ 保持屏蔽。**
 
 项目仓库：[ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS)。
 
@@ -50,6 +50,8 @@
 | [ARCHITECTURE.md](ARCHITECTURE.md) | 内核、应用、ABI、驱动和目录边界 |
 | [COMPATIBILITY.md](COMPATIBILITY.md) | 现有软件兼容策略、ABI 需求和验证矩阵 |
 | [docs/TOOLCHAINS.md](docs/TOOLCHAINS.md) | GCC/G++/Rust 从交叉编译到系统内开发 |
+| [docs/M11_TOOLCHAIN.md](docs/M11_TOOLCHAIN.md) | 系统内离线 GCC/G++/make、sysroot 与开发步骤 |
+| [docs/validation/M11.md](docs/validation/M11.md) | 工具链源码构建、C/C++/make、负例与重启证据 |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | 宿主配置、已实现命令、产物和失败处理 |
 | [docs/CODING_STYLE.md](docs/CODING_STYLE.md) | 英文开发语言约定与 Rust 格式规范 |
 | [docs/FIRST_TASK.md](docs/FIRST_TASK.md) | M0/M1 的实现顺序与每步完成标准 |
@@ -69,6 +71,8 @@
 | [docs/M8_LINUX.md](docs/M8_LINUX.md) | 静态 Linux ABI、固定 musl/BusyBox 构建与受测 CLI 范围 |
 | [docs/M9_RUNTIME.md](docs/M9_RUNTIME.md) | 线程、信号、终端、动态 musl 与所有权边界 |
 | [docs/validation/M9.md](docs/validation/M9.md) | 运行时哈希、宿主对照、QEMU 验收与回归证据 |
+| [docs/M10_NETWORK_PACKAGES.md](docs/M10_NETWORK_PACKAGES.md) | 受控 IPv4、DNS、TLS 与持久软件包范围 |
+| [docs/validation/M10.md](docs/validation/M10.md) | 网络、软件包、TLS、重启与回归证据 |
 | [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) | 强制开发需求，包括文件用途说明 |
 | [docs/FILE_PURPOSES.md](docs/FILE_PURPOSES.md) | 仓库中每个文件的用途 |
 | [docs/STATUS.md](docs/STATUS.md) | 当前已实现能力和下一步 |
@@ -123,11 +127,11 @@ cargo xtask root-image build/disks/work.ext2 # 创建新的持久数据盘
 cargo xtask run --disk build/disks/work.ext2 # 复用此盘，在系统内 shutdown 正常关机
 ```
 
-以上命令已在宿主 `xtask` 包中实现。镜像、缓存、日志和临时固件变量副本均位于 `build/`；普通启动使用临时数据盘、不连接网络。GitHub Actions 已配置相同检查，其运行结果与 [本地验收](docs/validation/M9.md) 分开记录。
+以上命令已在宿主 `xtask` 包中实现。镜像、缓存、日志和临时固件变量副本均位于 `build/`；普通启动使用临时数据盘、不连接网络。GitHub Actions 已配置相同检查，其运行结果与 [本地验收](docs/validation/M11.md) 分开记录。
 
 ## 下一步
 
-M8/M9 已加入独立 Linux syscall personality、受测静态 CLI，以及受限的线程、信号、终端和动态 musl 运行时。当前磁盘和编辑器范围见 [M7 存储设计](docs/M7_STORAGE.md)，另见 [当前状态](docs/STATUS.md) 和 [路线图](ROADMAP.md)。
+M12 将在已验收的离线 C/C++ 环境之上加入系统内 Rust/Cargo 开发。当前编译器与资源范围见 [M11 工具链](docs/M11_TOOLCHAIN.md)，另见 [当前状态](docs/STATUS.md) 和 [路线图](ROADMAP.md)。
 
 ## 许可证
 
@@ -162,4 +166,20 @@ cargo xtask run --network --disk build/disks/work.ext2
 `pkg remove demo`。`/persist/data/demo` 中的用户数据在升级和卸载时保留。
 `dns NAME` 查询 IPv4 A 记录。HTTPS 获取当前仅验收宿主受控仓库和生成的测试 CA。
 具体范围见 [M10 设计](docs/M10_NETWORK_PACKAGES.md) 与
-[验收记录](docs/validation/M10.md)。下一阶段是 M11：真正的系统内 C/C++ 编译。
+[验收记录](docs/validation/M10.md)。下一阶段是 M12：系统内 Rust/Cargo 应用开发。
+
+## M11 离线 C/C++ 开发
+
+```sh
+cargo xtask toolchain-build
+cargo xtask toolchain-image
+cargo xtask root-image --linux build/disks/devel.ext2
+cargo xtask run --toolchain --disk build/disks/devel.ext2
+cargo xtask toolchain-test
+```
+
+开发镜像使用 1 GiB 内存。在系统 shell 的 `/persist` 中用 `edit` 编辑保存源码，
+再运行 `gcc`、`g++ -std=c++17 -pthread` 和 `make`。已验证 C 的 stdio、文件、
+malloc、参数和多文件构建，以及 C++ string/vector、RAII、异常、线程、make
+增量构建和正常关机重启保留。范围见 [M11 设计](docs/M11_TOOLCHAIN.md) 与
+[验收记录](docs/validation/M11.md)。

@@ -4,13 +4,13 @@
 use super::{E2BIG, EFAULT, EINVAL, ENAMETOOLONG};
 
 pub const STRING_BYTES: usize = 129;
-pub const VECTOR_LIMIT: usize = 16;
+pub const VECTOR_LIMIT: usize = 64;
 const PAGE_BYTES: u64 = 4096;
 
 /// The caller pins the address space and recovers access faults inside `copy`.
-pub fn read_c_string(
+pub fn read_c_string<const N: usize>(
     address: u64,
-    bytes: &mut [u8; STRING_BYTES],
+    bytes: &mut [u8; N],
     copy: &mut impl FnMut(u64, &mut [u8]) -> Result<(), i64>,
 ) -> Result<usize, i64> {
     let mut done = 0;
@@ -31,14 +31,16 @@ pub fn read_c_string(
 
 /// Own validated argv/envp bytes while the original user mappings are inactive or replaced.
 pub struct StringVector {
-    bytes: [[u8; STRING_BYTES]; VECTOR_LIMIT],
+    bytes: [u8; 8192],
+    offsets: [usize; VECTOR_LIMIT],
     lengths: [usize; VECTOR_LIMIT],
     count: usize,
 }
 impl StringVector {
     pub fn empty() -> Self {
         Self {
-            bytes: [[0; STRING_BYTES]; VECTOR_LIMIT],
+            bytes: [0; 8192],
+            offsets: [0; VECTOR_LIMIT],
             lengths: [0; VECTOR_LIMIT],
             count: 0,
         }
@@ -50,6 +52,8 @@ impl StringVector {
     ) -> Result<(), i64> {
         self.count = 0;
         self.lengths.fill(0);
+        let mut used = 0_usize;
+        let mut string = [0; 1024];
         for index in 0..=VECTOR_LIMIT {
             let at = address.checked_add(index as u64 * 8).ok_or(EFAULT)?;
             let mut word = [0; 8];
@@ -61,8 +65,16 @@ impl StringVector {
             if index == VECTOR_LIMIT {
                 return Err(E2BIG);
             }
-            self.lengths[index] = read_c_string(pointer, &mut self.bytes[index], copy)
+            let length = read_c_string(pointer, &mut string, copy)
                 .map_err(|error| if error == ENAMETOOLONG { E2BIG } else { error })?;
+            let end = used
+                .checked_add(length)
+                .filter(|end| *end <= self.bytes.len())
+                .ok_or(E2BIG)?;
+            self.bytes[used..end].copy_from_slice(&string[..length]);
+            self.offsets[index] = used;
+            self.lengths[index] = length;
+            used = end;
             self.count += 1;
         }
         unreachable!("Bounded vector must terminate or exceed capacity");
@@ -76,8 +88,10 @@ impl StringVector {
     pub fn strings(&self) -> [&str; VECTOR_LIMIT] {
         core::array::from_fn(|index| {
             // Only read() sets lengths, after validating both UTF-8 and the bound.
-            core::str::from_utf8(&self.bytes[index][..self.lengths[index]])
-                .expect("Previously validated Linux string")
+            core::str::from_utf8(
+                &self.bytes[self.offsets[index]..self.offsets[index] + self.lengths[index]],
+            )
+            .expect("Previously validated Linux string")
         })
     }
 }
@@ -177,9 +191,9 @@ mod tests {
     fn vectors_accept_the_full_capacity_and_reject_bad_pointers_or_excess_arguments() {
         let mut memory = vec![0; 4096];
         for index in 0..VECTOR_LIMIT {
-            memory[index * 8..index * 8 + 8].copy_from_slice(&0x10200_u64.to_le_bytes());
+            memory[index * 8..index * 8 + 8].copy_from_slice(&0x10400_u64.to_le_bytes());
         }
-        memory[512..518].copy_from_slice(b"value\0");
+        memory[1024..1030].copy_from_slice(b"value\0");
         let mut copy = |address: u64, bytes: &mut [u8]| {
             let offset = address.checked_sub(0x10000).ok_or(EFAULT)? as usize;
             let input = memory.get(offset..offset + bytes.len()).ok_or(EFAULT)?;
@@ -192,7 +206,7 @@ mod tests {
         assert!(!vector.is_empty());
         assert_eq!(vector.strings(), ["value"; VECTOR_LIMIT]);
         assert!(vector.read(1, &mut copy).is_err());
-        memory[VECTOR_LIMIT * 8..VECTOR_LIMIT * 8 + 8].copy_from_slice(&0x10200_u64.to_le_bytes());
+        memory[VECTOR_LIMIT * 8..VECTOR_LIMIT * 8 + 8].copy_from_slice(&0x10400_u64.to_le_bytes());
         let result = vector.read(0x10000, &mut |address, bytes| {
             let offset = (address - 0x10000) as usize;
             bytes.copy_from_slice(&memory[offset..offset + bytes.len()]);
@@ -200,7 +214,7 @@ mod tests {
         });
         assert!(matches!(result, Err(E2BIG)));
         memory[VECTOR_LIMIT * 8..VECTOR_LIMIT * 8 + 8].fill(0);
-        memory[512..512 + STRING_BYTES].fill(b'x');
+        memory[1024..2048].fill(b'x');
         let result = vector.read(0x10000, &mut |address, bytes| {
             let offset = (address - 0x10000) as usize;
             bytes.copy_from_slice(&memory[offset..offset + bytes.len()]);

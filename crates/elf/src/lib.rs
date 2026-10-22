@@ -10,6 +10,8 @@ pub const PAGE: u64 = 4096;
 pub const IMAGE_LIMIT: u64 = 0x4000_0000;
 pub const MAX_SEGMENTS: usize = 16;
 pub const MAX_MEMORY: u64 = 4 * 1024 * 1024;
+pub const LINUX_MAX_MEMORY: u64 = 128 * 1024 * 1024;
+pub const LINUX_MAX_FILE: usize = 64 * 1024 * 1024;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Error {
@@ -144,7 +146,12 @@ pub fn interpreter(bytes: &[u8]) -> Result<Option<&str>, Error> {
 }
 
 fn parse_personality(bytes: &[u8], linux: bool) -> Result<Image, Error> {
-    if bytes.len() < 64 || bytes.len() > 8 * 1024 * 1024 || bytes[..7] != *b"\x7fELF\x02\x01\x01" {
+    let file_limit = if linux {
+        LINUX_MAX_FILE
+    } else {
+        8 * 1024 * 1024
+    };
+    if bytes.len() < 64 || bytes.len() > file_limit || bytes[..7] != *b"\x7fELF\x02\x01\x01" {
         return Err(Error::Header);
     }
     let at = |offset, length| integer(bytes, offset, length);
@@ -250,7 +257,8 @@ fn parse_personality(bytes: &[u8], linux: bool) -> Result<Image, Error> {
         memory = memory
             .checked_add(segment.page_end() - segment.page_start())
             .ok_or(Error::Capacity)?;
-        if image.count == MAX_SEGMENTS || memory > MAX_MEMORY {
+        let memory_limit = if linux { LINUX_MAX_MEMORY } else { MAX_MEMORY };
+        if image.count == MAX_SEGMENTS || memory > memory_limit {
             return Err(Error::Capacity);
         }
         image.segments[image.count] = segment;
