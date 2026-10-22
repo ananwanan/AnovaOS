@@ -254,7 +254,7 @@ not a direct wrapper around privileged kernel calls. All language clients
 use a single documented semantic contract; the Rust SDK may optimize its
 internal call path without changing observable behavior.
 
-\`\`\`text
+```text
 Rust app / C++ app / C app
      |       |       |
 Rust SDK / C++ SDK / C SDK
@@ -270,7 +270,7 @@ Rust SDK / C++ SDK / C SDK
 kernel IPC, mappings, display and input drivers
             |
        QEMU / hardware
-\`\`\`
+```
 
 The kernel retains buffer/memory permissions, IPC isolation, display and input
 device access; windows, focus, text rendering, widgets and the desktop shell
@@ -280,7 +280,7 @@ Clients do not receive unrestricted framebuffer mappings. All display
 formats/strides, damage regions, memory lengths, object handles, concurrency,
 events and crash/restart paths must be bounded, versioned and verified.
 
-GUI ABI rules: \`extern "C"\` exports; \`#[repr(C)]\` and explicit-width fields;
+GUI ABI rules: `extern "C"` exports; `#[repr(C)]` and explicit-width fields;
 no Rust-owned collection layouts, implicit shared allocators or unwinding
 across FFI; opaque handles and precise release ownership; explicit errors
 and version/capability checks; documented thread/callback semantics. Keep
@@ -298,11 +298,11 @@ Vulkan/OpenGL, Wayland/X11, SDL/Qt and Linux GUI application compatibility
 remain separate, version-specific ports. SMP and real-hardware expansion are
 independent future workstreams, not implicit M14 GUI completion criteria.
 
-Planned source boundaries (do not create empty skeletons): \`crates/gui-protocol/\`
-for wire types, \`user/compositor/\` for the window server,
-\`user/gui-runtime/\` for drawing/widgets, \`user/desktop/\` for shell UI, and
-\`user/gui-sdk/{ffi,rust,c,cpp}/\` for the library ABI and language SDKs.
-Evaluate \`embedded-graphics\`, \`tiny-skia\`, \`fontdue\` and \`cbindgen\`
+Planned source boundaries (do not create empty skeletons): `crates/gui-protocol/`
+for wire types, `user/compositor/` for the window server,
+`user/gui-runtime/` for drawing/widgets, `user/desktop/` for shell UI, and
+`user/gui-sdk/{ffi,rust,c,cpp}/` for the library ABI and language SDKs.
+Evaluate `embedded-graphics`, `tiny-skia`, `fontdue` and `cbindgen`
 only against tested guest targets, license, dependency and safety constraints
 before selecting them as actual dependencies.
 
