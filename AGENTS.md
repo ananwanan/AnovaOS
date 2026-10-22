@@ -170,3 +170,45 @@ cargo xtask test-compat
 阶段完成须有证据；TODO、占位返回值、日志文本和预生成图片不能算实现。不擅自回滚用户改动、不 force-push；新增依赖和架构变化需有实际理由。
 
 常规实现、修复和检查可以持续推进。涉及改写真实磁盘、删除用户数据、泄露密钥或改变用户已指定的重大目标时，停下并说明具体后果。其余情况以用户本次授权和现有事实为依据，减少无必要中断。
+
+## 13. Planned M14 GUI architecture and acceptance (mandatory)
+
+The project owner has selected a Rust implementation for the native GUI,
+with first-class **C, C++ and Rust application SDKs**, and five separate GUI
+submilestones. See [M14_GUI](docs/M14_GUI.md), [ROADMAP](ROADMAP.md)
+and owner requirement [DEV-002](docs/REQUIREMENTS.md). This section is a
+future-development contract: no M14 GUI code or verified GUI behavior is
+claimed by the M0–M11 baseline.
+
+- Write the window compositor, desktop shell and GUI runtime in Rust. Keep
+  the compositor in a **user process**; the kernel supplies safe display/input
+  drivers, memory protection, IPC and scheduling, not widget/window policy.
+- Use one **versioned C ABI** implemented in Rust as the portable library
+  interface: C headers, a C++ RAII/move-safe wrapper and safe Rust bindings.
+  Preserve equivalent observable behavior for all three languages.
+- At every FFI boundary, use checked \`extern "C"\` / \`#[repr(C)]\` layouts,
+  explicit widths, opaque handles, version/error checks, clear allocation
+  ownership and no unwinding. Specify threading, callbacks, event ordering,
+  lifetime, invalid arguments and resource exhaustion before freezing v1.
+- The compositor must validate untrusted client IPC, surface dimensions,
+  stride/format, shared memory and lifetime, object capabilities, focus and
+  event queues. Client crash and compositor failure must not corrupt the
+  kernel or other processes.
+- Develop in this order with separate acceptance evidence:
+  **M14.1** framebuffer/software drawing;
+  **M14.2** keyboard/pointer events;
+  **M14.3** user-space compositor/multiple windows;
+  **M14.4** GUI runtime and independent C/C++/Rust demos;
+  **M14.5** optional proven GPU acceleration with CPU fallback.
+  Do not mark a substage accepted based on a log, screenshot or stub alone.
+- Do not assert GPU acceleration from Limine framebuffer or virtio-gpu
+  scanout. Do not claim Vulkan/OpenGL, glibc, Wayland/X11, SDL/Qt,
+  USB input, SMP or real hardware support without their own tested profiles.
+  Preserve accepted serial/QEMU negative gates as graphics are introduced.
+- Plan ABI/package metadata during M13; implement and accept the actual
+  GUI SDK only after its dependent GUI runtime and relevant guest toolchains
+  are verified. Never equate host cross-compilation with guest compilation.
+- Any new GUI file follows DEV-001 purpose headers, English comments,
+  inventory, ownership/safety review, ABI compatibility tests and exact
+  validation evidence requirements. Add \`cargo xtask\` GUI commands only
+  together with their functioning implementation.
