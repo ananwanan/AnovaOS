@@ -93,3 +93,19 @@ included at /etc/network.LICENSE. Mbed TLS is unmodified and user-linked under
 its Apache-2.0 option; /etc/mbedtls.LICENSE preserves its upstream license.
 The generated demo package includes LICENSE and declares its native SDK/ABI.
 Test CA private keys are never included in the image or application packages.
+
+
+## Optional guest compiler profiles (M11/M12)
+
+The compiler tools remain separate guest processes. M11's source-built GCC,
+binutils, make, musl and runtime boundaries are recorded in
+[third-party/m11](third-party/m11.md); the optional `/tc/licenses` bundle retains
+their original texts and input/rebuild records.
+
+M12 uses checksum-locked official musl Rust/Cargo/std binary distributions,
+with embedded LLVM/rust-lld, rather than claiming a local Rust source build.
+`/rs/licenses` retains LICENSE/COPYRIGHT and Cargo third-party notices. The
+separate GCC unwinder's COPYING3 and COPYING.RUNTIME texts are also included,
+even in the Rust-only runtime image. The real vendored itoa crate retains its
+own upstream license files. See [third-party/m12](third-party/m12.md) for exact
+inputs and boundaries; first-party launchers and fixtures remain Apache-2.0.

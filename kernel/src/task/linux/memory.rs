@@ -4,7 +4,7 @@
 use super::*;
 use anova_memory::paging::Permissions;
 const START: u64 = 0x5000_0000;
-const END: u64 = 0x7000_0000;
+const END: u64 = 0xc000_0000;
 fn permissions(prot: u64) -> Result<Option<Permissions>, i64> {
     if prot & !7 != 0 || prot & 6 == 6 {
         return Err(-13);
@@ -51,13 +51,24 @@ impl Kernel {
             .rsi
             .checked_add(4095)
             .map(|n| n & !4095)
-            .filter(|n| *n > 0 && *n <= 128 * 1024 * 1024)
+            .filter(|n| *n > 0 && *n <= 256 * 1024 * 1024)
             .ok_or(-22)?;
         let end = f.rdi.checked_add(size).ok_or(-22)?;
         if f.rax == 10 {
             let perms = permissions(f.rdx)?;
             if f.rdi & 4095 != 0 {
                 return Err(-22);
+            }
+            if perms.is_some_and(|p| p.writable)
+                && self
+                    .process(i)
+                    .image
+                    .as_ref()
+                    .unwrap()
+                    .space
+                    .has_file_pages(f.rdi, end)
+            {
+                return Err(-13);
             }
             self.process_mut(i)
                 .image
@@ -87,9 +98,10 @@ impl Kernel {
         let anonymous = f.r10 & 0x20 != 0;
         let fixed = f.r10 & 0x10 != 0;
         let shared = f.r10 & 3 == 1;
-        if f.r10 & !0x1033 != 0
+        // Linux MAP_STACK is a hint; the same eager mapping and guard protections apply.
+        if f.r10 & !0x21033 != 0
             || !matches!(f.r10 & 3, 1 | 2)
-            || (shared && (!anonymous || fixed))
+            || (shared && fixed)
             || f.r9 & 4095 != 0
         {
             return Err(-22);
@@ -112,8 +124,20 @@ impl Kernel {
         if anonymous && (f.r8 != u64::MAX || f.r9 != 0) {
             return Err(-22);
         }
+        if shared && !anonymous && f.rdx & 2 != 0 {
+            return Err(-95);
+        }
         let files = &self.processes[i].as_ref().unwrap().files;
-        let data = if anonymous {
+        let file = if shared && !anonymous {
+            Some(
+                self.fs
+                    .shared_file_mapping(files, f.r8, f.r9, size)
+                    .map_err(errno)?,
+            )
+        } else {
+            None
+        };
+        let data = if anonymous || file.is_some() {
             None
         } else {
             Some(
@@ -123,28 +147,19 @@ impl Kernel {
             )
         };
         let image = self.process_mut(i).image.as_mut().unwrap();
+        if file.is_some() {
+            image
+                .space
+                .reserve_file_pages((size / 4096) as usize)
+                .map_err(|_| -12)?;
+        }
         let start = if fixed {
             if f.rdi & 4095 != 0 || f.rdi < START || end > END {
                 return Err(-22);
             }
             f.rdi
         } else {
-            let mut start = START;
-            let mut run = 0;
-            let mut found = None;
-            for page in (START..END).step_by(4096) {
-                if image.space.mapped(page) {
-                    start = page + 4096;
-                    run = 0;
-                } else {
-                    run += 4096;
-                    if run == size {
-                        found = Some(start);
-                        break;
-                    }
-                }
-            }
-            found.ok_or(-12)?
+            image.space.find_gap(START, END, size).ok_or(-12)?
         };
         if fixed
             && (start..start + size)
@@ -179,10 +194,19 @@ impl Kernel {
         if shared {
             image.space.share_mapping(start, start + size);
         }
+        if let Some(file) = file {
+            image
+                .space
+                .bind_file_pages(start, size, f.r9 as usize, file);
+            image.space.refresh_file_pages();
+        }
         image
             .space
             .protect(start, start + size, perms)
             .map_err(|_| -13)?;
+        if !fixed {
+            image.space.commit_mapping_hint(start + size);
+        }
         Ok(start as i64)
     }
 }

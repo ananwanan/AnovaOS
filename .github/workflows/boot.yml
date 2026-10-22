@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Gate purposes, native/Linux runtime, storage/network regressions and source-built guest compilers.
+# Gate purposes, native/Linux runtime, storage/network and source-built C/locked upstream Rust tools.
 name: Bare-metal boot
 
 on:
@@ -73,7 +73,7 @@ jobs:
   guest-toolchain:
     needs: boot
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Install compiler construction and guest test utilities
@@ -90,6 +90,18 @@ jobs:
         run: cargo xtask toolchain-build
       - name: Verify guest C/C++, incremental make, negative builds and reboot retention
         run: cargo xtask toolchain-test
+      - name: Prepare locked upstream Rust musl tools and offline vendor
+        run: |
+          rustup target add x86_64-unknown-linux-musl
+          cargo xtask rust-build
+      - name: Verify Rust std, detached threads and real compiler startup
+        run: |
+          cargo xtask rust-cross-test
+          cargo xtask rust-runtime-test
+      - name: Verify guest Rust, offline Cargo, build scripts, C FFI, macros and reboot
+        run: cargo xtask rust-test
+      - name: Verify online Cargo, strict TLS, transport failures and offline rebuild
+        run: cargo xtask rust-online-test
       - name: Upload compiler build and guest evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -101,4 +113,6 @@ jobs:
             build/toolchain/package.sha256
             build/toolchain/stage.sha256
             build/toolchain/archive.sha256
+            build/rust/stage.sha256
+            build/rust/archive.sha256
           if-no-files-found: ignore

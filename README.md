@@ -7,7 +7,8 @@ An x86_64 operating system built from scratch in Rust. The goal is to edit,
 compile, debug, and run applications inside AnovaOS itself, while gradually
 supporting selected existing Linux software.
 
-**Current status: M0–M11 are locally verified on QEMU q35/TCG. Native apps,
+**Current status: M0–M12 (bounded offline and online profiles) are locally verified
+on QEMU q35/TCG. Native apps,
 VFS, pipes, init/shell, modern virtio-blk and checked ext2 storage at `/persist`
 include source editing, sync/fsync and clean ACPI shutdown/reboot persistence.
 The bounded Linux profile runs musl 1.2.4 static, static PIE and dynamic programs,
@@ -18,7 +19,11 @@ There are 32 total process/thread slots on one CPU. M10 adds opt-in virtio-net I
 verified user-space TLS and locked package installation, upgrades, rollback and removal.
 M11 adds an optional offline GCC/G++/make development image: C/C++ applications
 compile and run inside the guest, with exceptions, threads and reboot retention verified.
-General Linux/glibc and guest Rust/Cargo remain future work; device IRQs stay masked.**
+M12 adds guest Rust 1.90.0/std and offline Cargo with vendor dependencies, build scripts,
+C FFI, standalone macros and a Cargo macro/build-script dependency graph.
+Opt-in online Cargo adds strict HTTPS registry/Git downloads and persisted-cache
+rebuilds; public crates.io/GitHub are tested through a configured host proxy.
+General Linux/glibc remains future work; device IRQs stay masked.**
 
 Repository: [ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS).
 
@@ -100,6 +105,9 @@ development language and formatting guide is in English.
 | [docs/validation/M10.md](docs/validation/M10.md) | Network, package, TLS, reboot and regression evidence |
 | [docs/M11_TOOLCHAIN.md](docs/M11_TOOLCHAIN.md) | Offline guest GCC/G++/make, sysroot, bounds and edit/build/run workflow |
 | [docs/validation/M11.md](docs/validation/M11.md) | Source-built tools, guest C/C++/make, negatives and reboot evidence |
+| [docs/M12_NETWORK.md](docs/M12_NETWORK.md) | Opt-in online Cargo, strict TLS, public sources and offline cache rebuilds |
+| [docs/M12_RUST.md](docs/M12_RUST.md) | Guest Rust/std, offline Cargo, build scripts, C FFI, macros and resource bounds |
+| [docs/validation/M12.md](docs/validation/M12.md) | Actual guest compilation, persisted hashes, reboot and regression evidence |
 | [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) | Mandatory owner requirements, including file-purpose explanations |
 | [docs/FILE_PURPOSES.md](docs/FILE_PURPOSES.md) | Purpose of every repository file |
 | [docs/STATUS.md](docs/STATUS.md) | Current implementation status and next steps |
@@ -144,8 +152,10 @@ complete the following without forwarding compilation requests to the host:
   run the result, and verify its output.
 - Read and write files, handle command-line arguments, and report errors. Source
   files and build artifacts must survive a reboot.
-- Validate online dependency retrieval, a full debugger, complex Cargo builds,
-  and compiler bootstrapping in later stages.
+- Retrieve pinned registry/Git dependencies with `cargo-online build` and rebuild
+  from the saved cache after reboot with `--offline --frozen`.
+- Validate a full debugger, broader Cargo builds and compiler bootstrapping in
+  later stages.
 
 The Linux compatibility layer may initially provide the environment for these
 tools; they still run on the AnovaOS kernel. An AnovaOS-specific target and a
@@ -175,14 +185,14 @@ cargo xtask run --disk build/disks/work.ext2 # Reuse that image; shutdown cleanl
 
 These commands now exist in the host `xtask` package. Images, caches, logs, and
 disposable firmware variable copies stay in `build/`. Normal runs use a temporary data disk; networking is opt-in with `--network`. GitHub Actions is configured to run the same checks; its status
-is reported separately from [local validation](docs/validation/M11.md).
+is reported separately from [local validation](docs/validation/M12.md).
 
 ## Next steps
 
-M12 will add guest Rust/Cargo development on top of the accepted offline C/C++
-environment. The current compiler and resource bounds are in
-[M11 toolchain](docs/M11_TOOLCHAIN.md). See [current status](docs/STATUS.md)
-and [roadmap](ROADMAP.md).
+M13 will package the verified application toolchains into a versioned SDK and
+application format. Current Rust/Cargo scope and limits are in
+[M12 Rust](docs/M12_RUST.md). See [current status](docs/STATUS.md) and
+[roadmap](ROADMAP.md).
 
 ## License
 
@@ -233,7 +243,7 @@ and `pkg remove demo`. Data under `/persist/data/demo` survives upgrades and rem
 `dns NAME` resolves IPv4 A records. HTTPS acquisition is currently restricted to
 the controlled host repository with its generated test CA. See the
 [M10 profile](docs/M10_NETWORK_PACKAGES.md) for exact commands and limitations.
-The next milestone is M12: guest Rust/Cargo application development.
+M12 adds the offline Rust/Cargo development profile below.
 
 ## M11 offline C/C++ development
 
@@ -250,3 +260,35 @@ with `edit`, then use `gcc`, `g++ -std=c++17 -pthread`, and `make` under `/persi
 C stdio/files/malloc/argv and multi-file builds, C++ string/vector/RAII/exceptions/
 threads, make incremental builds and clean reboot retention are tested. See the
 [M11 profile](docs/M11_TOOLCHAIN.md) and [acceptance evidence](docs/validation/M11.md).
+
+
+## M12 Rust/Cargo development
+
+```sh
+cargo xtask rust-build
+cargo xtask rust-image
+cargo xtask root-image --linux build/disks/rust-devel.ext2
+cargo xtask run --rust --disk build/disks/rust-devel.ext2
+cargo xtask rust-cross-test
+cargo xtask rust-runtime-test
+cargo xtask rust-test
+```
+
+The opt-in image uses 3 GiB RAM and checksum-locked official Rust 1.90.0 musl
+binary distributions, alongside the source-built M11 C tools. Guest rustc
+compiles std applications and a shared procedural macro; offline Cargo builds a
+locked vendored crate, runs build.rs and links guest-compiled C. Source edits,
+freshness, real syntax failures and execution across clean reboot are checked.
+See [M12 profile](docs/M12_RUST.md) and [acceptance evidence](docs/validation/M12.md).
+For online projects, add `--network` to `run --rust`, edit a project under
+`/persist`, and use `cargo-online build`. Its cache defaults to
+`/persist/cargo-home`; ordinary `cargo` retains the offline default. After a clean
+shutdown and reboot without a NIC, use `cargo-online build --offline --frozen`.
+
+`cargo xtask rust-online-test` verifies controlled HTTPS sparse registry/Git,
+CA/name/date checks, corrupted/truncated downloads, timeouts and a fresh offline
+rebuild. `cargo xtask rust-public-test` separately verifies pinned crates.io and
+GitHub sources; local acceptance used a reachable host proxy and public PEM roots.
+See [M12 networking](docs/M12_NETWORK.md) for configuration and resource limits.
+A native AnovaOS std port, arbitrary Cargo projects and compiler bootstrap
+remain separate work.

@@ -375,3 +375,54 @@ single-core and bounded; the development heap is 16 MiB and scheduler stack is
 256 KiB. Development Rust builds use opt-level 1 with debug information.
 See [M11_TOOLCHAIN](docs/M11_TOOLCHAIN.md) for ownership and limits and
 [M11 evidence](docs/validation/M11.md) for actual acceptance.
+
+
+## M12 implemented Rust development boundary
+
+The optional Rust archive adds independently checksum-locked upstream musl
+rustc/Cargo/std and LLVM rust-lld at `/rs`, beside M11's source-built `/tc` C
+sysroot. Linux personality remains explicit. Host tooling prepares these tools;
+actual accepted applications, build scripts and procedural macros compile in
+guest processes. Vendor archive/file checksums and Cargo.lock govern offline
+resolution. Rust source reconstruction and bootstrap are separate work.
+
+Per-thread alternate-stack state lives with Linux thread state; shared signal
+dispositions remain group-owned. Musl posix_spawn uses the explicitly supported
+shared-VM vfork process variant. Child waits use the thread-group parent identity
+and block only the calling thread. Detached Linux threads may remove their own
+stack before exit; return checks still validate user canonicality and executable
+RIP, and invalid return cannot be suppressed by ignoring/blocking SIGSEGV.
+
+VFS open descriptions own advisory locks and shared offsets. AF_UNIX packet
+pairs use two bounded pipe-pool queues, retain message boundaries and release
+peer writer/reader ownership only on the endpoint's final close. Positioned I/O
+restores its private cursor before returning to the scheduler. Bounded file
+resize/regular rename preserve open inode ownership. Empty-directory removal
+retains an open inode and reclaims it on final close; live cwd and removed-open-
+child references return busy to protect parent identities. Same-parent directory
+rename accepts only a new destination name, preserving dot-dot/parent links; ext2 mutation failure
+retains its failed-device state. The Rust linker writes through file syscalls
+rather than writable shared-file mappings. Linux-only startup, ELF
+and mmap bounds expand independently of the native ABI. Internal directory
+records carry 255-byte components and 512-byte paths; Linux getdents serializes
+these separately from native v1's fixed 80-byte record, whose adapter rejects
+unrepresentable names without advancing. mmap hints publish only
+on successful allocation. See [M12_RUST](docs/M12_RUST.md) for exact bounds and
+[acceptance](docs/validation/M12.md) for actual guest/reboot evidence.
+
+The online continuation adds Linux select with imported descriptor masks,
+monotonic deadlines and preserved signal-interruption frames. Readonly shared
+file mappings own a versioned VFS inode lease and physical-page metadata; they
+refresh successful file writes before the next user execution. Fork retains
+both owners, while munmap/exec/exit release them. Mapped inodes outlive close,
+unlink and name replacement. Writable shared-file mappings remain rejected;
+this is not persistent mmap writeback. File timestamps retain access/modify/
+change fields, and explicit ext2 updates use the existing checked disk writes.
+Ext2 import traverses nested cache directories iteratively within the node cap.
+
+`cargo-online` is an explicit launcher policy over the same official Cargo;
+networking, TLS, archive extraction and Git operate in user space. It preserves
+explicit Cargo environment settings, uses `/persist/cargo-home` by default and
+supplies the pinned public CA store without disabling verification. Ordinary
+Cargo remains offline by default. The independent controlled/public gates and
+resource/transport boundaries are in [M12_NETWORK](docs/M12_NETWORK.md).

@@ -59,7 +59,7 @@ impl<'a> Archive<'a> {
             || path_len == 0
             || path_len > 128
             || (kind == DIRECTORY && data_len != 0)
-            || data_len > 64 * 1024 * 1024
+            || data_len > 256 * 1024 * 1024
         {
             return Err(INVALID_ARGUMENT);
         }

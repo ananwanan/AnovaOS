@@ -119,6 +119,35 @@ impl Kernel {
         }
     }
     pub(in crate::task) fn linux_terminal(&mut self, i: usize, f: &TrapFrame) -> Result<i64, i64> {
+        if f.rax == 16 && f.rsi == 0x5421 {
+            let p = self.process(i);
+            let space = &p.image.as_ref().unwrap().space;
+            let mut bytes = [0; 4];
+            space
+                .with_active(|| uaccess::from_user(space, UserAddr(f.rdx), &mut bytes))
+                .map_err(errno)?;
+            self.fs
+                .set_nonblocking(
+                    &self.processes[i].as_ref().unwrap().files,
+                    f.rdi,
+                    i32::from_le_bytes(bytes) != 0,
+                )
+                .map_err(errno)?;
+            return Ok(0);
+        }
+        if f.rax == 16 && f.rsi == 0x541b {
+            let p = self.process(i);
+            let count = self
+                .fs
+                .available_bytes(&p.files, f.rdi)
+                .map_err(|e| if e == UNSUPPORTED { -25 } else { errno(e) })?;
+            let bytes = i32::try_from(count).map_err(|_| -75)?.to_le_bytes();
+            let space = &p.image.as_ref().unwrap().space;
+            space
+                .with_active(|| uaccess::to_user(space, UserAddr(f.rdx), &bytes))
+                .map_err(errno)?;
+            return Ok(0);
+        }
         if f.rax != 16 {
             let pid = self.policy.entry(i).pid;
             match f.rax {

@@ -34,6 +34,8 @@ pub fn errno(value: i64) -> i64 {
         PERMISSION_DENIED => -13,
         IO_ERROR => -5,
         DEVICE_TIMEOUT => -110,
+        BUSY => -16,
+        NOT_EMPTY => -39,
         n if n >= 0 => n,
         _ => -5,
     }

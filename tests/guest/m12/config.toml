@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: Apache-2.0
+# Select the prepared registry vendor with offline transport and one compiler job.
+[source.crates-io]
+replace-with = "vendored-sources"
+[source.vendored-sources]
+directory = "/rs/vendor"
+[net]
+offline = true

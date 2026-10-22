@@ -1,4 +1,4 @@
-<!-- Explain toolchain machine roles, implemented guest C/C++ development and future Rust/Cargo stages. -->
+<!-- Explain toolchain roles, verified guest C/C++/Rust development and bounded online transport and remaining bootstrap stages. -->
 # 从交叉编译到系统内开发
 
 ## 1. 先分清三个机器角色
@@ -111,22 +111,41 @@ make
 | R5 | proc-macro | 编译器进程加载 host 动态库、匹配 ABI 与库搜索 |
 | R6 | 在线 crates.io/Git 获取 | 网络、DNS、TLS、CA、时间及相关传输依赖 |
 
-M12 的基本开发闭环达到 R1–R3；R4–R6 分别记录，不能默认已支持。
+M12 offline acceptance covers R1–R3, build.rs/C FFI (R4), a standalone
+matching-ABI macro and a fixed Cargo macro/build-script dependency graph (R5).
+The graph checks dependency rebuilds, rejected macro input and retained outputs.
+R6 adds separately accepted strict HTTPS sparse-registry/Git downloads,
+controlled transport negatives and persisted-cache rebuilds after a no-NIC
+reboot. The public crates.io/GitHub gate uses pinned sources without vendor
+replacement; local acceptance used a configured host proxy and public PEM roots.
+See [M12_RUST](M12_RUST.md), [M12_NETWORK](M12_NETWORK.md) and
+[actual evidence](validation/M12.md).
+Rust 1.90.0/LLVM/Cargo/std are locked official musl binary distributions; this
+is not a local Rust source build or compiler self-bootstrap.
 
 build.rs 和 proc-macro 在“编译器 host”执行。交叉编译时与普通 target app 可能不同；系统内构建时也必须正确区分配置，不能把它们按内核 target 编译。
 
-### 5.3 预期验收
+### 5.3 Implemented offline workflow
 
-以下同样是未来 guest 操作目标：
+Use the optional `cargo xtask run --rust` image. These commands run in guest:
 
 ```sh
 rustc main.rs -o hello-rust
 ./hello-rust
 cargo build --offline
-cargo run --offline
+./target/debug/m12-app
 ```
 
-先测试 String/Vec、参数、文件与错误处理；再逐步加入线程、子进程、时间、构建脚本、宏和 C 依赖。在线下载与发布包是独立能力，不纳入首个离线闭环。
+The acceptance gate checks String/Vec, argv, files, threads, worker-thread child
+spawn/wait, build scripts, a shared procedural macro, C FFI, a locked vendor
+crate, no-op/source-change builds, a real syntax error and clean reboot.
+For online projects under `/persist`, start `run --rust --network` and use
+`cargo-online build`. Its cache defaults to `/persist/cargo-home`; use
+`cargo-online build --offline --frozen` after a no-NIC reboot. Ordinary `cargo`
+keeps the offline default. General Cargo projects, a native std port and bootstrap
+remain separate. Run `cargo xtask rust-build`, `rust-cross-test`,
+`rust-runtime-test`, `rust-test`, `rust-online-test` and the independent
+`rust-public-test`; complete commands and limits are in the M12 profiles.
 
 ## 6. 系统根目录和包内容
 

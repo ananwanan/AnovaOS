@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: Apache-2.0
+# Lock public registry and Git versions independently, without vendor source replacement.
+[package]
+name = "m12-public-app"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+
+[dependencies]
+itoa = "=1.0.15"
+itoa-git = { package = "itoa", git = "https://github.com/dtolnay/itoa", rev = "e2766b868e4ac1ae2bf5bea1ac43d4c0da23b899" }
+
+[profile.dev]
+opt-level = 1
+debug = 0
+strip = "symbols"
+codegen-units = 1
+incremental = false
+
+[workspace]

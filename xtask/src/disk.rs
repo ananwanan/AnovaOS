@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Create bounded regular ext2 images, attach temporary/persistent disks and verify real reboot data.
+//! Create bounded ext2 images, size Linux development inode tables and verify real reboot data.
 //! Every writable image stays below build/; existing images are never implicitly formatted.
 use super::*;
 use anova_storage::{BlockDevice, SECTOR, check_range, ext2::Ext2};
@@ -73,7 +73,7 @@ pub(super) fn create_profile(root: &Path, path: &Path, linux: bool) -> Result<()
                 "-g",
                 "4096",
                 "-N",
-                "128",
+                if linux { "512" } else { "128" },
                 "-m",
                 "0",
                 "-O",
@@ -395,6 +395,24 @@ pub(super) fn session_timeout(
     poweroff: bool,
     seconds: u64,
 ) -> Result<()> {
+    session_network(
+        root, iso, disk, name, readonly, fault, exchanges, poweroff, seconds, false,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn session_network(
+    root: &Path,
+    iso: &Path,
+    disk: &Path,
+    name: &str,
+    readonly: bool,
+    fault: Option<&str>,
+    exchanges: &[(&str, &[u8])],
+    poweroff: bool,
+    seconds: u64,
+    network: bool,
+) -> Result<()> {
     let logs = directory(root, "logs")?;
     let serial = logs.join(format!("{name}.serial.log"));
     let diagnostic = logs.join(format!("{name}.qemu.log"));
@@ -405,6 +423,9 @@ pub(super) fn session_timeout(
         fs::write(vars.0.join("blkdebug.conf"), fault)?;
     }
     let mut cmd = qemu_disk(root, iso, &vars.0, false, Some(disk), readonly)?;
+    if network {
+        network::attach(&mut cmd);
+    }
     cmd.args(["-serial", "stdio"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -443,6 +464,7 @@ pub(super) fn session_timeout(
             "[SHELL:FAIL]",
             "[FS:FAIL]",
             "[EDIT:FAIL]",
+            "edit: command/save failed; buffer retained",
             "[POWER:FAIL]",
         ]
         .iter()

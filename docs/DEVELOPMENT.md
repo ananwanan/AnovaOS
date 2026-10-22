@@ -1,3 +1,4 @@
+<!-- Describe reproducible host setup, implemented build commands and actual validation workflows. -->
 # Development and validation
 
 M0/M1 provide the Cargo workspace, host xtask, bare-metal kernel and UEFI ISO.
@@ -239,3 +240,57 @@ Use a clean guest shutdown to retain sources and binaries. Development runs
 use 1 GiB RAM, one CPU, a read-only `/tc` and a Linux-personality data disk;
 plain `run` keeps the smaller base image. See [M11_TOOLCHAIN](M11_TOOLCHAIN.md)
 for editor commands, tested features, input hashes and unsupported operations.
+
+
+## Offline guest Rust/Cargo development (M12)
+
+`cargo xtask rust-build` verifies M11 construction and prepares the checksum-locked
+upstream musl Rust 1.90.0 binary distributions, matching std/rust-lld and itoa
+vendor. `cargo xtask rust-image` independently verifies and packs
+`build/images/anova-rust.iso`; `cargo xtask run --rust` selects it with 3 GiB RAM.
+`--rust` and `--toolchain` are mutually exclusive. Use an explicit Linux-profile
+data image for retained sources and guest `shutdown` for a clean filesystem:
+
+```sh
+cargo xtask root-image --linux build/disks/rust-devel.ext2
+cargo xtask run --rust --disk build/disks/rust-devel.ext2
+cargo xtask rust-cross-test
+cargo xtask rust-runtime-test
+cargo xtask rust-test
+```
+
+The three gates separate preliminary host cross compilation, actual compiler
+startup and UART edit/guest compile/run/clean reboot. The full gate checks
+std, a procedural macro shared object, frozen offline Cargo/vendor, build.rs,
+C FFI, freshness/source edits, a real parser failure and persisted source/ELF
+hashes with e2fsck. Keep all M9/M10/M11 gates. See [M12_RUST](M12_RUST.md) and
+[validation/M12](validation/M12.md) for provenance, exact bounds and exclusions.
+
+## Opt-in online Cargo development (M12)
+
+The ordinary `cargo` launcher keeps its offline default. `cargo-online` uses the
+same official Cargo binary with online transport and a persistent Cargo home.
+Start the development image with an explicit Linux disk and virtio-net:
+
+```sh
+cargo xtask rust-image
+cargo xtask root-image --linux build/disks/rust-online.ext2
+cargo xtask run --rust --network --disk build/disks/rust-online.ext2
+```
+
+In a guest project under `/persist`, use `cargo-online build` followed by
+`cargo-online build --locked`. An independent boot without a NIC can use
+`cargo-online build --offline --frozen --target-dir rebuilt` to recompile from
+the saved cache. Guest `shutdown` is required for retained data.
+
+`cargo xtask rust-online-test` serves a deterministic HTTPS sparse registry and
+Git smart-HTTP repository, tests strict certificate checks and transfer failures,
+and checks guest compilation, filesystem integrity and a fresh offline rebuild.
+It requires Python 3, OpenSSL, Git and the existing compiler/QEMU utilities.
+`cargo xtask rust-public-test` separately downloads pinned crates.io/GitHub
+sources without source replacement. Its optional `ANOVA_CARGO_TEST_PROXY` and
+`ANOVA_CARGO_TEST_CA` inputs describe the test host's reachable HTTP proxy and
+public PEM trust roots; credentials and private keys must never be packed.
+See [M12_NETWORK](M12_NETWORK.md) for transport limits and configuration, and
+[validation/M12](validation/M12.md) for actual acceptance status. CI retains the
+deterministic online gate; the public gate depends on external availability.

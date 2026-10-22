@@ -377,7 +377,7 @@ fn retained_module(prefix: &[u8], name: &[u8]) -> &'static [u8] {
         let length = usize::try_from(module.size()).expect("Module size overflow");
         assert!(
             length > 0
-                && length <= 128 * 1024 * 1024
+                && length <= 1024 * 1024 * 1024
                 && info.entries.iter().any(|entry| entry.entry_type
                     == EntryType::EXECUTABLE_AND_MODULES
                     && physical >= entry.base

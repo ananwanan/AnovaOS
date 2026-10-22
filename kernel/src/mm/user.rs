@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Own shared user address spaces, private/shared page backing and guarded per-task kernel stacks.
+//! Own user roots, coherent readonly file/anonymous shared pages and guarded task kernel stacks.
 //! BSP mutations occur on the permanent kernel root at IF=0; user roots share upper paths.
 use super::*;
 use alloc::vec::Vec;
 use anova_abi::UserAddr;
 use anova_memory::shared::Shared;
 use core::cell::RefCell;
+mod file_mapping;
+use file_mapping::FilePage;
 
 // Trap capture returns to the separate 256 KiB scheduler stack before deep exec/ELF work.
 const STACK_BYTES: u64 = 64 * 1024;
@@ -54,6 +56,8 @@ pub fn set_test_budget(value: usize) {
 struct OwnedSpace {
     tables: Option<PageTables>,
     pages: Vec<(VirtAddr, Shared<UserFrame>)>,
+    next_mapping: u64,
+    file_pages: Vec<FilePage>,
 }
 
 struct UserFrame {
@@ -115,6 +119,49 @@ impl UserSpace {
     pub fn mapped(&self, address: u64) -> bool {
         self.0.borrow().mapped(address)
     }
+    /// Search after the last successful mapping, then wrap over the entire window.
+    /// PROT_NONE pages remain occupied. No reservation is published before allocation succeeds.
+    pub fn find_gap(&self, start: u64, end: u64, size: u64) -> Option<u64> {
+        if size == 0 || start >= end || (start | end | size) & 4095 != 0 || size > end - start {
+            return None;
+        }
+        let space = self.0.borrow();
+        let cursor = if (start..end).contains(&space.next_mapping) {
+            space.next_mapping
+        } else {
+            start
+        };
+        MEMORY.with(|slot| {
+            let manager = slot.as_mut().expect("Memory not initialized");
+            let store = manager.store();
+            let search = |from| {
+                let mut base = from;
+                let mut length = 0;
+                for page in (from..end).step_by(4096) {
+                    if space
+                        .tables
+                        .as_ref()
+                        .unwrap()
+                        .query(VirtAddr(page), &store)
+                        .is_ok()
+                    {
+                        base = page + 4096;
+                        length = 0;
+                    } else {
+                        length += 4096;
+                        if length == size {
+                            return Some(base);
+                        }
+                    }
+                }
+                None
+            };
+            search(cursor).or_else(|| if cursor != start { search(start) } else { None })
+        })
+    }
+    pub fn commit_mapping_hint(&mut self, end: u64) {
+        self.0.borrow_mut().next_mapping = end;
+    }
     pub fn share_mapping(&mut self, start: u64, end: u64) {
         for (address, frame) in &mut self.0.borrow_mut().pages {
             if (start..end).contains(&address.0) {
@@ -149,6 +196,14 @@ impl UserSpace {
         permissions: Option<Permissions>,
     ) -> Result<(), Error> {
         let mut space = self.0.borrow_mut();
+        if permissions.is_some_and(|p| p.writable)
+            && space
+                .file_pages
+                .iter()
+                .any(|p| (start..end).contains(&p.address.0))
+        {
+            return Err(Error::InvalidRange);
+        }
         if end
             .checked_sub(start)
             .and_then(|len| UserAddr(start).checked_end(len as usize))
@@ -211,6 +266,8 @@ impl OwnedSpace {
             Ok(Self {
                 tables: Some(manager.tables.new_user(&mut store)?),
                 pages: Vec::new(),
+                next_mapping: 0,
+                file_pages: Vec::new(),
             })
         })
     }
@@ -233,6 +290,10 @@ impl OwnedSpace {
     /// Eager fork copy: duplicate every leaf and permission; drop rolls back partial OOM.
     pub fn clone_eager(&self) -> Result<Self, Error> {
         let mut child = Self::new()?;
+        child
+            .file_pages
+            .try_reserve_exact(self.file_pages.len())
+            .map_err(|_| Error::OutOfMemory)?;
         for (address, source) in &self.pages {
             let (permissions, accessible) = MEMORY.with(|slot| {
                 let manager = slot.as_mut().expect("Memory not initialized");
@@ -285,6 +346,7 @@ impl OwnedSpace {
                 })?;
             }
         }
+        child.file_pages.extend(self.file_pages.iter().cloned());
         Ok(child)
     }
 
@@ -399,6 +461,7 @@ impl OwnedSpace {
                 .unmap(VirtAddr(address), &mut store)?;
             Ok::<_, Error>(())
         })?;
+        self.file_pages.retain(|p| p.address.0 != address);
         self.pages.swap_remove(index);
         Ok(())
     }

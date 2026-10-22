@@ -1,7 +1,7 @@
 <!-- Track milestone dependencies, implementation checklists and acceptance criteria. -->
 # 开发路线与阶段验收
 
-日期：2026-10-22。**M0–M11 已通过本地 q35/TCG 验收；M12–M15 尚未实现，外设 IRQ 路由启用待对应驱动。** 证据见 [M11 验证记录](docs/validation/M11.md) 与 [STATUS](docs/STATUS.md)。[FIRST_TASK](docs/FIRST_TASK.md) 记录 M0/M1 原始实现顺序；当前 M2 边界见 [CPU 基线](docs/M2_CPU.md)。
+日期：2026-10-23。**M0–M12（受限离线与联网范围）已通过本地 q35/TCG 验收；M13–M15 尚未实现，外设 IRQ 路由启用待对应驱动。** 证据见 [M12 验证记录](docs/validation/M12.md) 与 [STATUS](docs/STATUS.md)。[FIRST_TASK](docs/FIRST_TASK.md) 记录 M0/M1 原始实现顺序；当前 M2 边界见 [CPU 基线](docs/M2_CPU.md)。
 
 ## 阶段总览
 
@@ -19,7 +19,7 @@
 | M9 | 线程、信号、动态 musl | M8 | 本地验收通过；受限运行时与 PTY profile |
 | M10 | 网络和受控包安装 | M7、M9 | 本地受控 IPv4/TLS/包验收通过 |
 | M11 | 系统内 GCC/G++ 应用开发 | M7–M9；可先离线 | 本地离线 C/C++/make 验收通过 |
-| M12 | 系统内 Rust/Cargo 应用开发 | M11、M9；联网可后补 | 未开始 |
+| M12 | 系统内 Rust/Cargo 应用开发 | M11、M9；联网依赖 M10 | 离线与受限 HTTPS registry/Git 本地验收通过；原生端口独立推进 |
 | M13 | 可发布的 SDK 与应用包 | M4 基础 SDK、M11/M12 | 未开始 |
 | M14 | Rust 图形桌面与 C/C++/Rust GUI SDK（M14.1–M14.5） | M9、M13；具体依赖见 M14 文档 | 五阶段均未开始 |
 | M15 | 可选的工具链/内核自举 | M11–M13，资源满足 | 未开始 |
@@ -204,15 +204,15 @@ are outside this accepted profile.
 
 ## M12：系统内 Rust 与 Cargo
 
-- [ ] 先验证 Linux-musl 兼容 target 的交叉编译 `std` 应用，不改变内核 target。
-- [ ] 在宿主构建 guest-hosted rustc、所需 LLVM、Cargo、标准库和 linker/sysroot。
-- [ ] 在 guest 中编译、链接、运行含 Vec/String、文件 I/O、参数的小型 Rust 应用。
-- [ ] `cargo build --offline`：准备固定 registry/vendor/lockfile、依赖与配置。
-- [ ] 分别验证线程、子进程、build.rs、proc-macro `.so` 装载和 C FFI。
-- [ ] M10 完成后扩展联网 registry/Git、TLS/CA 和依赖下载。
+- [x] 先验证 Linux-musl 兼容 target 的交叉编译 `std` 应用，不改变内核 target。
+- [x] 在宿主准备校验锁定的官方 musl rustc/LLVM/Cargo/std/rust-lld 二进制包；M11 C sysroot 单独源码构建。Rust/LLVM 源码重建不在本次成果内。
+- [x] 在 guest 中编译、链接、运行含 Vec/String、文件 I/O、参数的小型 Rust 应用。
+- [x] `cargo build --offline --frozen`：准备固定 vendor、Cargo.lock、校验和与配置。
+- [x] 分别验证线程、线程内子进程等待、build.rs、proc-macro `.so` 装载和 C FFI。
+- [x] 扩展可选联网 registry/Git、严格 TLS/CA 与依赖下载；受控失败用例及经宿主代理的 crates.io/GitHub 实测通过，断网重启从保留缓存全量重编译。
 - [ ] 若要 AnovaOS 原生 target：独立实现 libc/`std` 的平台端口，不能仅改 target JSON。
 
-退出条件：guest 内编辑 Rust 源码，运行 rustc 和 Cargo 完成构建，执行产物且重启保留；运行期间无宿主远程编译。离线基本闭环与完整 Cargo 能力分项标记。原生 target 移植是另一个成果。
+退出条件：guest 内编辑 Rust 源码，运行 rustc 和 Cargo 完成构建，执行产物且重启保留；运行期间无宿主远程编译。离线基本闭环与完整 Cargo 能力分项标记。原生 target 移植是另一个成果。实际范围见 [M12 设计](docs/M12_RUST.md)、[联网范围](docs/M12_NETWORK.md) 与 [验收](docs/validation/M12.md)。
 
 ## M13：应用 SDK、包与开发体验
 

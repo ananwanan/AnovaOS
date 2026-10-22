@@ -284,6 +284,7 @@ impl Kernel {
                 process.thread.pgid = self.process(parent).thread.pgid;
                 process.thread.sid = self.process(parent).thread.sid;
                 process.thread.umask = self.process(parent).thread.umask;
+                process.thread.altstack = self.process(parent).thread.altstack;
                 self.processes[i] = Some(process);
                 self.metrics.forks += 1;
                 Ok(self.policy.entry(i).pid)
@@ -366,7 +367,32 @@ impl Kernel {
         self.metrics.reaps += 1;
     }
     fn wait(&mut self, i: usize, pid: u64, output: UserAddr) -> Option<i64> {
-        let child = match self.policy.wait(i, pid) {
+        let process = self.process(i);
+        let result = if process.image.as_ref().unwrap().linux
+            && process.thread.tgid != self.policy.entry(i).pid
+        {
+            let group = process.thread.tgid;
+            let mut found = false;
+            let child = (0..CAPACITY).find(|&k| {
+                let entry = self.policy.entry(k);
+                let eligible = entry.parent == group
+                    && entry.state != State::Empty
+                    && (pid == 0 || entry.pid == pid);
+                found |= eligible;
+                eligible && matches!(entry.state, State::Zombie(_))
+            });
+            if child.is_some() {
+                Ok(child)
+            } else if found {
+                self.policy.block(i);
+                Ok(None)
+            } else {
+                Err(NO_CHILD)
+            }
+        } else {
+            self.policy.wait(i, pid)
+        };
+        let child = match result {
             Ok(Some(child)) => child,
             Ok(None) => {
                 self.process_mut(i).wait = Some((pid, output));
@@ -403,10 +429,17 @@ impl Kernel {
         let valid = frame.cs == 0x33
             && frame.ss == 0x2b
             && space.accessible(UserAddr(frame.rip), 1, false, true)
-            && frame
-                .rsp
-                .checked_sub(8)
-                .is_some_and(|a| space.accessible(UserAddr(a), 8, true, false));
+            && if p.image.as_ref().unwrap().linux {
+                // musl detached threads munmap their own stack immediately before
+                // SYS_exit. IRETQ and intervening IRQs use the trusted kernel stack;
+                // CPL3 stack access is faulted when actually attempted, not predicted.
+                UserAddr(frame.rsp).checked_end(0).is_some()
+            } else {
+                frame
+                    .rsp
+                    .checked_sub(8)
+                    .is_some_and(|a| space.accessible(UserAddr(a), 8, true, false))
+            };
         frame.rflags = (frame.rflags & 0xcd5) | 0x202;
         valid
     }
@@ -587,6 +620,11 @@ impl Kernel {
         let mut previous = None;
         let mut preempted = false;
         loop {
+            if let Err(error) = self.fs.collect_mappings() {
+                serial::write(format_args!(
+                    "[FS:FAIL] mapped inode cleanup error={error}\n"
+                ));
+            }
             if let Some(net) = self.network.as_mut() {
                 net.collect(|id| self.fs.socket_live(id));
                 net.poll();
@@ -597,7 +635,9 @@ impl Kernel {
                 if self.policy.entry(i).state == State::Blocked {
                     let p = self.process(i);
                     if p.io.as_ref().is_some_and(|f| {
-                        if self.fs.socket_id(&p.files, f.rdi).ok().flatten().is_some() {
+                        if self.fs.socket_id(&p.files, f.rdi).ok().flatten().is_some()
+                            || self.fs.is_packet(&p.files, f.rdi)
+                        {
                             return self.socket_ready(i, f);
                         }
                         fs::ready(
@@ -711,6 +751,11 @@ impl Kernel {
             CAPTURE.store(&mut capture, Ordering::Release);
             let top = p.stack.as_ref().expect("Missing kernel stack").top();
             traps::set_kernel_stack(top);
+            p.image
+                .as_ref()
+                .expect("Missing image")
+                .space
+                .refresh_file_pages();
             p.context
                 .run(p.image.as_ref().expect("Missing image").space.root().0, top);
             CAPTURE.store(ptr::null_mut(), Ordering::Release);

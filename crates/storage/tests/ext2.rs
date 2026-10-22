@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Exercise real ext2 bytes, allocation/indirection/reboot invariants and injected device failures.
+//! Exercise real ext2 bytes, timestamp/reboot invariants, allocation and injected device failures.
 //! The in-memory sector device shares its backing state only with this deterministic test harness.
 use anova_abi::*;
 use anova_storage::{
@@ -13,6 +13,37 @@ struct State {
     writes: usize,
     fail_write: Option<usize>,
     fail_flush: bool,
+}
+#[test]
+fn explicit_timestamps_preserve_omitted_fields_and_survive_clean_reboot() {
+    let device = fixture();
+    let mut fs = mount(&device);
+    fs.set_clock(9000);
+    let inode = fs.create(2, "timestamp", false).unwrap();
+    fs.write(inode, 0, b"T").unwrap();
+    fs.set_times(inode, Some(111), Some(222)).unwrap();
+    let info = fs.inode(inode).unwrap();
+    assert_eq!(
+        (info.accessed, info.modified, info.changed),
+        (111, 222, 9000)
+    );
+    fs.set_clock(10000);
+    fs.set_times(inode, None, Some(333)).unwrap();
+    fs.shutdown().unwrap();
+    drop(fs);
+    let mut fs = mount(&device);
+    let info = fs.inode(inode).unwrap();
+    assert_eq!(
+        (info.accessed, info.modified, info.changed),
+        (111, 333, 10000)
+    );
+    fs.set_clock(11000);
+    fs.write(inode, 0, b"U").unwrap();
+    assert_eq!(fs.inode(inode).unwrap().modified, 11000);
+    let writes = device.0.borrow().writes;
+    device.0.borrow_mut().fail_write = Some(writes + 1);
+    assert_eq!(fs.set_times(inode, Some(1), Some(2)), Err(IO_ERROR));
+    assert_eq!(fs.set_times(inode, Some(3), Some(4)), Err(IO_ERROR));
 }
 #[derive(Clone)]
 struct Memory(Rc<RefCell<State>>);

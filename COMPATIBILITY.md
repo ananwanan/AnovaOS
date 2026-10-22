@@ -1,7 +1,12 @@
-<!-- Separate verified native support from planned existing-software ABI compatibility. -->
+<!-- Record verified native/Linux profiles and remaining existing-software compatibility boundaries. -->
 # 现有软件兼容策略
 
-本文记录兼容策略与验证矩阵。当前 **M0–M9 已验证 native Rust/C、持久存储、受限 BusyBox 1.36.1 CLI，以及 musl 1.2.4 静态、静态 PIE、动态 ELF 和 pthread/TLS/futex、信号、poll、PTY 子集。** 不代表通用 Linux 或 glibc 兼容。静态起点见 [M8_LINUX](docs/M8_LINUX.md)，当前运行时边界见 [M9_RUNTIME](docs/M9_RUNTIME.md)。
+The locally verified M0–M12 baseline covers native Rust/C applications, persistent
+storage, the pinned BusyBox CLI and static/PIE/dynamic musl runtime subset,
+controlled M10 networking/packages, M11 C/C++ development and M12 bounded
+offline/online Rust/Cargo development. This establishes the versioned profiles below, not
+general Linux/glibc compatibility. See [M9 runtime](docs/M9_RUNTIME.md) and
+[M12 Rust](docs/M12_RUST.md) for current bounds.
 
 ## 1. 兼容层次
 
@@ -82,8 +87,8 @@ musl 和 glibc 是不同的用户态组合。不能混用不匹配的解释器�
 | musl 静态/静态 PIE/动态 pthread 样例 | M9 | 线程同步、join、futex、信号返回、poll、PTY | q35/TCG 本地通过；完整边界见 M9_RUNTIME |
 | GNU make 4.4.1 与 binutils 2.37 | M11 | 子进程、文件时间、无改动/选择性增量构建 | q35/TCG 本地通过；离线 profile |
 | GCC/G++ 11.2.0 受控构建包 | M11 | guest 内编译/链接 C 与 C++、异常和线程 | q35/TCG 本地通过；完整边界见 M11_TOOLCHAIN |
-| Rust `std` app | M12 前期 | Vec/String、参数、文件 I/O | 计划 |
-| rustc/Cargo 受控构建包 | M12 | guest 内 Rust 与离线依赖 | 计划 |
+| Rust 1.90.0 `std` app | M12 | Vec/String、参数、文件、线程与线程内子进程 | q35/TCG 本地通过；musl target |
+| rustc/Cargo 1.90.0 受控二进制包 | M12 | 系统内 std、离线 vendor、build.rs/C FFI、过程宏 | q35/TCG 本地通过；范围见 M12_RUST |
 | SQLite CLI 等可移植工具 | M13 后按需 | 数据写入、锁、持久化 | 计划 |
 | 指定 glibc CLI 软件 | M14 子任务 | 指定版本的受测行为 | 计划 |
 | SDL/图形软件 | M14 子任务 | 软件渲染、窗口与输入 | 计划 |
@@ -131,7 +136,7 @@ timeouts, poll/nonblocking behavior and signal interruption. Actual guest DNS A,
 TLS 1.2 and package clients are tested. File readv, dup and restricted chmod(0755)
 complete their measured runtime needs. Existing musl static/PIE/dynamic hashes
 remain the M9 baseline. This does not establish curl, wget, musl getaddrinfo,
-TCP servers, socket vectored/message APIs, AF_UNIX, IPv6 or arbitrary Linux
+TCP servers, general socket vectored/message APIs, filesystem AF_UNIX, IPv6 or arbitrary Linux
 network application support. Unsupported interfaces return real errors.
 
 ## Verified M11 offline compiler profile
@@ -148,3 +153,50 @@ M11 adds real vfork parent suspension, private file snapshots, mode/umask and
 resource-query support; optional unsupported compiler probes return ENOSYS.
 Exact bounds and exclusions: [M11_TOOLCHAIN](docs/M11_TOOLCHAIN.md).
 Actual logs and file hashes: [M11 acceptance](docs/validation/M11.md).
+
+
+## Verified M12 offline Rust profile
+
+Official checksum-locked Rust 1.90.0 `x86_64-unknown-linux-musl` rustc/Cargo/std
+and rust-lld run on the AnovaOS kernel. A host cross test is preliminary;
+acceptance binaries compile from UART-edited sources inside the guest. Separate
+tests cover std/threads/child output, compiler startup, a standalone procedural macro,
+locked offline itoa, build.rs generated input/environment and guest GCC/ar C FFI.
+The fixed Cargo macro graph includes an ordinary host/build dependency, generated
+macro input, transitive rebuilds from 42 to 84, invalid-input status 101 and an
+unchanged runnable prior application, followed by a successful source repair.
+Cargo freshness/source edits, a real parser failure, disk hashes, e2fsck and
+reboot execution are checked. Runtime tests include alternate signal stacks,
+detached exit, invalid-return faults, positioned/resized files and OFD locks.
+
+This establishes the bounded profile in [M12_RUST](docs/M12_RUST.md), not general
+Cargo/ecosystem compatibility. Arbitrary macro graphs, native AnovaOS std
+and Rust/LLVM source construction/bootstrap remain unverified.
+M12 also adds bounded anonymous AF_UNIX SOCK_SEQPACKET pairs; SOCK_STREAM
+pairs remain rejected with ESOCKTNOSUPPORT. Linux/VFS names and paths use
+255/512-byte bounds without changing native v1 directory wire records.
+Actual logs and hashes: [M12 acceptance](docs/validation/M12.md).
+
+
+## Verified M12 online Cargo profile
+
+The same official Cargo 1.90.0 downloads a checksum-pinned crate from an HTTPS
+sparse registry and a full-revision Git dependency over HTTPS smart HTTP.
+`cargo-online` selects this opt-in transport and `/persist/cargo-home`; ordinary
+Cargo remains offline by default. Independent controlled-peer tests reject
+untrusted/expired/wrong-name certificates, corrupt/truncated archives and an
+application timeout. Guest compilation, no-op builds and fresh-target rebuilds
+after a no-NIC reboot preserve inspected source/cache/lockfile/ELF hashes.
+
+The separate public gate downloads crates.io itoa 1.0.15 and GitHub dtolnay/itoa
+revision `e2766b868e4ac1ae2bf5bea1ac43d4c0da23b899` without source replacement.
+Local public acceptance uses a configured host HTTP proxy and public PEM roots;
+direct public DNS/transport is not established. It does not imply arbitrary
+Cargo projects, private registry credentials, SSH, Cargo publish or IPv6.
+
+Runtime coverage adds select/readiness/deadline/EINTR, actual file timestamps,
+readonly shared-file coherence and inode lifetime across fork/close/unlink/name
+replacement, an actual readonly write fault, and real heap OOM/reuse. Writable
+shared-file mappings and persistent mmap writeback remain rejected. Exact bounds
+and configuration: [M12_NETWORK](docs/M12_NETWORK.md). Actual command results:
+[M12 acceptance](docs/validation/M12.md).

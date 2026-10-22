@@ -15,11 +15,19 @@ pub(in crate::task) enum Blocked {
         frame: TrapFrame,
         deadline: Option<u64>,
     },
+    Select {
+        frame: TrapFrame,
+        sets: [u32; 3],
+        deadline: Option<u64>,
+    },
     Sleep {
         deadline: u64,
         remaining: u64,
     },
     Signal,
+    FileLock {
+        frame: TrapFrame,
+    },
 }
 #[derive(Clone, Copy)]
 pub(in crate::task) struct SignalInfo {
@@ -39,6 +47,7 @@ pub(crate) struct Thread {
     // A vfork parent cannot run or deliver handlers while its child shares this root.
     pub vfork_child: Option<(u64, usize)>,
     pub umask: u16,
+    pub altstack: super::signals::AltStack,
     pub info: [SignalInfo; 64],
 }
 impl Thread {
@@ -53,6 +62,7 @@ impl Thread {
             saved_mask: None,
             vfork_child: None,
             umask: 0o022,
+            altstack: super::signals::AltStack::default(),
             info: [SignalInfo {
                 sender: 0,
                 code: 128,
@@ -92,6 +102,28 @@ pub(in crate::task) fn deadline(
 }
 impl Kernel {
     pub(in crate::task) fn linux_clone(&mut self, i: usize, f: &TrapFrame) -> Result<u64, i64> {
+        if f.rdi == 0x4111 {
+            // musl posix_spawn: a distinct child stack on a shared, suspended-parent root.
+            if !self.process(i).image.as_ref().unwrap().space.accessible(
+                UserAddr(f.rsi.saturating_sub(16)),
+                16,
+                true,
+                false,
+            ) {
+                return Err(-14);
+            }
+            let pid = self.fork_space(i, true).map_err(errno)?;
+            let child = (0..CAPACITY)
+                .find(|&k| self.policy.entry(k).pid == pid)
+                .unwrap();
+            self.process_mut(child).context.frame.rsp = f.rsi;
+            // Linux disables inherited alternate stacks for CLONE_VM without CLONE_VFORK;
+            // this CLONE_VFORK variant keeps the parent's registration until exec resets it.
+            let identity = self.process(i).image.as_ref().unwrap().space.identity();
+            self.process_mut(i).thread.vfork_child = Some((pid, identity));
+            self.policy.block(i);
+            return Ok(pid);
+        }
         if f.rdi == 17 && f.rsi == 0 {
             return self.fork(i).map_err(errno);
         }
@@ -425,8 +457,38 @@ impl Kernel {
                 self.policy.ready(i);
                 continue;
             }
+            if let Some((target, _)) = self.process(i).wait {
+                let group = self.process(i).thread.tgid;
+                let mut any = false;
+                let mut ready = false;
+                for k in 0..CAPACITY {
+                    let entry = self.policy.entry(k);
+                    if entry.parent == group
+                        && entry.state != State::Empty
+                        && (target == 0 || entry.pid == target)
+                    {
+                        any = true;
+                        ready |= matches!(entry.state, State::Zombie(_));
+                    }
+                }
+                if ready || !any {
+                    self.policy.ready(i);
+                }
+            }
             let blocked = self.process(i).thread.blocked;
             let result = match blocked {
+                Some(Blocked::FileLock { frame }) => {
+                    let mode = if frame.rsi & 1 != 0 { 1 } else { 2 };
+                    match self.fs.try_lock(
+                        &self.processes[i].as_ref().unwrap().files,
+                        frame.rdi,
+                        mode,
+                    ) {
+                        Ok(()) => Some(0),
+                        Err(WOULD_BLOCK) => None,
+                        Err(e) => Some(errno(e)),
+                    }
+                }
                 Some(Blocked::Futex {
                     deadline: Some(d), ..
                 }) if apic::ticks() >= d => Some(-110),
@@ -439,6 +501,13 @@ impl Kernel {
                         None
                     }
                 }
+                Some(Blocked::Select {
+                    frame,
+                    sets,
+                    deadline,
+                }) => self
+                    .select_result(i, &frame, sets, deadline)
+                    .unwrap_or_else(Some),
                 _ => None,
             };
             if let Some(result) = result {

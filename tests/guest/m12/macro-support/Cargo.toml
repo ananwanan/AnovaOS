@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: Apache-2.0
+# Supply the path dependency used by both the procedural macro and its build script.
+[package]
+name = "m12-macro-support"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"

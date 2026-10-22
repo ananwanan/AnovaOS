@@ -1,7 +1,254 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Test VFS paths, shared file/socket descriptor ownership, pipe shutdown and bounded rollback.
+//! Test VFS paths, shared file/socket/mapping ownership, pipe shutdown and bounded rollback.
 use super::*;
 use alloc::vec;
+#[test]
+fn shared_file_maps_observe_writes_and_pin_removed_replaced_inodes() {
+    let image = image();
+    let mut fs = Vfs::new(&image).unwrap();
+    let mut fds = Descriptors::default();
+    let fd = fs
+        .open(
+            &mut fds,
+            ROOT,
+            "/tmp/mapped",
+            OPEN_CREATE | OPEN_READ | OPEN_WRITE,
+        )
+        .unwrap();
+    fs.write(&fds, fd, b"original").unwrap();
+    let identity = fs.metadata(ROOT, "/tmp/mapped").unwrap().0;
+    let mapping = fs.shared_file_mapping(&fds, fd, 0, 4096).unwrap();
+    assert_eq!(fs.seek(&fds, fd, 0, 1), Ok(8));
+    let version = mapping.version();
+    fs.write_at(&fds, fd, 2, b"XY").unwrap();
+    let mut bytes = [0; 16];
+    mapping.copy_into(0, &mut bytes);
+    assert_eq!(&bytes[..8], b"orXYinal");
+    assert_ne!(mapping.version(), version);
+    assert_eq!(fs.set_len(&fds, fd, 4), Err(BUSY));
+    assert_eq!(
+        fs.open(&mut fds, ROOT, "/tmp/mapped", OPEN_WRITE | OPEN_TRUNCATE),
+        Err(BUSY)
+    );
+    fs.set_len(&fds, fd, 12).unwrap();
+    fs.write_at(&fds, fd, 10, b"Z").unwrap();
+    mapping.copy_into(0, &mut bytes);
+    assert_eq!(&bytes[8..12], b"\0\0Z\0");
+    fs.close(&mut fds, fd).unwrap();
+    fs.unlink(ROOT, "/tmp/mapped").unwrap();
+    fs.collect_mappings().unwrap();
+    let replacement = fs
+        .open(
+            &mut fds,
+            ROOT,
+            "/tmp/mapped",
+            OPEN_CREATE | OPEN_READ | OPEN_WRITE,
+        )
+        .unwrap();
+    fs.write(&fds, replacement, b"replacement").unwrap();
+    assert_ne!(identity, fs.metadata(ROOT, "/tmp/mapped").unwrap().0);
+    mapping.copy_into(0, &mut bytes);
+    assert_eq!(&bytes[..8], b"orXYinal");
+    drop(mapping);
+    fs.collect_mappings().unwrap();
+    fs.set_len(&fds, replacement, 0).unwrap();
+    fs.clear(&mut fds);
+    assert_eq!(fs.live_objects(), (0, 0));
+}
+#[test]
+fn removed_directories_retain_open_identity_and_reclaim_after_final_close() {
+    let image = image();
+    let mut fs = Vfs::new(&image).unwrap();
+    let mut fds = Descriptors::default();
+    fs.mkdir(ROOT, "/tmp/remove").unwrap();
+    let node = fs.chdir(ROOT, "/tmp/remove").unwrap();
+    let directory = fs
+        .open(&mut fds, ROOT, "/tmp/remove", OPEN_READ | OPEN_DIRECTORY)
+        .unwrap();
+    let child = fs
+        .open(&mut fds, node, "child", OPEN_CREATE | OPEN_WRITE)
+        .unwrap();
+    assert_eq!(fs.rmdir(ROOT, "/tmp/remove", &[]), Err(NOT_EMPTY));
+    fs.unlink(node, "child").unwrap();
+    fs.close(&mut fds, child).unwrap();
+    assert_eq!(fs.rmdir(ROOT, "/tmp/remove", &[node]), Err(BUSY));
+    fs.rmdir(ROOT, "/tmp/remove", &[]).unwrap();
+    assert!(fs.peek_readdir(&fds, directory).unwrap().is_none());
+    assert_eq!(fs.mkdir(node, "resurrect"), Err(NOT_FOUND));
+    fs.mkdir(ROOT, "/tmp/remove").unwrap();
+    assert_ne!(fs.chdir(ROOT, "/tmp/remove").unwrap(), node);
+    fs.close(&mut fds, directory).unwrap();
+    fs.rmdir(ROOT, "/tmp/remove", &[]).unwrap();
+    assert_eq!(fs.rmdir(ROOT, "/tmp", &[]), Err(BUSY));
+    fs.mkdir(ROOT, "/tmp/parent").unwrap();
+    fs.mkdir(ROOT, "/tmp/parent/child").unwrap();
+    let held = fs
+        .open(
+            &mut fds,
+            ROOT,
+            "/tmp/parent/child",
+            OPEN_READ | OPEN_DIRECTORY,
+        )
+        .unwrap();
+    fs.rmdir(ROOT, "/tmp/parent/child", &[]).unwrap();
+    assert_eq!(fs.rmdir(ROOT, "/tmp/parent", &[]), Err(BUSY));
+    fs.close(&mut fds, held).unwrap();
+    fs.rmdir(ROOT, "/tmp/parent", &[]).unwrap();
+    for _ in 0..NODE_LIMIT + 1 {
+        fs.mkdir(ROOT, "/tmp/reuse").unwrap();
+        fs.rmdir(ROOT, "/tmp/reuse", &[]).unwrap();
+    }
+    fs.clear(&mut fds);
+    assert_eq!(fs.live_objects(), (0, 0));
+}
+#[test]
+fn extended_names_keep_native_wire_records_bounded_and_failed_reads_unconsumed() {
+    let image = image();
+    let mut fs = Vfs::new(&image).unwrap();
+    let mut fds = Descriptors::default();
+    fs.mkdir(ROOT, "/tmp/names").unwrap();
+    let name = "n".repeat(NAME_BYTES);
+    let path = alloc::format!("/tmp/names/{name}");
+    let file = fs
+        .open(&mut fds, ROOT, &path, OPEN_CREATE | OPEN_WRITE)
+        .unwrap();
+    fs.write(&fds, file, b"long name").unwrap();
+    let directory = fs
+        .open(&mut fds, ROOT, "/tmp/names", OPEN_READ | OPEN_DIRECTORY)
+        .unwrap();
+    assert!(matches!(fs.readdir(&fds, directory), Err(TOO_LONG)));
+    let entry = fs.peek_readdir(&fds, directory).unwrap().unwrap();
+    assert_eq!(&entry.name[..entry.name_len as usize], name.as_bytes());
+    fs.advance_readdir(&fds, directory).unwrap();
+    assert!(fs.peek_readdir(&fds, directory).unwrap().is_none());
+    assert_eq!(
+        fs.open(
+            &mut fds,
+            ROOT,
+            &alloc::format!("{path}x"),
+            OPEN_CREATE | OPEN_WRITE
+        ),
+        Err(TOO_LONG)
+    );
+    assert_eq!(
+        fs.metadata(ROOT, &"n".repeat(PATH_BYTES + 1)),
+        Err(TOO_LONG)
+    );
+    fs.clear(&mut fds);
+    assert_eq!(fs.live_objects(), (0, 0));
+}
+#[test]
+fn packet_pairs_preserve_messages_duplex_backpressure_and_last_close() {
+    let image = image();
+    let mut fs = Vfs::new(&image).unwrap();
+    let mut fds = Descriptors::default();
+    let [a, b] = fs.packet_pair(&mut fds).unwrap();
+    fs.write(&fds, a, b"first").unwrap();
+    fs.write(&fds, a, b"next").unwrap();
+    let mut short = [0; 2];
+    assert_eq!(fs.read(&fds, b, &mut short).unwrap(), 2);
+    assert_eq!(&short, b"fi");
+    let mut bytes = [0; PACKET_BYTES];
+    assert_eq!(fs.read(&fds, b, &mut bytes).unwrap(), 4);
+    assert_eq!(&bytes[..4], b"next");
+    assert_eq!(fs.read(&fds, b, &mut bytes), Err(WOULD_BLOCK));
+    fs.write(&fds, b, b"reverse").unwrap();
+    assert_eq!(fs.read(&fds, a, &mut bytes).unwrap(), 7);
+    assert_eq!(&bytes[..7], b"reverse");
+    fs.write(&fds, a, &bytes).unwrap();
+    assert_eq!(fs.write(&fds, a, b"x"), Err(WOULD_BLOCK));
+    assert_eq!(fs.read(&fds, b, &mut bytes).unwrap(), PACKET_BYTES);
+    fs.write(&fds, a, &[]).unwrap();
+    assert!(fs.readiness(&fds, b).unwrap().0);
+    assert_eq!(fs.read(&fds, b, &mut []).unwrap(), 0);
+    assert_eq!(fs.read(&fds, b, &mut bytes), Err(WOULD_BLOCK));
+    let mut child = fs.inherit(&fds).unwrap();
+    fs.clear(&mut fds);
+    assert_eq!(fs.read(&child, a, &mut bytes), Err(WOULD_BLOCK));
+    fs.close(&mut child, b).unwrap();
+    assert_eq!(fs.read(&child, a, &mut bytes).unwrap(), 0);
+    assert_eq!(fs.write(&child, a, b"x"), Err(BROKEN_PIPE));
+    fs.clear(&mut child);
+    assert_eq!(fs.live_objects(), (0, 0));
+    for _ in 0..PIPE_LIMIT / 2 {
+        fs.packet_pair(&mut fds).unwrap();
+    }
+    assert_eq!(fs.packet_pair(&mut fds), Err(FILE_LIMIT));
+    assert_eq!(fds.count(), PIPE_LIMIT);
+    fs.clear(&mut fds);
+    assert_eq!(fs.live_objects(), (0, 0));
+}
+#[test]
+fn rename_replacement_preserves_open_bytes_and_description_lock_lifetime() {
+    let image = image();
+    let mut fs = Vfs::new(&image).unwrap();
+    let mut fds = Descriptors::default();
+    let a = fs
+        .open(
+            &mut fds,
+            ROOT,
+            "/tmp/a",
+            OPEN_READ | OPEN_WRITE | OPEN_CREATE,
+        )
+        .unwrap();
+    let b = fs
+        .open(
+            &mut fds,
+            ROOT,
+            "/tmp/b",
+            OPEN_READ | OPEN_WRITE | OPEN_CREATE,
+        )
+        .unwrap();
+    fs.write(&fds, a, b"new").unwrap();
+    fs.write_at(&fds, a, 1, b"E").unwrap();
+    assert_eq!(fs.seek(&fds, a, 0, 1).unwrap(), 3);
+    let mut positioned = [0; 3];
+    assert_eq!(fs.read_at(&fds, a, 0, &mut positioned).unwrap(), 3);
+    assert_eq!(&positioned, b"nEw");
+    assert_eq!(fs.seek(&fds, a, 0, 1).unwrap(), 3);
+    fs.write(&fds, b, b"old").unwrap();
+    fs.seek(&fds, b, 0, 0).unwrap();
+    fs.rename(ROOT, "/tmp/a", "/tmp/b").unwrap();
+    assert_eq!(fs.metadata(ROOT, "/tmp/a"), Err(NOT_FOUND));
+    let new = fs.open(&mut fds, ROOT, "/tmp/b", OPEN_READ).unwrap();
+    let mut bytes = [0; 3];
+    assert_eq!(fs.read(&fds, b, &mut bytes).unwrap(), 3);
+    assert_eq!(&bytes, b"old");
+    fs.set_len(&fds, b, 2).unwrap();
+    fs.set_len(&fds, b, 6).unwrap();
+    assert_eq!(fs.seek(&fds, b, 0, 1).unwrap(), 3);
+    let mut grown = [0xff; 6];
+    assert_eq!(fs.read_at(&fds, b, 0, &mut grown).unwrap(), 6);
+    assert_eq!(&grown, b"ol\0\0\0\0");
+    assert_eq!(fs.set_len(&fds, b, FILE_BYTES + 1), Err(NO_SPACE));
+    assert_eq!(fs.set_len(&fds, new, 0), Err(BAD_DESCRIPTOR));
+    fs.try_lock(&fds, a, 2).unwrap();
+    assert_eq!(fs.try_lock(&fds, new, 1), Err(WOULD_BLOCK));
+    let dup = fs.dup2(&mut fds, a, 20).unwrap();
+    fs.close(&mut fds, a).unwrap();
+    assert_eq!(fs.try_lock(&fds, new, 2), Err(WOULD_BLOCK));
+    fs.close(&mut fds, dup).unwrap();
+    fs.try_lock(&fds, new, 2).unwrap();
+    assert_eq!(fs.rename(ROOT, "/tmp/b", "/etc/text"), Err(READ_ONLY));
+    fs.mkdir(ROOT, "/tmp/staging").unwrap();
+    let directory = fs.chdir(ROOT, "/tmp/staging").unwrap();
+    fs.mkdir(ROOT, "/tmp/staging/child").unwrap();
+    fs.mkdir(ROOT, "/tmp/other").unwrap();
+    fs.rename(ROOT, "/tmp/staging", "/tmp/installed").unwrap();
+    assert_eq!(fs.chdir(ROOT, "/tmp/installed").unwrap(), directory);
+    assert_eq!(fs.metadata(ROOT, "/tmp/staging"), Err(NOT_FOUND));
+    assert!(fs.chdir(ROOT, "/tmp/installed/child").is_ok());
+    assert_eq!(
+        fs.rename(ROOT, "/tmp/installed", "/tmp/other"),
+        Err(UNSUPPORTED)
+    );
+    assert_eq!(
+        fs.rename(ROOT, "/tmp/installed", "/tmp/other/sub"),
+        Err(UNSUPPORTED)
+    );
+    fs.clear(&mut fds);
+    assert_eq!(fs.live_objects(), (0, 0));
+}
 #[test]
 fn shared_thread_table_publishes_close_and_releases_only_on_last_owner() {
     let image = image();

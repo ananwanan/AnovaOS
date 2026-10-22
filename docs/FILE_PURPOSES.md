@@ -58,8 +58,8 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `docs/M14_GUI.md` | Plan the Rust-native GUI, C ABI and C/C++/Rust SDK architecture, security boundaries, five stage gates and limits. |
 | `docs/REFERENCES.md` | Primary architecture, protocol, ABI and toolchain reference links. |
 | `docs/REQUIREMENTS.md` | Owner-mandated DEV-001 file-purpose rules and DEV-002 native GUI/SDK milestones. |
-| `docs/STATUS.md` | Record verified M0–M11 capabilities, the next M12 Rust/Cargo task and unimplemented M14 GUI design. |
-| `docs/TOOLCHAINS.md` | Distinguish accepted guest GCC/G++ from planned Rust/Cargo and optional compiler self-hosting. |
+| `docs/STATUS.md` | Record verified M0–M12 offline capabilities, the next M13 SDK task and unimplemented M14 GUI design. |
+| `docs/TOOLCHAINS.md` | Distinguish guest C/C++/Rust application builds from online Cargo and optional compiler self-hosting. |
 | `docs/validation/M0-M1.md` | Historical local engineering/boot acceptance evidence and input hashes. |
 | `docs/validation/M2.md` | Historical local CPU/timer/trap validation evidence and limitations. |
 | `docs/validation/M3.md` | Historical local memory/protection/OOM validation evidence and limitations. |
@@ -217,3 +217,51 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `docs/M11_TOOLCHAIN.md` | Define the offline source-built GCC profile, resource/ownership boundaries and acceptance workflow. |
 | `docs/validation/M11.md` | Record actual M11 source-build inputs, guest outputs, negative cases and complete regression evidence. |
 | `docs/third-party/m11.md` | Record pinned compiler licenses, source obligations and the local-validation distribution boundary. |
+
+## M12 Rust development files
+
+| File | Responsibility |
+| --- | --- |
+| `docs/third-party/m12.md` | Record official Rust/Cargo/LLVM distribution provenance, licenses and unwinder boundaries. |
+| `ports/rust/build.py` | Verify archives, isolate strip scratch output and publish the inventoried guest Rust sysroot. |
+| `ports/rust/inputs.json` | Lock official Rust musl binary archives and the vendored itoa registry checksum. |
+| `tests/guest/m12/Cargo.lock` | Generated lockfile for the fixed offline guest registry dependency; do not hand-edit. |
+| `tests/guest/m12/Cargo.toml` | Define the M12 offline Rust/Cargo acceptance fixture and its declared behavior. |
+| `tests/guest/m12/bad.rs` | Deliberately fail guest Rust parsing and verify nonzero status and retained earlier outputs. |
+| `tests/guest/m12/build.rs` | Run guest GCC/ar, generate OUT_DIR input and configure Rust FFI linkage. |
+| `tests/guest/m12/cargo.rs` | Define the M12 offline Rust/Cargo acceptance fixture and its declared behavior. |
+| `tests/guest/m12/config.toml` | Define the M12 offline Rust/Cargo acceptance fixture and its declared behavior. |
+| `tests/guest/m12/main.rs` | Define the M12 offline Rust/Cargo acceptance fixture and its declared behavior. |
+| `tests/guest/m12/runtime.c` | Exercise invalid return/detached exit, alternate signals, positioned/resized files and OFD locks in a real guest. |
+| `user/linux/rust.c` | Configure offline Rust/Cargo execution and the isolated guest sysroot and linker. |
+| `xtask/src/rust.rs` | Build Rust images, exercise real guest compilation and independently inspect rebooted source and ELF files. |
+| `docs/M12_RUST.md` | Specify the optional Rust/Cargo profile, construction commands, ownership and separate acceptance gates. |
+| `docs/validation/M12.md` | Record actual M12 guest compilation, feature-specific evidence and inherited regression results. |
+| `tests/guest/m12/helper.c` | Provide the C function compiled by guest build.rs and statically linked through Rust FFI. |
+| `tests/guest/m12/macro.rs` | Export a real procedural macro compiled into a guest shared library. |
+| `tests/guest/m12/macro/Cargo.toml` | Define the Cargo procedural macro and its runtime/build path dependency. |
+| `tests/guest/m12/macro/build.rs` | Generate macro input and environment from the host support crate. |
+| `tests/guest/m12/macro/src/lib.rs` | Expand the Cargo macro from generated input and reject unexpected tokens. |
+| `tests/guest/m12/macro-support/Cargo.toml` | Define the shared host dependency for the macro and its build script. |
+| `tests/guest/m12/macro-support/src/lib.rs` | Supply the edited value used to verify transitive Cargo rebuilds. |
+| `tests/guest/m12/use_macro.rs` | Require actual loading/expansion of the guest-built macro and validate its result. |
+| `tests/guest/m12/plain/Cargo.toml` | Define an independent dependency-free offline Cargo acceptance project. |
+| `tests/guest/m12/plain/Cargo.lock` | Cargo-generated lock for the dependency-free guest project; do not hand-edit. |
+| `tests/guest/m12/plain/src/main.rs` | Run an actual guest-built dependency-free Cargo executable and check its output. |
+
+## M12 online Cargo continuation
+
+| File | Purpose |
+| --- | --- |
+| `docs/M12_NETWORK.md` | Describe the in-progress online Cargo commands, runtime limits, trust inputs and independent acceptance gates. |
+| `xtask/src/rust_online.rs` | Verify real guest HTTPS sparse-registry/Git acquisition, strict transport failures and offline reboot cache reuse. |
+| `tests/guest/m12_online_peer.py` | Serve deterministic source archives and revision-locked Git smart HTTP with real TLS trust/name/date and transfer-failure fixtures. |
+| `tests/guest/m12/online/main.rs` | Run separately downloaded registry and Git dependencies in the guest-built application. |
+| `tests/guest/m12/online/Cargo.toml.in` | Instantiate the online guest project with an exact registry version and the generated full Git revision. |
+| `xtask/src/rust_public.rs` | Verify public crates.io/GitHub source acquisition, pinned revisions, actual guest compilation and offline reboot reuse. |
+| `tests/guest/m12/public/Cargo.toml` | Pin independent public registry and Git copies of itoa without vendor replacement. |
+| `tests/guest/m12/public/main.rs` | Run public dependencies linked into the actual guest-built executable. |
+| `kernel/src/task/linux/select.rs` | Implement checked select descriptor sets, true readiness, finite waits, remaining time and interruptible blocking. |
+| `kernel/src/task/linux/time.rs` | Adapt utimensat/futimesat, dirfd/descriptor paths, NOW/OMIT and checked timestamp precision. |
+| `kernel/src/mm/user/file_mapping.rs` | Pin readonly shared-file mappings and refresh changed VFS bytes with physical-page and fork ownership. |
+| `crates/vfs/src/file_mapping.rs` | Retain bounded shared-file bytes and version successful writes independently of descriptor lifetime. |

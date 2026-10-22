@@ -4,7 +4,7 @@ use crate::Error;
 use anova_abi::UserAddr;
 
 const PAGE_BYTES: usize = 4096;
-const STRING_LIMIT: usize = 64;
+const STRING_LIMIT: usize = 256;
 const STRING_BYTES: usize = 1023;
 
 struct StackPage<'a> {
@@ -18,7 +18,7 @@ impl<'a> StackPage<'a> {
         if top & (PAGE_BYTES as u64 - 1) != 0
             || UserAddr(base).checked_end(page.len()) != Some(top)
             || page.is_empty()
-            || page.len() > 16384
+            || page.len() > 32768
             || !page.len().is_multiple_of(PAGE_BYTES)
         {
             return Err(Error::Arguments);
@@ -70,7 +70,7 @@ impl<'a> StackPage<'a> {
 }
 
 pub fn build(args: &[&str], page: &mut [u8], top: u64) -> Result<u64, Error> {
-    if args.is_empty() {
+    if args.is_empty() || args.len() > 64 {
         return Err(Error::Arguments);
     }
     let mut stack = StackPage::new(page, top)?;

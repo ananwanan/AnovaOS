@@ -12,6 +12,51 @@ pub(crate) struct Action {
 }
 const RESTART: u64 = 0x1000_0000;
 const UNBLOCKABLE: u64 = (1 << 8) | (1 << 18);
+const ONSTACK: u64 = 0x0800_0000;
+
+#[derive(Clone, Copy, Default)]
+pub(in crate::task) struct AltStack {
+    pub base: u64,
+    pub size: u64,
+}
+impl AltStack {
+    fn contains(self, rsp: u64) -> bool {
+        self.size != 0 && rsp > self.base && rsp - self.base <= self.size
+    }
+    fn flags(self, rsp: u64) -> u64 {
+        if self.size == 0 {
+            2
+        } else {
+            u64::from(self.contains(rsp))
+        }
+    }
+    fn decode(bytes: &[u8], space: &mm::user::UserSpace) -> Result<Self, i64> {
+        // stack_t has a 32-bit flags field followed by unspecified alignment padding.
+        let flags = u32::from_le_bytes(bytes[8..12].try_into().unwrap());
+        if flags == 2 {
+            return Ok(Self::default());
+        }
+        if flags != 0 && flags != 1 {
+            return Err(-22);
+        }
+        let stack = Self {
+            base: word(bytes, 0),
+            size: word(bytes, 2),
+        };
+        if stack.size < 2048 {
+            return Err(-12);
+        }
+        if !space.accessible(
+            UserAddr(stack.base),
+            usize::try_from(stack.size).map_err(|_| -14)?,
+            true,
+            false,
+        ) {
+            return Err(-14);
+        }
+        Ok(stack)
+    }
+}
 fn word(bytes: &[u8], index: usize) -> u64 {
     u64::from_le_bytes(bytes[index * 8..index * 8 + 8].try_into().unwrap())
 }
@@ -49,6 +94,15 @@ impl Kernel {
             f.rip,
             f.rsp
         ));
+        // A synchronous invalid return cannot be hidden by blocking or ignoring
+        // SIGSEGV, otherwise the BSP would spin without ever re-entering CPL3.
+        let image = self.process_mut(i).image.as_mut().unwrap();
+        let bit = 1 << 10;
+        if image.sigmask & bit != 0 || image.actions.borrow()[10].handler == 1 {
+            image.actions.borrow_mut()[10] = Action::default();
+            image.sigmask &= !bit;
+            image.ignored &= !bit;
+        }
         self.queue_signal(i, 11);
         self.policy.ready(i);
     }
@@ -203,20 +257,41 @@ impl Kernel {
             return -4;
         }
         if f.rax == 131 {
-            // Alternate stacks are explicitly unsupported; querying the disabled state is truthful.
-            if f.rdi != 0 {
-                return ENOSYS;
-            }
-            if f.rsi == 0 {
-                return 0;
-            }
-            let image = self.process(i).image.as_ref().unwrap();
+            let p = self.process(i);
+            let image = p.image.as_ref().unwrap();
+            let old = p.thread.altstack;
             let mut b = [0; 24];
-            b[8..12].copy_from_slice(&2u32.to_le_bytes());
-            return image
+            put(&mut b, 0, old.base);
+            put(&mut b, 1, old.flags(p.context.frame.rsp));
+            put(&mut b, 2, old.size);
+            let result = image
                 .space
-                .with_active(|| uaccess::to_user(&image.space, UserAddr(f.rsi), &b))
-                .map_or_else(errno, |()| 0);
+                .with_active(|| -> Result<Option<AltStack>, i64> {
+                    let next = if f.rdi != 0 {
+                        if old.contains(p.context.frame.rsp) {
+                            return Err(-1);
+                        }
+                        let mut input = [0; 24];
+                        uaccess::from_user(&image.space, UserAddr(f.rdi), &mut input)
+                            .map_err(errno)?;
+                        Some(AltStack::decode(&input, &image.space)?)
+                    } else {
+                        None
+                    };
+                    if f.rsi != 0 {
+                        uaccess::to_user(&image.space, UserAddr(f.rsi), &b).map_err(errno)?;
+                    }
+                    Ok(next)
+                });
+            return match result {
+                Ok(next) => {
+                    if let Some(next) = next {
+                        self.process_mut(i).thread.altstack = next;
+                    }
+                    0
+                }
+                Err(e) => e,
+            };
         }
         if f.r10 != 8 {
             return -22;
@@ -250,7 +325,9 @@ impl Kernel {
             if f.rax == 13 && f.rsi != 0 {
                 let (handler, flags, restorer) =
                     (word(&input, 0), word(&input, 1), word(&input, 2));
-                if flags & !(0x0400_0000 | RESTART | 4 | 1 | 0x4000_0000 | 0x8000_0000) != 0 {
+                if flags & !(0x0400_0000 | ONSTACK | RESTART | 4 | 1 | 0x4000_0000 | 0x8000_0000)
+                    != 0
+                {
                     return Err(-22);
                 }
                 if handler > 1
@@ -313,9 +390,24 @@ impl Kernel {
         let p = self.process_mut(i);
         let interrupted = p.io.is_some() || p.wait.is_some() || p.thread.blocked.is_some();
         p.network_deadline = None;
-        let original = p.io.take().unwrap_or(p.context.frame);
+        let original =
+            p.io.take()
+                .or(match p.thread.blocked {
+                    Some(threads::Blocked::FileLock { frame })
+                    | Some(threads::Blocked::Poll { frame, .. })
+                    | Some(threads::Blocked::Select { frame, .. }) => Some(frame),
+                    _ => None,
+                })
+                .unwrap_or(p.context.frame);
         if interrupted {
             p.wait = None;
+            if let Some(threads::Blocked::Select {
+                frame, deadline, ..
+            }) = p.thread.blocked
+            {
+                let _ =
+                    super::select::remaining(&p.image.as_ref().unwrap().space, frame.r8, deadline);
+            }
             if let Some(super::threads::Blocked::Sleep {
                 deadline,
                 remaining,
@@ -341,11 +433,21 @@ impl Kernel {
             }
         }
         let frame = p.context.frame;
-        let base = frame.rsp.checked_sub(128 + 1024).ok_or(11u32)? & !63;
+        let alternate = p.thread.altstack;
+        let top =
+            if action.flags & ONSTACK != 0 && alternate.size != 0 && !alternate.contains(frame.rsp)
+            {
+                alternate.base.checked_add(alternate.size).ok_or(11u32)?
+            } else {
+                frame.rsp
+            };
+        let base = top.checked_sub(128 + 1024).ok_or(11u32)? & !63;
         let base = base.checked_sub(8).ok_or(11u32)?;
         let mut bytes = [0; 1024];
         put(&mut bytes, 0, action.restorer);
-        bytes[32..36].copy_from_slice(&2u32.to_le_bytes()); // Disabled alternate stack.
+        put(&mut bytes, 3, alternate.base);
+        put(&mut bytes, 4, alternate.flags(frame.rsp));
+        put(&mut bytes, 5, alternate.size);
         let registers = [
             frame.r8,
             frame.r9,
@@ -429,6 +531,7 @@ impl Kernel {
         if word(&bytes[48..], 18) != 0x002b_0000_0000_0033 || !p.context.restore_fpu(&fpu) {
             return Err(-22);
         }
+        p.thread.altstack = AltStack::decode(&bytes[24..48], &image.space)?;
         let r = |k| word(&bytes[48..], k);
         let frame = &mut p.context.frame;
         frame.r8 = r(0);
