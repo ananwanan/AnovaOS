@@ -402,10 +402,27 @@ retains an open inode and reclaims it on final close; live cwd and removed-open-
 child references return busy to protect parent identities. Same-parent directory
 rename accepts only a new destination name, preserving dot-dot/parent links; ext2 mutation failure
 retains its failed-device state. The Rust linker writes through file syscalls
-rather than unsupported persistent shared mappings. Linux-only startup, ELF
+rather than writable shared-file mappings. Linux-only startup, ELF
 and mmap bounds expand independently of the native ABI. Internal directory
 records carry 255-byte components and 512-byte paths; Linux getdents serializes
 these separately from native v1's fixed 80-byte record, whose adapter rejects
 unrepresentable names without advancing. mmap hints publish only
 on successful allocation. See [M12_RUST](docs/M12_RUST.md) for exact bounds and
 [acceptance](docs/validation/M12.md) for actual guest/reboot evidence.
+
+The online continuation adds Linux select with imported descriptor masks,
+monotonic deadlines and preserved signal-interruption frames. Readonly shared
+file mappings own a versioned VFS inode lease and physical-page metadata; they
+refresh successful file writes before the next user execution. Fork retains
+both owners, while munmap/exec/exit release them. Mapped inodes outlive close,
+unlink and name replacement. Writable shared-file mappings remain rejected;
+this is not persistent mmap writeback. File timestamps retain access/modify/
+change fields, and explicit ext2 updates use the existing checked disk writes.
+Ext2 import traverses nested cache directories iteratively within the node cap.
+
+`cargo-online` is an explicit launcher policy over the same official Cargo;
+networking, TLS, archive extraction and Git operate in user space. It preserves
+explicit Cargo environment settings, uses `/persist/cargo-home` by default and
+supplies the pinned public CA store without disabling verification. Ordinary
+Cargo remains offline by default. The independent controlled/public gates and
+resource/transport boundaries are in [M12_NETWORK](docs/M12_NETWORK.md).

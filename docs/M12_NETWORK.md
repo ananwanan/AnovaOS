@@ -1,8 +1,10 @@
 <!-- Define opt-in online Cargo, source/cache ownership, strict TLS and bounded network acceptance. -->
 # M12 online Cargo
 
-Work in progress: the online gates are not yet accepted. Checkpoint evidence and
-pending validation are recorded in [M12 validation](validation/M12.md).
+The bounded controlled and public gates are locally accepted on q35/TCG.
+Public crates.io/GitHub acceptance used the documented host proxy and public
+PEM roots; direct public DNS/transport and remote CI remain separate.
+Actual evidence is recorded in [M12 validation](validation/M12.md).
 
 This continuation adds an explicit online mode to the M12 guest toolchain.
 The compiler and Cargo remain the checksum-locked, unmodified official Rust
@@ -71,6 +73,10 @@ MPL-2.0 notice are locked in [inputs.json](../ports/rust/inputs.json).
   reject bad pointers/ranges/flags. ext2 stores whole seconds in 128-byte
   inodes; tmpfs preserves nanoseconds. Explicit timestamps survive clean
   reboot. Negative epochs and ext2 timestamps outside u32 seconds are rejected.
+- Ext2 import uses a fallible iterative directory traversal bounded by the
+  existing VFS node limit. Nested Git cache directories no longer fail at the
+  former eight-level recursive import bound; syscall paths retain their checked
+  512-byte limit.
 
 The 16 MiB kernel heap, 1 MiB writable-file limit, 16 MiB development disk,
 512 inodes, 2,048 VFS nodes, 32 task slots, 32 descriptors, eight Internet sockets,
@@ -98,13 +104,15 @@ guest. Tests require the actual CA/name/date failure, rejected corrupted and
 truncated archives, an application timeout, a repaired checksum failure,
 guest compilation, a no-op build and an independent boot without a peer or NIC.
 Persisted sources, lockfile, cache and executable hashes are inspected directly;
-e2fsck must pass. Generated TLS private keys remain under host `build/`.
+e2fsck must pass. The second boot rebuilds both dependencies into a fresh target
+directory before executing its new binary. Generated TLS private keys remain
+under host `build/`.
 
 `rust-public-test` independently uses crates.io itoa 1.0.15 and the public
 GitHub itoa repository at revision
 `e2766b868e4ac1ae2bf5bea1ac43d4c0da23b899`, followed by guest compilation and
-offline reboot/cache checks. It has no vendor source replacement. Public
-availability is distinct from the deterministic local gate. If a test host
+offline reboot/cache checks and a fresh-target rebuild. It has no vendor source
+replacement. Public availability is distinct from the deterministic local gate. If a test host
 requires a proxy, `ANOVA_CARGO_TEST_PROXY` supplies a guest-reachable HTTP proxy
 without embedded credentials; `ANOVA_CARGO_TEST_CA` optionally supplies public
 PEM roots for that test image. These inputs do not change the standard image.

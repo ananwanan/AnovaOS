@@ -3,8 +3,8 @@
 
 The locally verified M0–M12 baseline covers native Rust/C applications, persistent
 storage, the pinned BusyBox CLI and static/PIE/dynamic musl runtime subset,
-controlled M10 networking/packages, M11 C/C++ development and M12 offline
-Rust/Cargo development. This establishes the versioned profiles below, not
+controlled M10 networking/packages, M11 C/C++ development and M12 bounded
+offline/online Rust/Cargo development. This establishes the versioned profiles below, not
 general Linux/glibc compatibility. See [M9 runtime](docs/M9_RUNTIME.md) and
 [M12 Rust](docs/M12_RUST.md) for current bounds.
 
@@ -170,9 +170,33 @@ reboot execution are checked. Runtime tests include alternate signal stacks,
 detached exit, invalid-return faults, positioned/resized files and OFD locks.
 
 This establishes the bounded profile in [M12_RUST](docs/M12_RUST.md), not general
-Cargo/ecosystem compatibility. Online registry/Git, arbitrary macro graphs,
-native AnovaOS std and Rust/LLVM source construction/bootstrap remain unverified.
+Cargo/ecosystem compatibility. Arbitrary macro graphs, native AnovaOS std
+and Rust/LLVM source construction/bootstrap remain unverified.
 M12 also adds bounded anonymous AF_UNIX SOCK_SEQPACKET pairs; SOCK_STREAM
 pairs remain rejected with ESOCKTNOSUPPORT. Linux/VFS names and paths use
 255/512-byte bounds without changing native v1 directory wire records.
 Actual logs and hashes: [M12 acceptance](docs/validation/M12.md).
+
+
+## Verified M12 online Cargo profile
+
+The same official Cargo 1.90.0 downloads a checksum-pinned crate from an HTTPS
+sparse registry and a full-revision Git dependency over HTTPS smart HTTP.
+`cargo-online` selects this opt-in transport and `/persist/cargo-home`; ordinary
+Cargo remains offline by default. Independent controlled-peer tests reject
+untrusted/expired/wrong-name certificates, corrupt/truncated archives and an
+application timeout. Guest compilation, no-op builds and fresh-target rebuilds
+after a no-NIC reboot preserve inspected source/cache/lockfile/ELF hashes.
+
+The separate public gate downloads crates.io itoa 1.0.15 and GitHub dtolnay/itoa
+revision `e2766b868e4ac1ae2bf5bea1ac43d4c0da23b899` without source replacement.
+Local public acceptance uses a configured host HTTP proxy and public PEM roots;
+direct public DNS/transport is not established. It does not imply arbitrary
+Cargo projects, private registry credentials, SSH, Cargo publish or IPv6.
+
+Runtime coverage adds select/readiness/deadline/EINTR, actual file timestamps,
+readonly shared-file coherence and inode lifetime across fork/close/unlink/name
+replacement, an actual readonly write fault, and real heap OOM/reuse. Writable
+shared-file mappings and persistent mmap writeback remain rejected. Exact bounds
+and configuration: [M12_NETWORK](docs/M12_NETWORK.md). Actual command results:
+[M12 acceptance](docs/validation/M12.md).

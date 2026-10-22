@@ -5,7 +5,7 @@
 
 这是 Rust 编写的 x86_64 自研操作系统。最终用户应能在系统自己的终端中编辑源码、使用 GCC/G++/Rust/Cargo 编译、链接并运行应用，同时逐步运行经过验证的现有 Linux 软件。
 
-当前 M0–M12（离线范围）已通过本地 QEMU TCG 验证。原生进程、VFS、init/shell、virtio-blk、受限 ext2 `/persist`、文本编辑、sync/fsync 和正常关机/重启已实现。M9 还验证 musl 1.2.4 静态、静态 PIE、动态 ELF、pthread/TLS/futex、信号栈帧/返回、中断/重启、poll、非阻塞 I/O 和四组 PTY。**单核，共 32 个进程/线程槽；内核不可抢占；tmpfs 易失；ext2 无日志和断电恢复、单文件最多 1 MiB；无 SMP 或通用 Linux/glibc；引导保留区未回收，堆固定 16 MiB。** 外设 IRQ 仍屏蔽，CI 远端结果单独记录。先读 [M9_RUNTIME](docs/M9_RUNTIME.md)、[STATUS](docs/STATUS.md)、[M8_LINUX](docs/M8_LINUX.md)、[M7_STORAGE](docs/M7_STORAGE.md) 和 [开发需求](docs/REQUIREMENTS.md)，再检查真实代码与 git 状态。
+当前 M0–M12（受限离线与联网范围）已通过本地 QEMU TCG 验证。原生进程、VFS、init/shell、virtio-blk、受限 ext2 `/persist`、文本编辑、sync/fsync 和正常关机/重启已实现。M9 还验证 musl 1.2.4 静态、静态 PIE、动态 ELF、pthread/TLS/futex、信号栈帧/返回、中断/重启、poll、非阻塞 I/O 和四组 PTY。**单核，共 32 个进程/线程槽；内核不可抢占；tmpfs 易失；ext2 无日志和断电恢复、单文件最多 1 MiB；无 SMP 或通用 Linux/glibc；引导保留区未回收，堆固定 16 MiB。** 外设 IRQ 仍屏蔽，CI 远端结果单独记录。先读 [M9_RUNTIME](docs/M9_RUNTIME.md)、[STATUS](docs/STATUS.md)、[M8_LINUX](docs/M8_LINUX.md)、[M7_STORAGE](docs/M7_STORAGE.md) 和 [开发需求](docs/REQUIREMENTS.md)，再检查真实代码与 git 状态。
 
 M10 adds opt-in, polled virtio-net IPv4 TCP/UDP sockets, bounded user-space DNS,
 strict user-space TLS and checksum-locked native package install/upgrade/rollback/
@@ -31,7 +31,18 @@ previous gates. Actual guest compilation covers std, worker-thread child wait,
 build.rs, C FFI, a standalone procedural macro and a fixed Cargo macro graph
 with shared host/build dependencies. Preserve dependency-change rebuilds,
 macro input rejection and retained prior outputs. It does not establish Rust source
-construction, online registry/Git, native AnovaOS std or compiler bootstrap.
+construction, native AnovaOS std or compiler bootstrap.
+
+The opt-in `cargo-online` profile adds strict HTTPS sparse-registry/Git downloads,
+a pinned public CA store and persisted-cache rebuilds. Read
+[M12_NETWORK](docs/M12_NETWORK.md). Preserve `rust-online-test` alongside the
+original Rust and OS gates; `rust-public-test` independently covers pinned
+crates.io/GitHub sources and may need the documented test proxy/public CA inputs.
+Local public acceptance used that proxy; it does not establish direct public
+DNS/transport, arbitrary Cargo graphs, SSH or authenticated private registries.
+Readonly file-backed MAP_SHARED is coherent within the bounded cache/inode
+lifetime; writable shared-file mapping/writeback remains unsupported.
+
 Linux accepts 256 argv/env entries, a checked 32 KiB startup block, 256 MiB ELF
 and per-mmap bounds, the `[0x50000000, 0xc0000000)` mapping window and bounded
 512-byte paths/255-byte components. Native v1 directory records remain fixed;
@@ -193,7 +204,7 @@ with first-class **C, C++ and Rust application SDKs**, and five separate GUI
 submilestones. See [M14_GUI](docs/M14_GUI.md), [ROADMAP](ROADMAP.md)
 and owner requirement [DEV-002](docs/REQUIREMENTS.md). This section is a
 future-development contract: no M14 GUI code or verified GUI behavior is
-claimed by the M0–M12 offline baseline.
+claimed by the M0–M12 bounded baseline.
 
 - Write the window compositor, desktop shell and GUI runtime in Rust. Keep
   the compositor in a **user process**; the kernel supplies safe display/input

@@ -101,8 +101,9 @@ unnecessary. See [third-party/m12](third-party/m12.md) for upstream notices.
   Pipe FIONREAD/FIONBIO expose real queued bytes and shared status flags.
 - Bounded ftruncate preserves offsets, retains the prefix on shrink and
   zero-fills growth. ext2 preflights space and uses its failed-device mutation
-  rules. rust-lld uses `--no-mmap-output-file`; persistent shared mmap/writeback
-  remains outside this profile.
+  rules. rust-lld uses `--no-mmap-output-file`; writable shared-file mmap/writeback
+  remains outside this profile. The online continuation adds bounded readonly
+  shared-file mappings with coherent writes and retained inode lifetime.
 - AF_UNIX SOCK_SEQPACKET pairs use two queues from the 16-entry pipe pool.
   Packets are at most 1,022 bytes with preserved boundaries, atomic sends,
   truncating receives, real duplex traffic, backpressure, EOF, nonblocking/
@@ -155,9 +156,10 @@ Procedural macros use this exact compiler's host ABI. The launcher selects
 dynamic musl CRT/PIC options for a single `proc-macro` crate type. Cargo `lib`
 and `rlib` dependencies also use PIC so address-bearing data can be linked into
 the macro shared object; application linkage remains static by default. General
-Cargo workspaces, arbitrary proc-macro graphs, public registry/Git/TLS
-transport, a native AnovaOS std port and Rust/LLVM self-bootstrap need their own
-tests and are not implied by this bounded offline profile.
+Cargo workspaces and arbitrary proc-macro graphs are not implied by this bounded
+offline profile. The independent online registry/Git/TLS continuation is defined
+in [M12_NETWORK](M12_NETWORK.md), with actual results in the validation record.
+A native AnovaOS std port and Rust/LLVM self-bootstrap remain separate work.
 
 Cargo may emit a nonfatal last-use/global-cache warning because POSIX fcntl
 record locks are unsupported. The accepted frozen vendor build does not rely

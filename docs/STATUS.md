@@ -1,7 +1,7 @@
 <!-- Record locally verified subsystem capabilities, runtime limits and the next development task. -->
 # Implementation status
 
-Recorded 2026-10-22 (Asia/Shanghai). Continuation baseline `6d623b3`.
+Recorded 2026-10-23 (Asia/Shanghai). Online continuation baseline `e60e4e9`.
 Task branch: `feat/m12-validation`. See [M12 profile](M12_RUST.md) and
 [validation/M12.md](validation/M12.md).
 Remote CI and publication are separate from local acceptance.
@@ -55,7 +55,7 @@ Remote CI and publication are separate from local acceptance.
   is restricted to the controlled host peer and generated test CA.
 - DEV-001 remains mandatory: English purpose headers plus the checked
   [file inventory](FILE_PURPOSES.md). Current command results are in validation/M12.
-- 81 host tests, host/kernel/user Clippy, formatting and all 13 QEMU scenarios
+- 83 host tests, host/kernel/user Clippy, formatting and all 13 QEMU scenarios
   pass. Ordinary UART and persistence/error sessions consume ordered stdout
   directly; diagnostic-log snapshots cannot invalidate their matching cursors.
 
@@ -69,11 +69,12 @@ Remote CI and publication are separate from local acceptance.
 | ext2 | Normal shutdown persistence; no journal, atomic save or power-loss guarantee |
 | Per-thread alternate signal stacks and SA_ONSTACK | Locally accepted in the bounded M12 runtime |
 | Full terminal jobs, realtime queues, robust/PI futexes | Not implemented or verified |
-| COW, shared persistent mmap/writeback, ASLR, SMP, GUI and physical hardware | Not implemented or verified |
+| COW, writable shared-file mmap/writeback, ASLR, SMP, GUI and physical hardware | Not implemented or verified |
 | M10 IPv4 client networking and controlled native packages/TLS | Locally accepted within M10_NETWORK_PACKAGES |
 | M11 offline GCC/G++ 11.2.0, binutils, make and matching musl/C++ sysroot | Locally accepted within M11_TOOLCHAIN |
 | M12 guest Rust 1.90.0/std, offline Cargo/vendor, build.rs/C FFI and the fixed Cargo macro graph | Locally accepted within M12_RUST |
-| General Linux networking/glibc, public package repositories and online Cargo registry/Git | Not implemented or verified |
+| M12 opt-in HTTPS Cargo sparse-registry/Git and persisted-cache rebuilds | Locally accepted within M12_NETWORK; public sources through a configured proxy |
+| General Linux networking/glibc and public native package repositories | Not implemented or verified |
 | External IRQs, asynchronous block I/O, hotplug and boot-memory reclamation | Not implemented |
 
 The BSP polls block I/O with a two-second deadline; long kernel I/O delays tasks
@@ -134,8 +135,8 @@ bounds recorded here. Native limits remain separate.
   limited to an absent destination in the same parent. Empty-directory removal
   retains open identities and reclaims on final close; live cwd/removed-child
   references return EBUSY. Relative dirfd open/stat/unlink and O_NOFOLLOW are
-  checked independently. Persistent shared mmap/
-  writeback remains unsupported.
+  checked independently. Writable shared-file mmap/
+  writeback remains unsupported; readonly coherent mappings are described below.
 - Linux ELF/loaded image and per-mmap bounds are 256 MiB; the mapping window is
   `[0x50000000, 0xc0000000)`. A committed per-root gap hint avoids rescanning large
   immutable compiler mappings. Linux startup uses 256 argv/env entries and a
@@ -146,45 +147,40 @@ bounds recorded here. Native limits remain separate.
   heap, 1 MiB writable files and Linux stacks, 256 KiB scheduler stack and
   retained boot memory remain bounded. See M12_RUST for exact scope.
 
-## M12 online Cargo checkpoint — not accepted
+## M12 online Cargo implemented and locally verified
 
-The current work in progress adds `rust-online-test` for controlled HTTPS sparse
-registry/Git acquisition and negative transport cases, plus `rust-public-test`
-for public crates.io/GitHub sources. Runtime changes include bounded select,
-explicit file timestamps and readonly shared-file mappings with retained inode
-identity. These additions are checkpointed separately from the accepted offline
-profile; neither online gate has a completed successful result yet.
-
-Checkpoint checks passed 83 host tests and file-purpose coverage. The existing
-latest cross-test transcript covers select/signal interruption, shared-map
-coherence/lifetime/OOM and timestamp boundaries followed by clean shutdown.
-The earlier online attempt downloaded a registry dependency but failed while
-setting its extracted mtime; the timestamp implementation and tests are now
-present. Online end-to-end validation and the full regression matrix remain
-pending. See [M12 validation](validation/M12.md).
-
-The 2026-10-23 follow-up also checkpoints the pending online test assertions,
-offline rebuild checks and iterative ext2 directory import. Its host checks
-pass; guest online/public acceptance and the full regression matrix remain pending.
-
-Continued local validation now completes the controlled HTTPS registry/Git gate,
-including strict TLS and transport negatives, guest compilation, 49 persisted
-file hashes and a fresh offline rebuild after an independent reboot. Public
-crates.io/GitHub acquisition and guest compilation pass; a corrected host source
-assertion and the public offline reboot still need a full retry. The full
-regression matrix is in progress. R6 remains unaccepted until those checks and
-the latest runner/readonly-fault assertions complete; see validation/M12.
+- Opt-in `cargo-online` uses the official unmodified Cargo 1.90.0, strict TLS,
+  the pinned public CA store and `/persist/cargo-home`. Ordinary Cargo remains
+  offline by default; explicit environment/project settings are preserved.
+- Controlled HTTPS sparse-registry and Git smart-HTTP acquisition, full-revision
+  and crate checksum checks, actual CA/name/expiry failures, corrupt/truncated
+  transfer rejection, timeout diagnostics, repaired retry and guest compilation.
+- Public crates.io itoa 1.0.15 and GitHub dtolnay/itoa at the pinned full revision,
+  without source replacement. Local public acceptance uses the documented host
+  proxy/public CA configuration; direct public DNS/transport is not established.
+- Both gates inspect persisted source/cache/lockfile/ELF hashes, require e2fsck,
+  and recompile dependencies into a fresh target directory after an independent
+  boot without a peer or NIC. Host peers/proxy transport sources only.
+- Bounded select with real readiness, monotonic deadlines, checked sets and
+  signal EINTR; actual utimensat/futimesat and persisted ext2 timestamps.
+- Coherent readonly file-backed MAP_SHARED with retained inode ownership across
+  fork, close, unlink and name replacement; real readonly write fault and kernel
+  heap OOM/reuse. Writable shared-file mappings and truncating live mapped files
+  are rejected. Nested ext2 cache directories import iteratively within the node
+  bound instead of the former eight-level recursion bound.
+- 83 host tests, 228-file purpose coverage, strict host/user/kernel Clippy,
+  formatting, all 13 QEMU scenarios and every earlier terminal, storage, network,
+  package and C/C++/Rust gate pass. Complete results and remaining resource limits
+  are in [validation/M12](validation/M12.md) and [M12_NETWORK](M12_NETWORK.md).
+  The deterministic online gate is included in CI; remote execution is separate.
 
 ## Next task
 
-Complete and validate the in-progress M12 online gates before marking R6 accepted.
-The next milestone after that acceptance remains M13.
-
 M13: version the application SDK, manifest, package and developer experience
 around the verified C/C++/Rust toolchains. Preserve every previous runtime,
-storage, network, toolchain and Rust acceptance gate. Online Cargo registry/Git,
-general Cargo projects, native AnovaOS std, LTO/OpenMP/sanitizers and compiler
-self-bootstrap remain independently scoped.
+storage, network, toolchain and Rust acceptance gate, including controlled online
+Cargo. Broader Cargo projects, native AnovaOS std, LTO/OpenMP/sanitizers and
+compiler self-bootstrap remain independently scoped.
 
 ## M14 graphics planning — not implemented (2026-10-22)
 
@@ -205,6 +201,6 @@ constraints, candidate dependency policy and five independent gates are in
 This documentation change delivers **no GUI implementation, no graphics
 test, no new SDK binaries, no GPU acceleration and no additional hardware
 support**. The Limine framebuffer response is an early boot input, not a
-window system. M12 supplies the bounded offline Rust/Cargo prerequisite; M13
+window system. M12 supplies the bounded Rust/Cargo prerequisite; M13
 SDK packaging is still required before M14.4's developer-experience acceptance. SMP, physical
 devices and Linux GUI compatibility remain separately scoped workstreams.

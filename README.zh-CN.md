@@ -5,7 +5,7 @@
 
 用 Rust 从零开发的 x86_64 操作系统，目标是在自己的系统中编辑、编译、调试和运行应用，并逐步兼容部分现有 Linux 软件。
 
-**当前状态：M0–M12（离线范围）已通过本地 QEMU q35/TCG 验证。原生应用、VFS、管道、init/shell、现代 virtio-blk 和 `/persist` 受限 ext2 已支持源码编辑、sync/fsync、正常关机及重启保留。受限 Linux profile 已运行 musl 1.2.4 静态、静态 PIE 和动态程序，验证 pthread/TLS/futex、真实信号处理与中断/重启、poll、非阻塞 I/O、四组 PTY，以及启动共享库、dlopen 和动态 TLS；保留固定 BusyBox 1.36.1 echo/ls/cat/ash 子集。当前单核，共 32 个进程/线程槽；M10 新增可选 virtio-net IPv4 TCP/UDP/DNS、可中断 socket、严格证书验证的用户态 TLS，以及锁定软件包的安装、升级、回滚与卸载。M11 新增可选离线 GCC/G++/make 开发镜像，已验证系统内编译运行 C/C++、异常、线程及重启保留。M12 新增系统内 Rust 1.90.0/std 与离线 Cargo，分别验证 vendor 依赖、build.rs、C FFI 和系统内编译的过程宏。通用 Linux/glibc 与在线 Cargo registry/Git 获取仍待实现，外设 IRQ 保持屏蔽。**
+**当前状态：M0–M12（受限离线与联网范围）已通过本地 QEMU q35/TCG 验证。原生应用、VFS、管道、init/shell、现代 virtio-blk 和 `/persist` 受限 ext2 已支持源码编辑、sync/fsync、正常关机及重启保留。受限 Linux profile 已运行 musl 1.2.4 静态、静态 PIE 和动态程序，验证 pthread/TLS/futex、真实信号处理与中断/重启、poll、非阻塞 I/O、四组 PTY，以及启动共享库、dlopen 和动态 TLS；保留固定 BusyBox 1.36.1 echo/ls/cat/ash 子集。当前单核，共 32 个进程/线程槽；M10 新增可选 virtio-net IPv4 TCP/UDP/DNS、可中断 socket、严格证书验证的用户态 TLS，以及锁定软件包的安装、升级、回滚与卸载。M11 新增可选离线 GCC/G++/make 开发镜像，已验证系统内编译运行 C/C++、异常、线程及重启保留。M12 新增系统内 Rust 1.90.0/std 与离线 Cargo，分别验证 vendor 依赖、build.rs、C FFI 和系统内编译的过程宏。可选在线 Cargo 已验证严格 HTTPS registry/Git 下载、缓存保留及断网重编译；公网 crates.io/GitHub 通过配置的宿主代理验证。通用 Linux/glibc 仍待实现，外设 IRQ 保持屏蔽。**
 
 项目仓库：[ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS)。
 
@@ -52,6 +52,7 @@
 | [docs/TOOLCHAINS.md](docs/TOOLCHAINS.md) | GCC/G++/Rust 从交叉编译到系统内开发 |
 | [docs/M11_TOOLCHAIN.md](docs/M11_TOOLCHAIN.md) | 系统内离线 GCC/G++/make、sysroot 与开发步骤 |
 | [docs/validation/M11.md](docs/validation/M11.md) | 工具链源码构建、C/C++/make、负例与重启证据 |
+| [docs/M12_NETWORK.md](docs/M12_NETWORK.md) | 可选联网 Cargo、严格 TLS、公网来源及断网缓存重编译 |
 | [docs/M12_RUST.md](docs/M12_RUST.md) | 系统内 Rust/std、离线 Cargo、构建脚本、C FFI、过程宏及资源范围 |
 | [docs/validation/M12.md](docs/validation/M12.md) | 实际系统内编译、持久文件校验、重启和回归证据 |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | 宿主配置、已实现命令、产物和失败处理 |
@@ -105,7 +106,8 @@ cargo fmt --manifest-path user/Cargo.toml --all -- --check
 - 使用系统中运行的 `gcc`、`g++`、`rustc` 编译、链接并运行产物。
 - 使用 `cargo build --offline` 构建带已准备依赖的小型项目，运行应用并核对输出。
 - 应用能够读写文件、处理命令行参数、报告错误；重启后源码与产物保留。
-- 后续再验证联网获取依赖、完整调试器、复杂 Cargo 构建与编译器自举。
+- 使用 `cargo-online build` 获取固定 registry/Git 依赖，重启后用 `--offline --frozen` 从缓存重编译。
+- 完整调试器、更广泛的 Cargo 构建与编译器自举后续分别验证。
 
 可以先通过 Linux 兼容层运行这些工具链；这仍是应用在自研内核上的系统内开发。AnovaOS 专用 target 和原生 `std` 移植另设阶段，避免混淆进度。
 
@@ -187,7 +189,7 @@ malloc、参数和多文件构建，以及 C++ string/vector、RAII、异常、�
 [验收记录](docs/validation/M11.md)。
 
 
-## M12 离线 Rust/Cargo 开发
+## M12 Rust/Cargo 开发
 
 ```sh
 cargo xtask rust-build
@@ -205,4 +207,12 @@ Cargo 构建锁定的 vendor crate，执行 build.rs，并链接系统内编译�
 还验证 Cargo 过程宏及其普通依赖、构建依赖和生成源码；支持库修改触发依赖重建，
 非法宏输入返回 101 后旧程序仍可运行。验收检查构建新鲜度与正常关机重启后的执行。
 详见 [M12 设计](docs/M12_RUST.md) 与 [验收记录](docs/validation/M12.md)。
-在线 registry/Git、AnovaOS 原生 std 端口和编译器自举仍独立推进。
+联网项目在 `run --rust` 时增加 `--network`，在 `/persist` 下编辑项目，使用
+`cargo-online build`。缓存默认保存于 `/persist/cargo-home`；普通 `cargo` 保持离线
+默认。正常关机后无网卡重启，可用 `cargo-online build --offline --frozen` 继续构建。
+
+`cargo xtask rust-online-test` 验证受控 HTTPS sparse registry/Git、CA/名称/日期检查、
+损坏及截断下载、超时与断网全量重编译。`cargo xtask rust-public-test` 独立验证固定的
+crates.io 与 GitHub 来源；本地公网验收使用可达的宿主代理和公开 PEM 根证书。
+配置与资源限制见 [M12 联网范围](docs/M12_NETWORK.md)。AnovaOS 原生 std、任意
+Cargo 项目与编译器自举仍独立推进。
