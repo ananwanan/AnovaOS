@@ -9,6 +9,9 @@
 
 项目仓库：[ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS)。
 
+M14.1 已增加可选软件显示、受检 framebuffer 映射和真实 QEMU 逐像素/截图验证；
+下一步为 M14.2 输入与游标，窗口及 GUI SDK 仍按后续阶段推进。
+
 日常开发与 Pull Request 的目标分支为 **`dev`**；`main` 保留阶段验收后的稳定快照。分支约定见 [GitHub 协作说明](docs/GITHUB_SETUP.md)。
 
 ## 项目目标
@@ -233,3 +236,16 @@ cargo xtask diagnostics-test
 ```
 
 用 `cpp` 或 `rust` 创建另外两种原生模板。`app-run PACKAGE SHA256` 会把已校验的自建包放入镜像，创建匹配 ABI 的临时磁盘并打印可直接使用的 guest 安装和运行命令；`--disk` 可复用显式持久镜像。完整创建、构建、安装和升级步骤见 [M13 SDK](docs/M13_SDK.md)。原生 SDK 与 M11/M12 的 Linux-musl 系统内编译器分别验收。权限声明用于安装准入；GUI runtime、GDB stub、进程沙箱和原生 Rust std 不属于当前成果。
+
+## M14.1 软件显示
+
+```sh
+cargo xtask graphics-image
+cargo xtask graphics-test
+cargo xtask run --graphics
+```
+
+可选 profile 绘制有界 CPU 测试图案并保留 COM1 shell。无头测试验证真实 QMP
+截图，并分别在有/无 VGA 时验证串口恢复；交互运行需要 GTK 显示环境。
+当前交付范围是软件显示，窗口、输入与 GUI SDK 按后续阶段分别验收。
+见 [M14 设计](docs/M14_GUI.md) 与 [M14.1 证据](docs/validation/M14.1.md)。

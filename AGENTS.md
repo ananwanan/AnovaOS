@@ -53,7 +53,11 @@ and [validation/M13](docs/validation/M13.md). Preserve `sdk-test`, `app-test`,
 `package-v2-test` and `diagnostics-test` alongside all previous gates. Native
 syscall v1 remains frozen; permissions are admission metadata, and static
 ET_EXEC Linux package admission is separate from the wider M9 runtime profile.
-The mounted persistent ABI marker is immutable. M14.1 is next; GUI libraries,
+The mounted persistent ABI marker is immutable. M14.1 adds optional checked CPU
+graphics and actual QMP scanout/serial-fallback verification. Preserve
+`cargo xtask graphics-test` and the `graphics` kernel feature check alongside
+previous gates. See [M14 GUI](docs/M14_GUI.md) and
+[validation/M14.1](docs/validation/M14.1.md). M14.2 is next; GUI libraries,
 GDB stubs, native std and compiler bootstrap remain independently scoped.
 
 本文件是后续 Codex 开发规范。用户明确指令优先；已有修改应保留。日常、可逆的实现选择可自主完成，不因普通阶段切换反复请求确认。

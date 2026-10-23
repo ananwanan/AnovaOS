@@ -308,3 +308,24 @@ SDK templates retain debug symbols; compact package payloads have separate
 hashes. Kernel resource logs describe global counters, not process accounting.
 Preserve all M0–M12 gates alongside the four new SDK/workflow/package/diagnostic
 gates. Remote CI results remain separate from local evidence.
+
+## M14.1 software display
+
+```sh
+cargo xtask graphics-image
+cargo xtask graphics-test
+cargo xtask run --graphics
+```
+
+The optional `graphics` kernel feature draws a CPU test pattern; ordinary serial
+and compiler images retain their existing profile. `graphics-image` produces
+`build/images/anova-graphics.iso`. Interactive `run --graphics` needs a working
+GTK display and retains the COM1 shell on standard input/output. Graphics are
+currently limited to the normal recovery image, independently of compiler images.
+
+`graphics-test` runs headlessly with QEMU standard VGA, captures an actual QMP
+screendump and compares every visible pixel with the CPU reference. A separate
+boot without VGA must retain serial recovery. The shell remains the text
+diagnostic fallback; this stage does not provide a graphical terminal or fonts.
+See [M14 GUI](M14_GUI.md) for format, memory, cache and stage boundaries and
+[M14.1 validation](validation/M14.1.md) for actual local results.

@@ -25,6 +25,8 @@ Opt-in online Cargo adds strict HTTPS registry/Git downloads and persisted-cache
 rebuilds; public crates.io/GitHub are tested through a configured host proxy.
 M13 adds SDK 1.0.0, native C/C++/Rust templates, explicit ABI-bound packages,
 installer target-policy checks and real user-fault source symbolization.
+M14.1 adds opt-in software graphics, checked framebuffer mappings and actual
+QEMU pixel/screenshot verification; input, windows and GUI SDKs remain planned.
 General Linux/glibc remains future work; device IRQs stay masked.**
 
 Repository: [ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS).
@@ -194,8 +196,8 @@ is reported separately from [local validation](docs/validation/M12.md).
 ## Next steps
 
 M13 delivers the versioned SDK and application format described in
-[M13 SDK](docs/M13_SDK.md). M14.1 begins framebuffer/software drawing under the
-[separate GUI plan](docs/M14_GUI.md). Current Rust/Cargo limits remain in
+[M13 SDK](docs/M13_SDK.md). M14.1 delivers checked software drawing; M14.2 is next
+under the [separate GUI plan](docs/M14_GUI.md). Current Rust/Cargo limits remain in
 [M12 Rust](docs/M12_RUST.md). See [current status](docs/STATUS.md) and
 [roadmap](ROADMAP.md).
 
@@ -319,3 +321,17 @@ recipe](docs/M13_SDK.md). The versioned native SDK stays separate from the
 M11/M12 Linux-musl guest compilers. Package permissions are admission metadata;
 GUI runtime, GDB stubs, per-process sandboxes and native Rust std remain outside
 this accepted profile.
+
+## M14.1 software display
+
+```sh
+cargo xtask graphics-image
+cargo xtask graphics-test
+cargo xtask run --graphics
+```
+
+The opt-in profile draws a bounded CPU test pattern and retains the COM1 shell.
+The headless test checks the actual QMP screenshot and serial recovery with and
+without VGA; interactive runs need a GTK display. This is the software display
+stage; windows, input and GUI SDKs have independent later gates.
+See [M14 GUI](docs/M14_GUI.md) and [M14.1 evidence](docs/validation/M14.1.md).

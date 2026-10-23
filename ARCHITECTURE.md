@@ -241,7 +241,8 @@ native SDK 从 M4 的 `no_std` 应用与最小 runtime 开始。开发者可先�
 
 ## 9. Planned M14 graphical userland and SDK architecture
 
-The GUI is **planned, not implemented**. The authoritative design and the
+The optional **M14.1 software display is implemented**; input, user-space GUI
+and SDK components remain planned. The authoritative design and the
 independently accepted M14.1–M14.5 stages are in
 [M14_GUI](docs/M14_GUI.md), with stage status in [ROADMAP](ROADMAP.md)
 and [STATUS](docs/STATUS.md).
@@ -297,6 +298,15 @@ framebuffer or virtio-gpu display scanout does not prove GPU rendering support;
 Vulkan/OpenGL, Wayland/X11, SDL/Qt and Linux GUI application compatibility
 remain separate, version-specific ports. SMP and real-hardware expansion are
 independent future workstreams, not implicit M14 GUI completion criteria.
+
+The implemented `crates/graphics` library owns no hardware or allocator; callers
+supply RGB storage. The optional kernel boot diagnostic validates the complete
+framebuffer byte reservation and page-rounded overlap safety, checks inherited
+supervisor RW/NX PAT5 WC mappings without creating an alias, then writes/readbacks
+the test pattern through volatile byte accesses and MFENCE. Temporary heap
+storage is reclaimed before user startup. COM1 remains the recovery console.
+This adds no window/widget/font policy or application display capability.
+See [M14.1 evidence](docs/validation/M14.1.md).
 
 Planned source boundaries (do not create empty skeletons): `crates/gui-protocol/`
 for wire types, `user/compositor/` for the window server,

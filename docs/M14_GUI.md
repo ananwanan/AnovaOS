@@ -1,7 +1,8 @@
-<!-- Specify the planned Rust GUI stack, stable C ABI, three SDKs, five M14 gates and non-goals. -->
+<!-- Specify software display implementation and planned Rust GUI/SDK stages with independent gates. -->
 # M14: GUI architecture and five-stage delivery
 
-Status: **design only** (2026-10-22). None of M14.1–M14.5 is implemented or accepted.
+Status: **M14.1 implemented; M14.2–M14.5 remain planned** (2026-10-23).
+Actual local acceptance is recorded separately in [M14.1 validation](validation/M14.1.md).
 This design is subordinate to [AGENTS](../AGENTS.md), [architecture](../ARCHITECTURE.md),
 [roadmap](../ROADMAP.md), and [implementation status](STATUS.md). Do not interpret the
 Limine framebuffer boot response or any rendered host mockup as a functioning desktop.
@@ -139,13 +140,13 @@ guest-side reproducibility. Fonts, rasterizer and layouts belong in user space.
 Dependencies: existing Limine response checks, owned paging, safe device mapping
 and a repeatable QEMU video device profile.
 
-- [ ] Verify mode, pixel format, pitch/stride, dimensions and buffer bounds;
+- [x] Verify mode, pixel format, pitch/stride, dimensions and buffer bounds;
       explicitly reject unsupported formats rather than assuming RGBA.
-- [ ] Implement bounded pixel/rectangle/blit primitives, clipping and a software
+- [x] Implement bounded pixel/rectangle/blit primitives, clipping and a software
       back buffer; present without tearing where the selected backend permits.
-- [ ] Provide a deterministic boot graphic/test pattern and text diagnostic
+- [x] Provide a deterministic boot graphic/test pattern and text diagnostic
       fallback that preserves COM1 output and failures.
-- [ ] Keep mapped video memory out of general-purpose RAM allocation; document
+- [x] Keep mapped video memory out of general-purpose RAM allocation; document
       caching, pixel packing and ownership.
 
 **Gate:** QEMU shows a correctly clipped graphical pattern; tests assert known
@@ -251,3 +252,51 @@ M14 must not destabilize the accepted M0–M11 serial, process, VFS, toolchain
 and negative-test gates. Do not fabricate a `cargo xtask gui-test` command;
 introduce a real test command only along with its working implementation
 and check it on the documented reference configuration.
+
+## 7. Implemented M14.1 display contract
+
+`crates/graphics` is a dependency-free `no_std` software library; it does not
+map hardware or allocate. `Layout` checks width/height, pixel count, row pitch,
+total length and distinct eight-bit RGB masks before packing little-endian
+24-bit or 32-bit pixels. The limits are 4,096 pixels per axis, 2,097,152 total
+pixels, 8 MiB of RGB back buffer and 16 MiB including device row padding.
+`Surface` borrows caller storage and clips signed pixel/rectangle/blit origins.
+Blits validate the entire source/stride before writing any destination;
+presentation touches visible bytes only and preserves row padding.
+
+The optional `graphics` kernel feature owns one boot diagnostic presentation.
+`boot::display` accepts only the primary RGB framebuffer, validates the full
+visible byte span inside a framebuffer reservation and rejects overlap of its
+page-rounded mapping with allocator, boot/module or firmware memory. Limine
+permits a partial final framebuffer page; its mapped tail is never accessed.
+`mm::check_display` verifies every inherited mapping's physical identity,
+supervisor RW/NX permissions and PAT index 5. It also verifies PAT5 is WC.
+The mapping is retained, with no new alias or altered PAT/MTRR configuration.
+Only USABLE memory reaches the existing frame allocator; video memory is never
+allocated, freed, handed to an application or added to the ordinary heap.
+
+This follows the locked [Limine protocol caching and HHDM contract](https://github.com/Limine-Bootloader/limine-protocol/blob/3a0526b700e356f0eac1b71a77697b3fd1c707a3/PROTOCOL.md).
+The back buffer uses fallible reservation on the existing heap. The kernel
+renders the deterministic reference pattern, writes visible bytes through
+volatile stores, executes MFENCE and compares every byte read back before
+reporting `[GRAPHICS:PRESENT]`. Temporary storage is dropped before user startup,
+with an asserted heap baseline and `[GRAPHICS:RECLAIM]`. Errors report
+`[GRAPHICS:FALLBACK]` and leave the normal COM1 shell available. Hardware
+access occurs only on the BSP boot path, before any process runs; no IRQ or
+application receives access to this memory.
+
+`graphics-image`, `graphics-test` and `run --graphics` are implemented host
+commands. The independent host gate captures a real QMP PPM image from QEMU
+standard VGA, compares every pixel and canonical checksum, then exercises
+serial recovery and clean ACPI shutdown. Another boot with `-vga none` must
+reach the missing-display fallback and retain the same recovery/shutdown path.
+The host-only JSON dependency handles QMP framing; it is not linked into the
+kernel or distributed as a guest graphics library.
+
+This CPU copy does not synchronize to vblank or promise tear-free animation;
+the standard-VGA backend supplies no page-flip/completion interface. Only the
+fixed 800×600×32 QEMU scanout is accepted in hardware; other admitted pixel
+packings are host-tested. There is no GPU drawing, graphical text terminal,
+input, compositor, GUI syscall or public GUI ABI at this stage. The temporary
+kernel diagnostic will yield presentation ownership to the future user-space
+compositor; it adds no window, focus, font or widget policy to the kernel.

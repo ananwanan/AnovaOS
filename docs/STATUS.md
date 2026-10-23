@@ -202,13 +202,13 @@ bounds recorded here. Native limits remain separate.
 
 ## Next task
 
-M14.1: checked framebuffer/software drawing under the five independent
+M14.2: bounded keyboard/pointer events and a clipped cursor under the five independent
 [M14 GUI stages](M14_GUI.md). Preserve every previous runtime/storage/network,
 C/C++/Rust/Cargo and new SDK/workflow/package/diagnostic gate. Broader Cargo
 projects, native AnovaOS std, full user debugging, LTO/OpenMP/sanitizers and
 compiler self-bootstrap remain independently scoped.
 
-## M14 graphics planning — not implemented (2026-10-22)
+## M14.1 software display — locally verified (2026-10-23)
 
 The project owner approved [DEV-002](REQUIREMENTS.md): a Rust-native GUI
 runtime, user-space window compositor/desktop and stable versioned C ABI
@@ -218,15 +218,25 @@ constraints, candidate dependency policy and five independent gates are in
 
 | Planned stage | Intended observable result | Current status |
 | --- | --- | --- |
-| M14.1 | Validated framebuffer with bounded CPU/software graphics | Not started |
+| M14.1 | Validated framebuffer with bounded CPU/software graphics | Local QEMU gate passed |
 | M14.2 | Keyboard/pointer events and visible cursor | Not started |
 | M14.3 | Isolated user-space compositor; two windows and correct focus | Not started |
 | M14.4 | GUI runtime and C/C++/Rust SDK demos compiled/run in guest | Not started |
 | M14.5 | Verified GPU-rendered path with CPU fallback | Not started |
 
-This documentation change delivers **no GUI implementation, no graphics
-test, no GUI SDK binaries, no GPU acceleration and no additional hardware
-support**. The Limine framebuffer response is an early boot input, not a
-window system. M12 supplies the bounded Rust/Cargo prerequisite and M13
+The optional graphics feature validates the reserved framebuffer span and each
+supervisor RW/NX WC mapping before writing. A dependency-free `no_std` library
+provides clipped pixel/rectangle/blit primitives, checked 24/32-bit RGB packing
+and a temporary caller-owned back buffer. The actual standard-VGA screenshot's
+480,000 pixels and fixed checksum match the reference; full device readback and
+heap restoration also pass. Another boot without VGA retains the COM1 shell.
+Both boots execute a recovery command and shut down cleanly. See
+[validation/M14.1](validation/M14.1.md) for commands, artifacts and the exact
+regression scope. `graphics-image`, `graphics-test` and `run --graphics` exist.
+
+No GUI SDK binaries, input routing, compositor or GPU acceleration are delivered;
+the framebuffer diagnostic is not a window system. CPU presentation has no
+vblank/atomic page-flip guarantee. Only QEMU 800×600×32 is accepted as a scanout;
+other pixel formats are host-tested. M12 supplies the bounded Rust/Cargo prerequisite and M13
 supplies SDK/package delivery; M14.4 still requires its own GUI developer acceptance. SMP, physical
 devices and Linux GUI compatibility remain separately scoped workstreams.

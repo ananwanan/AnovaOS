@@ -58,7 +58,7 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `docs/M14_GUI.md` | Plan the Rust-native GUI, C ABI and C/C++/Rust SDK architecture, security boundaries, five stage gates and limits. |
 | `docs/REFERENCES.md` | Primary architecture, protocol, ABI and toolchain reference links. |
 | `docs/REQUIREMENTS.md` | Owner-mandated DEV-001 file-purpose rules and DEV-002 native GUI/SDK milestones. |
-| `docs/STATUS.md` | Record verified M0–M12 offline capabilities, the next M13 SDK task and unimplemented M14 GUI design. |
+| `docs/STATUS.md` | Record verified operating-system/SDK profiles, independent graphics stages and the next development task. |
 | `docs/TOOLCHAINS.md` | Distinguish guest C/C++/Rust application builds from online Cargo and optional compiler self-hosting. |
 | `docs/validation/M0-M1.md` | Historical local engineering/boot acceptance evidence and input hashes. |
 | `docs/validation/M2.md` | Historical local CPU/timer/trap validation evidence and limitations. |
@@ -81,7 +81,7 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `kernel/src/arch/x86_64/user.rs` | BSP saved GPR/segment/x87/SSE2 contexts, native SYSCALL and IRETQ transitions. Each user trap returns to the trusted scheduler root/stack; kernel code remains SIMD-free. |
 | `kernel/src/boot.rs` | Borrow retained Limine data. M3 allocates only USABLE RAM; bootloader data, original stacks/tables, modules, firmware and the early pool remain reserved. Retained native ELF modules support isolation tests; a tagged archive supplies the M6 root. |
 | `kernel/src/fs/mod.rs` | Bridge checked native user buffers to the shared VFS and polled canonical terminal. Calls run on the BSP at IF=0; blocking retains only a copied syscall frame, never a lock. |
-| `kernel/src/main.rs` | Boot owned memory/CPU/PCI state and run isolated native/Linux workloads with persistent storage and a shell. |
+| `kernel/src/main.rs` | Boot owned CPU/memory/devices, optional checked software graphics, and isolated user workloads. |
 | `kernel/src/mm/lock.rs` | Non-sleeping BSP locks. Order: memory manager before heap; the fixed heap never calls the frame allocator. IRQ/NMI/fatal paths must not take either. |
 | `kernel/src/mm/mod.rs` | BSP memory ownership: checked USABLE frames, fully owned table hierarchy, guarded stacks, reclaiming buddy heap and private process memory integration. |
 | `kernel/src/mm/uaccess.rs` | Copy bounded user bytes with page checks and REP MOVSB fault recovery; IF=0 pins shared mappings and no copy spans a scheduling/blocking boundary. |
@@ -125,6 +125,17 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `xtask/src/purposes.rs` | Check file-purpose inventory coverage and top-of-file comments for first-party code. Human review still verifies that each explanation describes its actual responsibility. |
 | `xtask/src/smoke.rs` | Require real CPU/memory/user/process evidence together with the QEMU exit result. |
 | `xtask/src/terminal.rs` | Drive ordinary UART editing/EOF, dynamic musl launch, real Ctrl+C interruption and volatile reboot checks. |
+
+## M14.1 software graphics files
+
+| File | Purpose |
+| --- | --- |
+| `crates/graphics/Cargo.toml` | Build the dependency-free no_std layout and software drawing library for kernel and host checks. |
+| `crates/graphics/src/lib.rs` | Validate bounded RGB modes and render clipped pixels, rectangles and blits into caller-owned buffers. |
+| `crates/graphics/src/tests.rs` | Check RGB packing, bounds, canaries, overflow, clipping and the deterministic pattern independently of hardware. |
+| `kernel/src/graphics.rs` | Validate display mappings, fallibly allocate a back buffer, present/read back WC video memory and reclaim temporary RAM. |
+| `xtask/src/graphics.rs` | Verify actual QMP pixels, bounded capture parsing, serial recovery and clean shutdown with and without VGA. |
+| `docs/validation/M14.1.md` | Record actual graphics/negative tests, artifacts and the scope of preserved local regression checks. |
 
 ## M7 storage and editor files
 

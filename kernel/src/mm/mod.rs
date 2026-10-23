@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! BSP memory ownership: checked USABLE frames, fully owned table hierarchy,
 //! guarded stacks, buddy heap, private process memory and explicitly owned coherent DMA pages.
+//! Optional video access validates inherited supervisor WC mappings without creating cache aliases.
 mod lock;
 pub mod uaccess;
 pub mod user;
@@ -54,6 +55,50 @@ static HEAP: IrqLock<BuddyHeap> = IrqLock::new(BuddyHeap::new());
 
 pub fn heap_used() -> usize {
     HEAP.with(|heap| heap.used())
+}
+
+/// Verify each inherited video page after owned table import. The caller has
+/// already checked its complete physical reservation; no mapping is created.
+#[cfg(feature = "graphics")]
+pub fn check_display(display: &crate::boot::Display) -> Result<(), &'static str> {
+    if (cpu::read_msr(0x277) >> 40) & 255 != 1 {
+        return Err("pat5-not-write-combining");
+    }
+    MEMORY.with(|slot| {
+        let manager = slot.as_mut().ok_or("memory-not-ready")?;
+        let store = Store {
+            frames: &mut manager.frames,
+            direct: manager.direct,
+            boot: None,
+            active: true,
+        };
+        let start = display.address.0 & !(PAGE_SIZE - 1);
+        let end = align_up(
+            display
+                .address
+                .0
+                .checked_add(display.layout.byte_len() as u64)
+                .ok_or("video-range-overflow")?,
+            PAGE_SIZE,
+        )
+        .map_err(|_| "video-range-overflow")?;
+        let physical = display.physical.0 & !(PAGE_SIZE - 1);
+        for offset in (0..end - start).step_by(PAGE_SIZE as usize) {
+            let mapping = manager
+                .tables
+                .query(VirtAddr(start + offset), &store)
+                .map_err(|_| "video-page-not-mapped")?;
+            if mapping.physical.0 != physical + offset
+                || !mapping.writable
+                || mapping.executable
+                || mapping.user
+                || mapping.cache_index != 5
+            {
+                return Err("unsafe-video-mapping");
+            }
+        }
+        Ok(())
+    })
 }
 
 /// One physical, WB-coherent x86 DMA page, never borrowed from the heap or a process.
