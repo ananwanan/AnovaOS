@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Exercise real musl pthread/TLS, futex, signals, poll, PTYs and optional dynamic TLS in Ring 3.
+// Exercise musl threads/signals and bounded PTY byte streams, plus optional dynamic TLS in Ring 3.
 #define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>
@@ -137,22 +137,37 @@ static void poll_tests(void) {
     close(fd[0]);CHECK(poll(&p,1,0)==1&&(p.revents&POLLNVAL));
     puts("[M9:POLL] nonblocking=true readiness=true timeout=true EOF=true HUP=true NVAL=true");
 }
+/* PTYs are byte streams: a ready read may return one echo fragment, not the whole line. */
+static void tty_read_exact(int fd,char *bytes,size_t length) {
+    size_t done=0;
+    while (done<length) {
+        struct pollfd p={fd,POLLIN,0};CHECK(poll(&p,1,1000)==1&&(p.revents&POLLIN));
+        ssize_t count=read(fd,bytes+done,length-done);CHECK(count>0);done+=(size_t)count;
+    }
+}
 static void tty_tests(void) {
     int master=posix_openpt(O_RDWR|O_NOCTTY);CHECK(master>=0);
     CHECK(grantpt(master)==0);char *path=ptsname(master);CHECK(path!=NULL);
     CHECK(open(path,O_RDWR|O_NOCTTY)==-1&&errno==EIO);CHECK(unlockpt(master)==0);
     int slave=open(path,O_RDWR);CHECK(slave>=0);
     struct termios settings;CHECK(tcgetattr(slave,&settings)==0);
-    CHECK(write(master,"M9-pty\n",7)==7);char bytes[32];CHECK(read(slave,bytes,sizeof bytes)==7&&memcmp(bytes,"M9-pty\n",7)==0);
-    CHECK(read(master,bytes,sizeof bytes)>0);
+    CHECK((settings.c_lflag&(ICANON|ECHO))==(ICANON|ECHO));
+    /* Select plain LF echo explicitly, then consume every byte before disabling echo. */
+    settings.c_oflag&=~OPOST;CHECK(tcsetattr(slave,TCSANOW,&settings)==0);
+    CHECK(write(master,"M9-pty\n",7)==7);char bytes[32];tty_read_exact(slave,bytes,7);CHECK(!memcmp(bytes,"M9-pty\n",7));
+    tty_read_exact(master,bytes,7);CHECK(!memcmp(bytes,"M9-pty\n",7));
     cfmakeraw(&settings);CHECK(tcsetattr(slave,TCSANOW,&settings)==0);
-    CHECK(write(master,"raw",3)==3);CHECK(read(slave,bytes,3)==3&&!memcmp(bytes,"raw",3));
-    CHECK(write(slave,"reply",5)==5);struct pollfd p={master,POLLIN,0};CHECK(poll(&p,1,10)==1);
-    CHECK(read(master,bytes,5)==5&&!memcmp(bytes,"reply",5));
+    CHECK(write(master,"raw",3)==3);tty_read_exact(slave,bytes,3);CHECK(!memcmp(bytes,"raw",3));
+    CHECK(write(slave,"reply",5)==5);
+    tty_read_exact(master,bytes,5);CHECK(!memcmp(bytes,"reply",5));
     CHECK(tcsetpgrp(slave,getpgrp())==0);CHECK(tcgetpgrp(slave)==getpgrp());
     struct sigaction action={0};action.sa_sigaction=handler;action.sa_flags=SA_SIGINFO;sigemptyset(&action.sa_mask);CHECK(sigaction(SIGINT,&action,NULL)==0);
     settings.c_lflag|=ISIG;CHECK(tcsetattr(slave,TCSANOW,&settings)==0);
-    CHECK(write(master,"\003",1)==1);CHECK(interrupts==1);
+    /* Host line disciplines may deliver Ctrl+C after write returns. Unmask atomically while waiting. */
+    sigset_t mask,old;sigemptyset(&mask);sigaddset(&mask,SIGINT);CHECK(sigprocmask(SIG_BLOCK,&mask,&old)==0);
+    CHECK(write(master,"\003",1)==1);struct timespec timeout={1,0};
+    CHECK(ppoll(NULL,0,&timeout,&old)==-1&&errno==EINTR);CHECK(interrupts==1);
+    CHECK(sigprocmask(SIG_SETMASK,&old,NULL)==0);
     CHECK(signal(SIGHUP,SIG_IGN)!=SIG_ERR);
     close(slave);CHECK(read(master,bytes,1)==-1&&errno==EIO);close(master);
     puts("[M9:TTY] PTY=true lock=true canonical=true raw=true poll=true foreground=true CtrlC=true hangup=true");

@@ -200,3 +200,15 @@ replacement, an actual readonly write fault, and real heap OOM/reuse. Writable
 shared-file mappings and persistent mmap writeback remain rejected. Exact bounds
 and configuration: [M12_NETWORK](docs/M12_NETWORK.md). Actual command results:
 [M12 acceptance](docs/validation/M12.md).
+
+## M13 application package admission
+
+SDK 1.0.0 keeps native v1 numbers, errors and layouts frozen. ANOVAPK2 adds
+explicit target/ABI/entry/dependency metadata and executable consistency checks.
+Native persistent disks admit native packages; Linux disks admit bounded static
+ET_EXEC Linux packages. Installation cannot change the VFS personality, and the
+mount's ABI marker cannot be rewritten or replaced. Dynamic/PIE package
+admission is deferred without changing the independently tested M9 ELF runtime.
+This package profile does not establish general Linux package compatibility,
+glibc, a dependency solver, signature authentication or per-process sandboxes.
+See [M13 design](docs/M13_SDK.md) and [validation](docs/validation/M13.md).

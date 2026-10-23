@@ -4,11 +4,12 @@
 //! Built with the x86_64 user ABI and SSE2, without libc, allocation or Linux calls.
 pub use anova_abi as abi;
 mod memory;
-use core::{
-    arch::{asm, naked_asm},
-    marker::PhantomData,
-};
+pub mod v1;
+#[cfg(not(test))]
+use core::arch::naked_asm;
+use core::{arch::asm, marker::PhantomData};
 
+#[cfg(not(test))]
 unsafe extern "C" {
     fn anova_main(argc: usize, argv: *const *const u8) -> u32;
 }
@@ -18,6 +19,7 @@ unsafe extern "C" {
 /// The loader must supply the documented mapped startup block and an RX entry.
 #[unsafe(naked)]
 #[unsafe(no_mangle)]
+#[cfg(not(test))]
 pub unsafe extern "C" fn _start() -> ! {
     // SAFETY: The loader supplies bounded argc, argv and null-terminated strings.
     // Align before CALL; the native main return status crosses SYS_EXIT only.
@@ -167,10 +169,12 @@ pub struct Args<'a> {
 impl Args<'_> {
     /// Borrow startup strings whose storage remains unchanged for the borrow.
     /// # Safety
-    /// argv has count live pointers, each to a NUL-terminated string <=128 bytes;
-    /// count <=16 and the pointer array/strings remain valid and immutable.
+    /// For count <=64, argv has count live pointers. Each string is readable through
+    /// its first NUL or for at least 1024 bytes, and the array/strings remain valid and
+    /// immutable for the borrow. Larger counts panic before dereferencing argv;
+    /// strings without a NUL within the native 1023-byte limit panic during iteration.
     pub unsafe fn from_raw(count: usize, argv: *const *const u8) -> Self {
-        assert!(count <= 16, "Invalid native argument count");
+        assert!(count <= abi::MAX_ARGS, "Invalid native argument count");
         Self {
             argv,
             count,
@@ -191,9 +195,13 @@ impl<'a> Iterator for Args<'a> {
             let pointer = self.argv.add(self.index).read();
             self.index += 1;
             let mut length = 0;
-            while length < 128 && pointer.add(length).read() != 0 {
+            while length <= abi::MAX_ARGUMENT_BYTES && pointer.add(length).read() != 0 {
                 length += 1;
             }
+            assert!(
+                length <= abi::MAX_ARGUMENT_BYTES,
+                "Invalid native argument length"
+            );
             Some(core::slice::from_raw_parts(pointer, length))
         }
     }
@@ -320,4 +328,41 @@ pub fn getcwd(output: &mut [u8]) -> Result<usize, i64> {
         )
     })
     .map(|n| n as usize)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn native_arguments_accept_all_current_loader_limits_without_truncation() {
+        let mut text = [b'x'; abi::MAX_ARGUMENT_BYTES + 1];
+        text[abi::MAX_ARGUMENT_BYTES] = 0;
+        let pointers = [text.as_ptr(); abi::MAX_ARGS];
+        // SAFETY: All 64 immutable pointers reference the same live terminated 1023-byte string.
+        let mut arguments = unsafe { Args::from_raw(pointers.len(), pointers.as_ptr()) };
+        for _ in 0..abi::MAX_ARGS {
+            assert_eq!(arguments.next().unwrap(), &text[..abi::MAX_ARGUMENT_BYTES]);
+        }
+        assert_eq!(arguments.next(), None);
+        // SAFETY: Zero arguments access neither the null array nor any string pointer.
+        assert_eq!(unsafe { Args::from_raw(0, core::ptr::null()) }.next(), None);
+    }
+
+    #[test]
+    #[should_panic(expected = "Invalid native argument count")]
+    fn native_arguments_reject_one_more_than_the_loader_count_limit() {
+        // SAFETY: An excessive count is rejected before inspecting the deliberately null array.
+        let _ = unsafe { Args::from_raw(abi::MAX_ARGS + 1, core::ptr::null()) };
+    }
+
+    #[test]
+    #[should_panic(expected = "Invalid native argument length")]
+    fn native_arguments_reject_one_more_than_the_loader_string_limit() {
+        let mut text = [b'x'; abi::MAX_ARGUMENT_BYTES + 2];
+        text[abi::MAX_ARGUMENT_BYTES + 1] = 0;
+        let pointers = [text.as_ptr()];
+        // SAFETY: The string remains immutable and has the required 1024 readable bytes.
+        let _ = unsafe { Args::from_raw(1, pointers.as_ptr()) }.next();
+    }
 }

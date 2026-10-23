@@ -426,3 +426,21 @@ explicit Cargo environment settings, uses `/persist/cargo-home` by default and
 supplies the pinned public CA store without disabling verification. Ordinary
 Cargo remains offline by default. The independent controlled/public gates and
 resource/transport boundaries are in [M12_NETWORK](docs/M12_NETWORK.md).
+
+## M13 delivered SDK and application boundary
+
+The [M13 SDK](docs/M13_SDK.md) exports source SDK 1.0.0 independently from the
+frozen native syscall personality. `user/rt/src/v1.rs` adds typed errors and
+descriptor ownership; `sdk/` supplies C/C++/Rust templates, the user linker and
+standalone host builder. `xtask/src/sdk.rs`, `app.rs` and `packages.rs` provide
+create/build/pack/image/install acceptance without kernel-target flag leakage.
+ANOVAPK2 declares architecture, ABI, entry, dependencies and admission
+requirements. The VFS pins `/persist/.anova-abi` as immutable mount authority,
+and the installer rejects a target mismatch before writing. Native and static
+Linux package profiles remain distinct. Permission declarations do not add a
+process sandbox. GUI libraries require a separate future ABI/capability.
+
+`kernel/src/task/diagnostics.rs` copies bounded user frame-pointer records after
+a captured hardware fault; `xtask/src/debug.rs` resolves addresses on the host
+against retained exact ELF symbols. The kernel does not parse DWARF or run a
+GDB stub. See [M13 validation](docs/validation/M13.md).

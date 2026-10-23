@@ -174,12 +174,38 @@ bounds recorded here. Native limits remain separate.
   are in [validation/M12](validation/M12.md) and [M12_NETWORK](M12_NETWORK.md).
   The deterministic online gate is included in CI; remote execution is separate.
 
+## M13 implemented and locally verified
+
+- Source SDK 1.0.0 freezes native v1 numbers/layouts/errors and exports independent
+  C/C++/Rust templates with normal user target flags. Rust uses a locked local
+  dependency and typed errors; C++ demonstrates move-safe descriptor ownership.
+  Runtime argument helpers follow the existing 64-entry/1,023-byte native limit.
+- ANOVAPK2 records ABI, architecture, entry, bounded dependency minima and
+  permission/capability admission. It validates hashes and executable metadata
+  before staging. Native/Linux disk mismatches, including legacy native v1 on
+  Linux disks, are rejected. The VFS pins the mounted ABI marker against writes,
+  truncation, chmod, unlink and replacement/rename.
+- Actual installed C/C++/Rust and static musl Linux execution, 31 rehashed parser
+  negatives with no-write controls, a rebuilt C upgrade, staged-write failure,
+  downgrade rejection, four boots/e2fsck checks and retained user data.
+- Public create/build/pack/image/run commands allow a new developer to install
+  their own externally hash-locked package. An actual guest application returns
+  the stable missing-file error and status 0 through the public image path.
+- Captured hardware faults produce a bounded checked-usercopy frame trace,
+  registers and global resource counters. Host symbolization of the exact debug
+  ELF resolves five actual function/source locations; corrupt RBP stops safely
+  and the shell continues. No GDB stub or general DWARF unwinder is provided.
+- The separate future GUI C ABI/C++/Rust delivery contract remains reserved for
+  M14.4. Permissions are admission metadata, not process sandboxing. The package
+  Linux profile is static ET_EXEC; the broader M9 runtime remains separately
+  verified. See [M13 SDK](M13_SDK.md) and [validation/M13](validation/M13.md).
+
 ## Next task
 
-M13: version the application SDK, manifest, package and developer experience
-around the verified C/C++/Rust toolchains. Preserve every previous runtime,
-storage, network, toolchain and Rust acceptance gate, including controlled online
-Cargo. Broader Cargo projects, native AnovaOS std, LTO/OpenMP/sanitizers and
+M14.1: checked framebuffer/software drawing under the five independent
+[M14 GUI stages](M14_GUI.md). Preserve every previous runtime/storage/network,
+C/C++/Rust/Cargo and new SDK/workflow/package/diagnostic gate. Broader Cargo
+projects, native AnovaOS std, full user debugging, LTO/OpenMP/sanitizers and
 compiler self-bootstrap remain independently scoped.
 
 ## M14 graphics planning — not implemented (2026-10-22)
@@ -199,8 +225,8 @@ constraints, candidate dependency policy and five independent gates are in
 | M14.5 | Verified GPU-rendered path with CPU fallback | Not started |
 
 This documentation change delivers **no GUI implementation, no graphics
-test, no new SDK binaries, no GPU acceleration and no additional hardware
+test, no GUI SDK binaries, no GPU acceleration and no additional hardware
 support**. The Limine framebuffer response is an early boot input, not a
-window system. M12 supplies the bounded Rust/Cargo prerequisite; M13
-SDK packaging is still required before M14.4's developer-experience acceptance. SMP, physical
+window system. M12 supplies the bounded Rust/Cargo prerequisite and M13
+supplies SDK/package delivery; M14.4 still requires its own GUI developer acceptance. SMP, physical
 devices and Linux GUI compatibility remain separately scoped workstreams.

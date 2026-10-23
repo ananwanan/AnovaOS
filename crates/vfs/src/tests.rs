@@ -1,7 +1,46 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Test VFS paths, shared file/socket/mapping ownership, pipe shutdown and bounded rollback.
+//! Test VFS paths, immutable mounted ABI identity, shared ownership and bounded rollback.
 use super::*;
 use alloc::vec;
+#[test]
+fn mounted_policy_identity_rejects_content_and_namespace_mutations() {
+    let image = image();
+    let mut fs = Vfs::new(&image).unwrap();
+    let mut fds = Descriptors::default();
+    let path = "/tmp/.anova-abi";
+    let fd = fs
+        .open(&mut fds, ROOT, path, OPEN_CREATE | OPEN_READ | OPEN_WRITE)
+        .unwrap();
+    fs.write(&fds, fd, b"anova.native.v1\n").unwrap();
+    // Pin the same node identity mount_disk retains after reading a checked ext2 marker.
+    fs.policy_node = Some(fs.resolve(ROOT, path).unwrap());
+    assert_eq!(
+        fs.open(&mut fds, ROOT, path, OPEN_WRITE | OPEN_TRUNCATE),
+        Err(READ_ONLY)
+    );
+    assert_eq!(fs.write(&fds, fd, b"linux.x86_64.v1\n"), Err(READ_ONLY));
+    assert_eq!(
+        fs.write_at(&fds, fd, 0, b"linux.x86_64.v1\n"),
+        Err(READ_ONLY)
+    );
+    assert_eq!(fs.set_len(&fds, fd, 0), Err(READ_ONLY));
+    assert_eq!(fs.chmod(ROOT, path, 0o777), Err(READ_ONLY));
+    assert_eq!(fs.fchmod(&fds, fd, 0o777), Err(READ_ONLY));
+    assert_eq!(fs.set_executable(ROOT, path), Err(READ_ONLY));
+    assert_eq!(fs.unlink(ROOT, path), Err(READ_ONLY));
+    assert_eq!(fs.rename(ROOT, path, "/tmp/moved"), Err(READ_ONLY));
+    let replacement = fs
+        .open(&mut fds, ROOT, "/tmp/replace", OPEN_CREATE | OPEN_WRITE)
+        .unwrap();
+    fs.write(&fds, replacement, b"linux.x86_64.v1\n").unwrap();
+    assert_eq!(fs.rename(ROOT, "/tmp/replace", path), Err(READ_ONLY));
+    assert!(!fs.writable(ROOT, path).unwrap());
+    let mut bytes = [0; 32];
+    assert_eq!(fs.read_at(&fds, fd, 0, &mut bytes), Ok(16));
+    assert_eq!(&bytes[..16], b"anova.native.v1\n");
+    fs.clear(&mut fds);
+}
+
 #[test]
 fn shared_file_maps_observe_writes_and_pin_removed_replaced_inodes() {
     let image = image();

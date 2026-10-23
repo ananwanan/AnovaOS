@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Gate purposes, native/Linux runtime, storage/network and source-built C/locked upstream Rust tools.
+# Gate SDK/packages/diagnostics, native/Linux runtime and source-built C/locked upstream Rust tools.
 name: Bare-metal boot
 
 on:
@@ -21,13 +21,14 @@ jobs:
       - name: Install host utilities
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends qemu-system-x86 xorriso curl dpkg-dev gcc make musl-tools qemu-user e2fsprogs openssl python3
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 xorriso curl dpkg-dev gcc g++ binutils make musl-tools qemu-user e2fsprogs openssl python3
       - name: Load the pinned Rust toolchain
         run: rustup show active-toolchain
       - name: Check formatting
         run: |
           cargo fmt --all -- --check
           cargo fmt --manifest-path user/Cargo.toml --all -- --check
+          rustfmt --edition 2024 --check sdk/templates/rust/main.rs sdk/templates/rust/offline-message/src/lib.rs
       - name: Check file-purpose explanations
         run: cargo xtask check-files
       - name: Check host tools
@@ -61,6 +62,12 @@ jobs:
         run: cargo xtask network-test
       - name: Verify offline packages, reboot rollback and strict HTTPS
         run: cargo xtask package-test
+      - name: Verify versioned SDK templates, package policy and crash symbols
+        run: |
+          cargo xtask sdk-test
+          cargo xtask app-test
+          cargo xtask package-v2-test
+          cargo xtask diagnostics-test
       - name: Upload boot evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

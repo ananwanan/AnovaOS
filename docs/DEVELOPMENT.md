@@ -18,12 +18,13 @@ External device IRQ delivery remains pending; block completion is polled.
 ## Host setup
 
 The tested host is x86_64 Ubuntu 24.04.3. Ubuntu 24.04 under WSL2 can use TCG;
-WSL2 itself was not exercised in this validation environment. Install rustup
+M13 additionally validates Ubuntu 24.04 under WSL2 with QEMU 8.2.2 TCG;
+see [M13 evidence](validation/M13.md). Install rustup
 from its official distribution, then install host utilities:
 
 ```sh
 sudo apt-get update
-sudo apt-get install --no-install-recommends qemu-system-x86 xorriso curl dpkg-dev gcc make musl-tools qemu-user e2fsprogs openssl python3 binutils
+sudo apt-get install --no-install-recommends qemu-system-x86 xorriso curl dpkg-dev gcc g++ binutils make musl-tools qemu-user e2fsprogs openssl python3 binutils
 rustup show active-toolchain
 cargo xtask fetch
 cargo xtask doctor
@@ -294,3 +295,16 @@ public PEM trust roots; credentials and private keys must never be packed.
 See [M12_NETWORK](M12_NETWORK.md) for transport limits and configuration, and
 [validation/M12](validation/M12.md) for actual acceptance status. CI retains the
 deterministic online gate; the public gate depends on external availability.
+
+## M13 application workflow and diagnostics
+
+Follow [M13_SDK](M13_SDK.md) for runnable create/build/pack/boot/install/upgrade
+steps, separate native/Linux disk policy, stable errors and crash symbols.
+Commands `sdk`, `app-new`, `app-build`, `app-pack`, `app-image`, `app-run`,
+`symbolize`, `sdk-test`, `app-test`, `package-v2-test` and `diagnostics-test`
+are implemented. GCC/G++ and binutils (`readelf`, `strip`, `addr2line`) are
+required for the three native templates and host symbolization. M13 source
+SDK templates retain debug symbols; compact package payloads have separate
+hashes. Kernel resource logs describe global counters, not process accounting.
+Preserve all M0–M12 gates alongside the four new SDK/workflow/package/diagnostic
+gates. Remote CI results remain separate from local evidence.

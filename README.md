@@ -7,7 +7,7 @@ An x86_64 operating system built from scratch in Rust. The goal is to edit,
 compile, debug, and run applications inside AnovaOS itself, while gradually
 supporting selected existing Linux software.
 
-**Current status: M0–M12 (bounded offline and online profiles) are locally verified
+**Current status: M0–M13 (bounded offline and online profiles) are locally verified
 on QEMU q35/TCG. Native apps,
 VFS, pipes, init/shell, modern virtio-blk and checked ext2 storage at `/persist`
 include source editing, sync/fsync and clean ACPI shutdown/reboot persistence.
@@ -23,6 +23,8 @@ M12 adds guest Rust 1.90.0/std and offline Cargo with vendor dependencies, build
 C FFI, standalone macros and a Cargo macro/build-script dependency graph.
 Opt-in online Cargo adds strict HTTPS registry/Git downloads and persisted-cache
 rebuilds; public crates.io/GitHub are tested through a configured host proxy.
+M13 adds SDK 1.0.0, native C/C++/Rust templates, explicit ABI-bound packages,
+installer target-policy checks and real user-fault source symbolization.
 General Linux/glibc remains future work; device IRQs stay masked.**
 
 Repository: [ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS).
@@ -108,6 +110,8 @@ development language and formatting guide is in English.
 | [docs/M12_NETWORK.md](docs/M12_NETWORK.md) | Opt-in online Cargo, strict TLS, public sources and offline cache rebuilds |
 | [docs/M12_RUST.md](docs/M12_RUST.md) | Guest Rust/std, offline Cargo, build scripts, C FFI, macros and resource bounds |
 | [docs/validation/M12.md](docs/validation/M12.md) | Actual guest compilation, persisted hashes, reboot and regression evidence |
+| [docs/M13_SDK.md](docs/M13_SDK.md) | Versioned SDK, application manifests, install/upgrade workflow and fault symbols |
+| [docs/validation/M13.md](docs/validation/M13.md) | Actual SDK/package/diagnostic and preserved regression evidence |
 | [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) | Mandatory owner requirements, including file-purpose explanations |
 | [docs/FILE_PURPOSES.md](docs/FILE_PURPOSES.md) | Purpose of every repository file |
 | [docs/STATUS.md](docs/STATUS.md) | Current implementation status and next steps |
@@ -189,8 +193,9 @@ is reported separately from [local validation](docs/validation/M12.md).
 
 ## Next steps
 
-M13 will package the verified application toolchains into a versioned SDK and
-application format. Current Rust/Cargo scope and limits are in
+M13 delivers the versioned SDK and application format described in
+[M13 SDK](docs/M13_SDK.md). M14.1 begins framebuffer/software drawing under the
+[separate GUI plan](docs/M14_GUI.md). Current Rust/Cargo limits remain in
 [M12 Rust](docs/M12_RUST.md). See [current status](docs/STATUS.md) and
 [roadmap](ROADMAP.md).
 
@@ -292,3 +297,25 @@ GitHub sources; local acceptance used a reachable host proxy and public PEM root
 See [M12 networking](docs/M12_NETWORK.md) for configuration and resource limits.
 A native AnovaOS std port, arbitrary Cargo projects and compiler bootstrap
 remain separate work.
+
+## M13 SDK and application packages
+
+```sh
+cargo xtask sdk
+cargo xtask app-new c build/hello-c
+cargo xtask app-build build/hello-c
+cargo xtask app-pack build/hello-c/app.toml build/hello-c/hello-c.apkg
+cargo xtask sdk-test
+cargo xtask app-test
+cargo xtask package-v2-test
+cargo xtask diagnostics-test
+```
+
+Use `cpp` or `rust` for the other native templates. `app-run PACKAGE SHA256`
+creates an image containing your checked package, selects a matching temporary
+disk, and prints actual guest install/run commands; use `--disk` to reuse an
+explicit persistent image. Follow the complete [create/build/install/upgrade
+recipe](docs/M13_SDK.md). The versioned native SDK stays separate from the
+M11/M12 Linux-musl guest compilers. Package permissions are admission metadata;
+GUI runtime, GDB stubs, per-process sandboxes and native Rust std remain outside
+this accepted profile.

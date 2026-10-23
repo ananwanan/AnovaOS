@@ -265,3 +265,27 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `kernel/src/task/linux/time.rs` | Adapt utimensat/futimesat, dirfd/descriptor paths, NOW/OMIT and checked timestamp precision. |
 | `kernel/src/mm/user/file_mapping.rs` | Pin readonly shared-file mappings and refresh changed VFS bytes with physical-page and fork ownership. |
 | `crates/vfs/src/file_mapping.rs` | Retain bounded shared-file bytes and version successful writes independently of descriptor lifetime. |
+
+## M13 application SDK and package delivery
+
+| File | Purpose |
+| --- | --- |
+| `docs/M13_SDK.md` | Define SDK/ABI versions, package policy, developer workflow, diagnostics and future GUI delivery boundaries. |
+| `docs/validation/M13.md` | Record actual M13 SDK/package/crash diagnostics and preserved regression evidence. |
+| `xtask/src/sdk.rs` | Export a checksummed SDK and create/build independent native C, C++ and offline Rust projects. |
+| `xtask/src/debug.rs` | Resolve captured guest fault PCs against exact ELF symbols and verify bounded real guest crash traces. |
+| `kernel/src/task/diagnostics.rs` | Copy bounded user frame-pointer chains safely and report captured fault registers and resources. |
+| `user/rt/src/v1.rs` | Provide additive native v1 typed errors and owned descriptor wrappers while retaining raw interfaces. |
+| `sdk/README.md` | Document the native SDK release, templates, standalone build driver and separate GUI ABI reservation. |
+| `sdk/build.py` | Build independent native SDK projects with isolated user flags, offline Rust inputs and explicit ABI metadata. |
+| `sdk/include/anova.hpp` | Wrap native C descriptors with move-safe C++ ownership without STL or exception dependencies. |
+| `sdk/templates/c/main.c` | Exercise native SDK version negotiation, console I/O and a diagnosed missing-file error in C. |
+| `sdk/templates/cpp/main.cpp` | Exercise equivalent native SDK behavior and C++ descriptor ownership. |
+| `sdk/templates/rust/main.rs` | Exercise native typed errors and a local offline dependency without Rust std. |
+| `sdk/templates/rust/offline-message/Cargo.toml` | Pin the local first-party dependency used by the offline native Rust template. |
+| `sdk/templates/rust/offline-message/src/lib.rs` | Supply a no_std message through the template local Cargo dependency. |
+| `sdk/tests/contract.c` | Assert native C/C++ syscall numbers, stable errors, structure sizes, alignments and field offsets. |
+| `tests/guest/m13/crash.c` | Trigger real native user faults through named stack frames and reject a corrupted frame pointer. |
+| `sdk/native-v1.ld` | Link SDK user images with distinct W^X pages and valid nonempty load segments under GNU ld and rust-lld. |
+| `xtask/src/app.rs` | Validate external package hashes, build application images, launch isolated disks and verify the public SDK installation workflow. |
+| `sdk/templates/rust/Cargo.toml` | Define the exported standalone no_std Rust project with local runtime and offline dependency paths. |

@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Host CLI for reproducible builds, ISO/ext2 images, safe disk attachment and QEMU validation.
+//! Host CLI for SDK/app packages, fault symbols, reproducible images and QEMU validation.
+mod app;
 mod apps;
 mod assets;
+mod debug;
 mod disk;
 mod linux;
 mod network;
@@ -10,6 +12,7 @@ mod purposes;
 mod rust;
 mod rust_online;
 mod rust_public;
+mod sdk;
 mod smoke;
 mod terminal;
 mod toolchain;
@@ -145,7 +148,20 @@ fn execute() -> Result<()> {
     env::set_current_dir(&root)?;
     let args: Vec<_> = env::args().skip(1).collect();
     let action = args.first().map_or("help", String::as_str);
-    if !matches!(action, "smoke" | "root-image" | "run") && args.len() > 1 {
+    if !matches!(
+        action,
+        "smoke"
+            | "root-image"
+            | "run"
+            | "sdk"
+            | "app-new"
+            | "app-build"
+            | "app-pack"
+            | "symbolize"
+            | "app-image"
+            | "app-run"
+    ) && args.len() > 1
+    {
         return Err("Unexpected arguments; run cargo xtask help".into());
     }
     match action {
@@ -207,6 +223,22 @@ fn execute() -> Result<()> {
             disk::create_profile(&root, &path, linux)
         }
         "package-test" => packages::verify(&root),
+        "package-v2-test" => packages::verify_v2(&root),
+        "sdk" => sdk::dispatch(&root, &args[1..]),
+        "app-new" => sdk::app_new(&root, &args[1..]),
+        "app-build" => sdk::app_build(&root, &args[1..]),
+        "app-pack" => match &args[1..] {
+            [manifest, output] => {
+                packages::pack_manifest(&root, Path::new(manifest), Path::new(output))
+            }
+            _ => Err("Usage: cargo xtask app-pack MANIFEST OUTPUT".into()),
+        },
+        "sdk-test" => sdk::verify(&root),
+        "app-image" => app::image(&root, &args[1..]),
+        "app-run" => app::run(&root, &args[1..]),
+        "app-test" => app::verify(&root),
+        "symbolize" => debug::run(&args[1..]),
+        "diagnostics-test" => debug::verify(&root),
         "toolchain-build" => toolchain::build(&root),
         "toolchain-image" => toolchain::image(&root).map(|_| ()),
         "toolchain-test" => toolchain::verify(&root),
@@ -284,6 +316,17 @@ fn execute() -> Result<()> {
                 "--manifest-path",
                 "user/Cargo.toml",
                 "-p",
+                "anova-rt",
+                "--lib",
+                "--target-dir",
+                "build/user-host-target",
+            ]))?;
+            command(Command::new("cargo").args([
+                "test",
+                "--locked",
+                "--manifest-path",
+                "user/Cargo.toml",
+                "-p",
                 "shell",
                 "--lib",
                 "--target-dir",
@@ -292,7 +335,7 @@ fn execute() -> Result<()> {
         }
         "help" | "--help" | "-h" => {
             println!(
-                "AnovaOS host tools\n\n  cargo xtask doctor\n  cargo xtask fetch\n  cargo xtask build\n  cargo xtask image\n  cargo xtask run [--network] [--toolchain | --rust] [--disk build/disks/NAME.ext2]\n  cargo xtask smoke [--case CASE] [--timeout-secs 1..300]\n  cargo xtask verify\n  cargo xtask test-host\n  cargo xtask test-compat\n  cargo xtask trace-compat\n  cargo xtask apps\n  cargo xtask check-apps\n  cargo xtask check-files\n  cargo xtask network-test\n  cargo xtask package-test\n  cargo xtask toolchain-build\n  cargo xtask toolchain-image\n  cargo xtask toolchain-test\n  cargo xtask rust-build\n  cargo xtask rust-image\n  cargo xtask rust-cross-test\n  cargo xtask rust-runtime-test\n  cargo xtask rust-test\n  cargo xtask rust-online-test\n  cargo xtask rust-public-test\n  cargo xtask terminal-test\n  cargo xtask root-image [--linux] build/disks/NAME.ext2\n  cargo xtask persistence-test\n\nCASE: boot, panic, timeout, invalid-opcode, general-protection, page-fault, double-fault, stack-guard, read-only, no-execute, direct-no-execute, unmapped, oom.\nOutputs stay in build/; run uses disposable OVMF variables and a temporary data disk unless --disk is explicit. Use guest shutdown for persistent images. TCG is mandatory."
+                "AnovaOS host tools\n\n  cargo xtask doctor\n  cargo xtask fetch\n  cargo xtask build\n  cargo xtask image\n  cargo xtask run [--network] [--toolchain | --rust] [--disk build/disks/NAME.ext2]\n  cargo xtask smoke [--case CASE] [--timeout-secs 1..300]\n  cargo xtask verify\n  cargo xtask test-host\n  cargo xtask test-compat\n  cargo xtask trace-compat\n  cargo xtask apps\n  cargo xtask check-apps\n  cargo xtask check-files\n  cargo xtask network-test\n  cargo xtask package-test\n  cargo xtask sdk\n  cargo xtask app-new <c|cpp|rust> PROJECT\n  cargo xtask app-build PROJECT\n  cargo xtask app-pack MANIFEST OUTPUT\n  cargo xtask app-image PACKAGE SHA256\n  cargo xtask app-run PACKAGE SHA256 [--disk build/disks/NAME.ext2]\n  cargo xtask app-test\n  cargo xtask sdk-test\n  cargo xtask package-v2-test\n  cargo xtask diagnostics-test\n  cargo xtask symbolize ELF [--base 0xBIAS] ADDRESS... | --log LOG [--pid PID]\n  cargo xtask toolchain-build\n  cargo xtask toolchain-image\n  cargo xtask toolchain-test\n  cargo xtask rust-build\n  cargo xtask rust-image\n  cargo xtask rust-cross-test\n  cargo xtask rust-runtime-test\n  cargo xtask rust-test\n  cargo xtask rust-online-test\n  cargo xtask rust-public-test\n  cargo xtask terminal-test\n  cargo xtask root-image [--linux] build/disks/NAME.ext2\n  cargo xtask persistence-test\n\nCASE: boot, panic, timeout, invalid-opcode, general-protection, page-fault, double-fault, stack-guard, read-only, no-execute, direct-no-execute, unmapped, oom.\nOutputs stay in build/; run uses disposable OVMF variables and a temporary data disk unless --disk is explicit. Use guest shutdown for persistent images. TCG is mandatory."
             );
             Ok(())
         }
@@ -381,6 +424,9 @@ fn doctor(root: &Path) -> Result<()> {
         ("curl", vec!["--version"], None),
         ("dpkg-deb", vec!["--version"], None),
         ("gcc", vec!["--version"], None),
+        ("g++", vec!["--version"], None),
+        ("addr2line", vec!["--version"], None),
+        ("strip", vec!["--version"], None),
         ("readelf", vec!["--version"], None),
         ("musl-gcc", vec!["--version"], None),
         ("make", vec!["--version"], None),

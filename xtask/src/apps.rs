@@ -95,6 +95,8 @@ pub fn build(root: &Path, clippy: bool) -> Result<()> {
         "target-cpu=x86-64".into(),
         "-C".into(),
         "target-feature=-avx,-avx2".into(),
+        "-C".into(),
+        "force-frame-pointers=yes".into(),
     ];
     let target = directory(root, "user-target")?;
     let mut rust = Command::new("cargo");
@@ -139,6 +141,8 @@ pub fn build(root: &Path, clippy: bool) -> Result<()> {
                 "-Werror",
                 "-O2",
                 "-g",
+                "-fno-omit-frame-pointer",
+                "-fno-optimize-sibling-calls",
                 "-ffreestanding",
                 "-fno-stack-protector",
                 "-fno-pie",
