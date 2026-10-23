@@ -61,8 +61,12 @@ a bounded diagnostic queue and clipped cursor; its local three-boot QEMU gate pa
 Preserve `cargo xtask input-test` and the `graphics,input-test` kernel feature
 check as well. See [M14 GUI](docs/M14_GUI.md),
 [validation/M14.1](docs/validation/M14.1.md) and
-[validation/M14.2](docs/validation/M14.2.md). M14.3 user-space composition is next;
-GUI libraries, GDB stubs, native std and compiler bootstrap remain independently scoped.
+[validation/M14.2](docs/validation/M14.2.md). M14.3 adds an isolated user-space compositor, authenticated bounded copied IPC,
+private surfaces, focused input and actual client/server-fault restart verification.
+Preserve `cargo xtask gui-test` and both `graphics,gui` and
+`graphics,gui,gui-test` kernel checks. Read [M14 compositor](docs/M14_COMPOSITOR.md)
+and [validation/M14.3](docs/validation/M14.3.md). M14.4 GUI runtime/SDKs are next;
+GDB stubs, native std and compiler bootstrap remain independently scoped.
 
 本文件是后续 Codex 开发规范。用户明确指令优先；已有修改应保留。日常、可逆的实现选择可自主完成，不因普通阶段切换反复请求确认。
 

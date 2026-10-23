@@ -357,3 +357,37 @@ CI retains `build/input/`; remote execution remains separate from local evidence
 These cases establish neither physical hotplug nor USB, external IRQ, real
 hardware or user-space GUI routing. Preserve `graphics-test`, `input-test`,
 their kernel feature checks and all earlier gates.
+
+## M14.3 native window composition
+
+```sh
+cargo xtask gui-image
+cargo xtask gui-test
+cargo xtask run --gui
+```
+
+`gui-image` builds `build/images/anova-gui.iso` with `graphics,gui`.
+The COM1 shell remains the entry point: type `gui-test` to spawn the independent
+user compositor and two native clients. Click for focus, title-drag for movement,
+and bottom-right drag for resize. The supervised demonstration uses X in the
+red window to fault that client, F12 to fault/restart the compositor and F11
+in the restarted session to close it and return to the shell. Interactive GTK
+availability is separate from the accepted headless gate.
+
+`gui-test` builds `build/images/anova-gui-test.iso` with
+`graphics,gui,gui-test`. Three boots cover standard VGA/i8042, no VGA, and
+no i8042. The kernel test profile exhausts the actual heap and checks connection
+rollback/reuse; ordinary interactive images omit that pressure injection.
+Actual QMP input drives window focus, movement, resize and both isolated user
+faults. Eight screenshots compare all pixels against a separate host reference;
+every boot requires COM1 recovery and clean ACPI shutdown. Results, hashes and
+serial/QMP/scanout artifacts stay in `build/gui/`. The CI gate retains that
+folder; local results do not claim a remote CI run.
+
+Preserve all previous gates alongside `gui-test`. The internal syscall transport
+is separate from native v1 and the future GUI C ABI. Each client owns copied
+private pixels, one bounded window and a bounded mailbox; no device mappings
+are exported. See [M14_COMPOSITOR](M14_COMPOSITOR.md) for exact ownership,
+backpressure and restart semantics and [M14.3 validation](validation/M14.3.md)
+for actual verification and exclusions. M14.4 GUI runtime/SDKs and M14.5 GPU
+rendering remain separate stages.

@@ -9,7 +9,7 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | --- | --- |
 | `.cargo/config.toml` | Routes host commands through xtask and confines kernel code-generation flags to its target. |
 | `.gitattributes` | Normalize first-party text to LF while preserving binary images and archives. |
-| `.github/workflows/boot.yml` | Gate host/user/kernel checks, graphics/PS2 input and QEMU regressions, retain build/input evidence, and run a separate source-built guest compiler job. |
+| `.github/workflows/boot.yml` | Gate host/user/kernel checks, graphics/input/native composition and QEMU regressions, retain GUI evidence, and run a separate source-built guest compiler job. |
 | `.gitignore` | Ignore generated host/user builds, images, toolchains and local machine secrets. |
 | `AGENTS.md` | Define mandatory repository development, safety, validation and delivery conventions. |
 | `ARCHITECTURE.md` | Describe implemented subsystem boundaries and the planned operating-system architecture. |
@@ -133,7 +133,7 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `crates/graphics/Cargo.toml` | Build the dependency-free no_std layout and software drawing library for kernel and host checks. |
 | `crates/graphics/src/lib.rs` | Validate bounded RGB modes, provide a fixed cursor raster and render clipped pixels, rectangles and blits into caller-owned buffers. |
 | `crates/graphics/src/tests.rs` | Check RGB packing, bounds, canaries, overflow, clipping, literal cursor shape and deterministic pattern independently of hardware. |
-| `kernel/src/graphics.rs` | Validate display mappings, present/read back and reclaim the temporary RGB buffer, then save/restore a bounded clipped diagnostic cursor. |
+| `kernel/src/graphics.rs` | Validate display mappings, present/reclaim the boot buffer, manage the diagnostic cursor and copy checked user compositor damage. |
 | `xtask/src/graphics.rs` | Verify actual QMP pixels, bounded capture parsing, serial recovery and clean shutdown with and without VGA. |
 | `docs/validation/M14.1.md` | Record actual graphics/negative tests, artifacts and the scope of preserved local regression checks. |
 
@@ -144,7 +144,7 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `crates/input/Cargo.toml` | Build dependency-free no_std PS/2 decoding and bounded diagnostic event delivery for kernel and host checks. |
 | `crates/input/src/lib.rs` | Normalize physical set-1 keys, three-byte mouse packets, bounded queue/reset/reconnect semantics and clipped pointer state without allocation or GUI policy. |
 | `crates/input/src/tests.rs` | Check key/modifier/special-sequence state, full nine-bit motion, malformed/overflow recovery, consumer lifecycle and pointer bounds. |
-| `kernel/src/drivers/input.rs` | Own i8042 source/ACK setup, bounded scheduler polling and incomplete-packet expiry, diagnostic delivery and test-only controller lifecycle checks. |
+| `kernel/src/drivers/input.rs` | Own i8042 setup/polling/expiry, hand off exclusive physical events to the admitted user compositor, and retain diagnostic/lifecycle checks. |
 | `xtask/src/input.rs` | Inject QMP keyboard/mouse sequences, compare all cursor/background pixels and require missing-device serial recovery and clean shutdown. |
 | `docs/validation/M14.2.md` | Record actual polled PS/2/cursor gate results, bounded recovery cases, artifacts and regression limits. |
 
@@ -311,3 +311,26 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `sdk/native-v1.ld` | Link SDK user images with distinct W^X pages and valid nonempty load segments under GNU ld and rust-lld. |
 | `xtask/src/app.rs` | Validate external package hashes, build application images, launch isolated disks and verify the public SDK installation workflow. |
 | `sdk/templates/rust/Cargo.toml` | Define the exported standalone no_std Rust project with local runtime and offline dependency paths. |
+
+## M14.3 isolated native composition
+
+| File | Purpose |
+| --- | --- |
+| `crates/gui/Cargo.toml` | Define the no_std internal GUI wire and software composition library. |
+| `crates/gui/src/lib.rs` | Expose bounded user-space window policy and the experimental transport contract. |
+| `crates/gui/src/wire.rs` | Serialize fixed-width versioned GUI requests/replies without pointers or padding. |
+| `crates/gui/src/transport.rs` | Define copied kernel message, hardware-event and checked scanout layouts. |
+| `crates/gui/src/policy.rs` | Validate private surfaces and implement damage, stacking, movement, resizing and focus. |
+| `crates/gui/src/tests.rs` | Exercise adversarial wire packets, ownership, quotas, damage and routed input as pure logic. |
+| `kernel/src/gui.rs` | Authenticate executable/server and process/client identities, copy bounded IPC/scanout and clean up lifetimes. |
+| `user/compositor/Cargo.toml` | Build the isolated Rust native software window compositor. |
+| `user/compositor/src/main.rs` | Receive authenticated packets, compose private surfaces and route hardware input in user space. |
+| `user/gui-common/Cargo.toml` | Share internal native GUI transport helpers across the compositor and test programs. |
+| `user/gui-common/src/lib.rs` | Wrap synchronous copied GUI packets and preserve explicit pointer safety contracts. |
+| `user/gui-client/Cargo.toml` | Build independent native window clients and adversarial transport fixtures. |
+| `user/gui-client/src/main.rs` | Upload private red/blue surfaces, handle focused input and test crash/queue/ownership boundaries. |
+| `user/gui-test/Cargo.toml` | Build the native process supervisor for actual GUI lifecycle acceptance. |
+| `user/gui-test/src/main.rs` | Spawn/reap isolated windows and compositor sessions, test quotas and retain COM1 recovery. |
+| `xtask/src/gui.rs` | Inject actual QMP input and compare native windows, failure recovery and every scanout pixel. |
+| `docs/M14_COMPOSITOR.md` | Specify experimental GUI authority, copied surfaces, damage, input and restart semantics. |
+| `docs/validation/M14.3.md` | Record actual M14.3 execution, scanouts, fault/OOM recovery and regression evidence. |

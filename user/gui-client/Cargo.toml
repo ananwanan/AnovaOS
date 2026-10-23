@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: Apache-2.0
+# Build independent native client processes for copied surface submission and routed input.
+[package]
+name = "gui-client"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+build = "../build.rs"
+
+[[bin]]
+name = "gui-client"
+path = "src/main.rs"
+test = false
+bench = false
+
+[dependencies]
+anova-rt = { path = "../rt" }
+anova-gui = { path = "../../crates/gui" }
+anova-gui-user = { path = "../gui-common" }

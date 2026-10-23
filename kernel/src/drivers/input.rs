@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Own the QEMU i8042 ports with PM-timer-bounded setup and scheduler-only byte polling.
-//! IRQ1/12 remain masked. A fixed diagnostic consumer owns events/cursor until M14.3
-//! supplies a user-space compositor; physical keys never become COM1 text or public ABI.
+//! IRQ1/12 remain masked. The diagnostic yields exclusive events/cursor to an admitted
+//! user compositor; physical keys never become COM1 text or a frozen public ABI.
 use crate::{arch::x86_64::cpu, graphics::Cursor, serial};
 use anova_input::{Dispatcher, Event, KeyState, ResetReason};
 use anova_platform::{PM_HZ, acpi::PmTimer, pm_elapsed};
@@ -20,6 +20,8 @@ struct State {
     timer: PmTimer,
     last_keyboard: u32,
     last_mouse: u32,
+    #[cfg(feature = "gui")]
+    gui: bool,
 }
 
 impl State {
@@ -232,6 +234,8 @@ pub fn init(timer: PmTimer) {
             timer,
             last_keyboard: now,
             last_mouse: now,
+            #[cfg(feature = "gui")]
+            gui: false,
         };
         #[cfg(feature = "input-test")]
         let mut state = state;
@@ -273,6 +277,10 @@ pub fn poll() {
             state.dispatcher.feed_keyboard(byte);
         }
     }
+    #[cfg(feature = "gui")]
+    if state.gui {
+        return;
+    }
     for _ in 0..QUEUE {
         let Some(event) = state.dispatcher.pop_event() else {
             break;
@@ -308,6 +316,60 @@ pub fn poll() {
             }
         }
     }
+}
+
+#[cfg(feature = "gui")]
+pub fn gui_owner(active: bool) {
+    // SAFETY: Only the BSP scheduler at IF=0 borrows this handoff. There is
+    // no IRQ reader, and the mutable reference ends before user execution.
+    if let Some(state) = unsafe { &mut *OWNER.0.get() } {
+        if let Some(cursor) = &mut state.cursor {
+            cursor.hide();
+        }
+        state.dispatcher.reset(ResetReason::Explicit);
+        state.gui = active;
+    }
+}
+
+#[cfg(feature = "gui")]
+pub fn gui_event() -> Result<anova_gui::transport::HardwareEvent, i64> {
+    use anova_gui::transport::{HardwareEvent, KEY, POINTER, RESET};
+    // SAFETY: Sole BSP scheduler at IF=0; GUI bind excludes the diagnostic
+    // consumer. Neither IRQs nor user code can alias this state during the call.
+    let state = unsafe { &mut *OWNER.0.get() }
+        .as_mut()
+        .ok_or(anova_abi::UNSUPPORTED)?;
+    if !state.keyboard && !state.pointer {
+        return Err(anova_abi::UNSUPPORTED);
+    }
+    if !state.gui {
+        return Err(anova_abi::PERMISSION_DENIED);
+    }
+    let event = state.dispatcher.pop_event().ok_or(anova_abi::WOULD_BLOCK)?;
+    Ok(match event {
+        Event::Reset(_) => HardwareEvent {
+            kind: RESET,
+            ..HardwareEvent::default()
+        },
+        Event::Key(key) => HardwareEvent {
+            kind: KEY,
+            value: u32::from(key.key.number()),
+            flags: match key.state {
+                KeyState::Pressed => 0,
+                KeyState::Released => 1,
+                KeyState::Repeat => 2,
+            } | (u32::from(key.modifiers.bits()) << 8),
+            ..HardwareEvent::default()
+        },
+        Event::Pointer(event) => HardwareEvent {
+            kind: POINTER,
+            value: u32::from(event.buttons.bits()),
+            x: event.x,
+            y: event.y,
+            flags: u32::from(event.changed.bits()),
+            reserved: 0,
+        },
+    })
 }
 
 #[cfg(feature = "input-test")]

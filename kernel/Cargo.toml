@@ -22,6 +22,7 @@ anova-elf = { path = "../crates/elf" }
 anova-sched = { path = "../crates/sched" }
 anova-graphics = { path = "../crates/graphics", optional = true }
 anova-input = { path = "../crates/input", optional = true }
+anova-gui = { path = "../crates/gui", optional = true }
 
 anova-vfs = { path = "../crates/vfs" }
 anova-storage = { path = "../crates/storage" }
@@ -30,6 +31,8 @@ smoltcp = { version = "=0.12.0", default-features = false, features = ["alloc", 
 
 [features]
 graphics = ["dep:anova-graphics", "dep:anova-input"]
+gui = ["graphics", "dep:anova-gui"]
+gui-test = ["gui"]
 input-test = ["graphics"]
 qemu-test = []
 test-panic = ["qemu-test"]

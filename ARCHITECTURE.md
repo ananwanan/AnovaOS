@@ -242,9 +242,9 @@ native SDK 从 M4 的 `no_std` 应用与最小 runtime 开始。开发者可先�
 ## 9. M14 display/input and planned graphical userland/SDK architecture
 
 The optional **M14.1 software display and M14.2 polled PS/2 input/cursor are
-implemented and locally verified**. User-space GUI and SDK
-components remain planned. The authoritative design and the
-independently accepted M14.1–M14.5 stages are in
+implemented and locally verified**. The M14.3 isolated user-space compositor
+is also locally accepted; GUI runtime/SDK and GPU components remain planned. The authoritative design and the
+independently gated M14.1–M14.5 stages are in
 [M14_GUI](docs/M14_GUI.md), with stage status in [ROADMAP](ROADMAP.md)
 and [STATUS](docs/STATUS.md).
 
@@ -276,8 +276,9 @@ kernel IPC, mappings, display and input drivers
 
 The kernel retains buffer/memory permissions, IPC isolation, display and input
 device access; windows, focus, text rendering, widgets and the desktop shell
-belong to user-space components. The compositor authenticates clients and
-owns presentation, stacking, input routing, buffer lifetime and quotas.
+belong to user-space components. The kernel authenticates process identities;
+the compositor validates window ownership and owns presentation, stacking,
+input routing, buffer lifetime and quotas.
 Clients do not receive unrestricted framebuffer mappings. All display
 formats/strides, damage regions, memory lengths, object handles, concurrency,
 events and crash/restart paths must be bounded, versioned and verified.
@@ -328,8 +329,16 @@ consumer reconnect and actual controller-port stop/reinitialization cases.
 See [M14.2 evidence](docs/validation/M14.2.md) for acceptance status. This path
 adds no USB, physical hotplug, external IRQ or real-hardware support claim.
 
-Planned source boundaries (do not create empty skeletons): `crates/gui-protocol/`
-for wire types, `user/compositor/` for the window server,
+Implemented M14.3 boundaries are `crates/gui/` for wire types and bounded
+composition policy, `kernel/src/gui.rs` for authenticated copied transport and
+exclusive display/input access, and `user/compositor/` for the window server.
+The compositor owns private surface copies, damage, stacking, focus and input
+routing. Client/server exit, fault and exec release transport resources; session
+changes invalidate old handles. Actual heap OOM, mailbox pressure, two separate
+client processes and both client/server #UD recovery are tested. No shared
+user mapping or device address reaches clients. See
+[M14_COMPOSITOR](docs/M14_COMPOSITOR.md) and
+[M14.3 evidence](docs/validation/M14.3.md). Remaining planned boundaries are
 `user/gui-runtime/` for drawing/widgets, `user/desktop/` for shell UI, and
 `user/gui-sdk/{ffi,rust,c,cpp}/` for the library ABI and language SDKs.
 Evaluate `embedded-graphics`, `tiny-skia`, `fontdue` and `cbindgen`

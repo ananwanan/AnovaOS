@@ -1,9 +1,10 @@
 <!-- Specify software display implementation and planned Rust GUI/SDK stages with independent gates. -->
 # M14: GUI architecture and five-stage delivery
 
-Status: **M14.1–M14.2 implemented and locally verified; M14.3–M14.5 remain planned**
+Status: **M14.1–M14.3 implemented and locally verified; M14.4–M14.5 remain planned**
 (2026-10-23). Actual local acceptance is recorded separately in
-[M14.1 validation](validation/M14.1.md) and [M14.2 validation](validation/M14.2.md).
+[M14.1 validation](validation/M14.1.md), [M14.2 validation](validation/M14.2.md)
+and [M14.3 validation](validation/M14.3.md).
 This design is subordinate to [AGENTS](../AGENTS.md), [architecture](../ARCHITECTURE.md),
 [roadmap](../ROADMAP.md), and [implementation status](STATUS.md). Do not interpret the
 Limine framebuffer boot response or any rendered host mockup as a functioning desktop.
@@ -177,15 +178,17 @@ regression scope are in [M14.2 validation](validation/M14.2.md).
 
 ### M14.3 — User-space compositor and native windows
 
-Dependencies: M14.1–M14.2 plus validated IPC and safe shared user memory.
+Dependencies: M14.1–M14.2 plus validated IPC and checked user buffer copying.
+The accepted initial profile deliberately uses copied private surfaces; shared
+user mappings are not required or implemented. See [M14_COMPOSITOR](M14_COMPOSITOR.md).
 
-- [ ] Implement a separate compositor process, authenticated per-client
+- [x] Implement a separate compositor process, authenticated per-client
       connections, surface ownership, quotas and lifecycle cleanup.
-- [ ] Implement damage-based software composition, window ordering, moving,
+- [x] Implement damage-based software composition, window ordering, moving,
       resizing, focus, visibility and input routing; no widget logic in kernel.
-- [ ] Specify surface/buffer ownership and presentation completion, redraw
+- [x] Specify surface/buffer ownership and presentation completion, redraw
       after occlusion and restart behavior.
-- [ ] Keep terminal/serial recovery available if compositor or a client fails.
+- [x] Keep terminal/serial recovery available if compositor or a client fails.
 
 **Gate:** at least two isolated user processes display overlapping, movable
 windows with correct focus, redraw and input targeting. Kill a client; verify
@@ -301,7 +304,9 @@ This CPU copy does not synchronize to vblank or promise tear-free animation;
 the standard-VGA backend supplies no page-flip/completion interface. Only the
 fixed 800×600×32 QEMU scanout is accepted in hardware; other admitted pixel
 packings are host-tested. There is no GPU drawing, graphical text terminal,
-compositor, GUI syscall or public GUI ABI. M14.2 extends the temporary kernel
+user-space compositor or GUI syscall in this diagnostic. M14.3 separately adds
+the experimental copied transport; a public GUI library ABI remains M14.4.
+M14.2 extends the temporary kernel
 diagnostic with physical input/cursor only. It will yield presentation ownership
 to the future user-space compositor and adds no window, focus, font or widget policy.
 
@@ -402,4 +407,6 @@ CI runs `input-test` and retains its `build/input/` artifacts.
 Only the documented QEMU PS/2 profile and software cursor are accepted. USB,
 physical hotplug, peripheral IRQ routing, real-hardware keyboard/mouse support,
 graphical terminal/text, user-space compositor, public GUI event ABI and GUI
-SDK remain outside M14.2. M14.3 is the next required GUI stage.
+SDK remain outside M14.2. M14.3 is accepted separately under
+[M14_COMPOSITOR](M14_COMPOSITOR.md) and [its validation](validation/M14.3.md);
+M14.4 is the next required GUI stage.

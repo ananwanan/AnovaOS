@@ -1,7 +1,7 @@
 <!-- Track milestone dependencies, implementation checklists and acceptance criteria. -->
 # 开发路线与阶段验收
 
-日期：2026-10-23。**M0–M13（受限离线与联网范围）及 M14.1 软件显示已通过本地 q35/TCG 验收；M14.2 输入与游标已通过本地 q35/TCG 验收；M14.3–M14.5 与 M15 尚未实现，外设 IRQ 路由启用待对应驱动。** 证据见 [M13 验证记录](docs/validation/M13.md)、[M14.1 验证记录](docs/validation/M14.1.md)、[M14.2 验证记录](docs/validation/M14.2.md) 与 [STATUS](docs/STATUS.md)。[FIRST_TASK](docs/FIRST_TASK.md) 记录 M0/M1 原始实现顺序；当前 M2 边界见 [CPU 基线](docs/M2_CPU.md)。
+日期：2026-10-23。**M0–M13（受限离线与联网范围）及 M14.1 软件显示已通过本地 q35/TCG 验收；M14.2 输入与游标已通过本地 q35/TCG 验收；M14.3 用户态合成器已通过本地 q35/TCG 验收；M14.4–M14.5 与 M15 尚未实现，外设 IRQ 路由启用待对应驱动。** 证据见 [M13 验证记录](docs/validation/M13.md)、[M14.1 验证记录](docs/validation/M14.1.md)、[M14.2 验证记录](docs/validation/M14.2.md)、[M14.3 验证记录](docs/validation/M14.3.md) 与 [STATUS](docs/STATUS.md)。[FIRST_TASK](docs/FIRST_TASK.md) 记录 M0/M1 原始实现顺序；当前 M2 边界见 [CPU 基线](docs/M2_CPU.md)。
 
 ## 阶段总览
 
@@ -21,7 +21,7 @@
 | M11 | 系统内 GCC/G++ 应用开发 | M7–M9；可先离线 | 本地离线 C/C++/make 验收通过 |
 | M12 | 系统内 Rust/Cargo 应用开发 | M11、M9；联网依赖 M10 | 离线与受限 HTTPS registry/Git 本地验收通过；原生端口独立推进 |
 | M13 | 可发布的 SDK 与应用包 | M4 基础 SDK、M11/M12 | 本地 SDK/包/诊断验收通过 |
-| M14 | Rust 图形桌面与 C/C++/Rust GUI SDK（M14.1–M14.5） | M9、M13；具体依赖见 M14 文档 | M14.1–M14.2 本地通过；下一步 M14.3 |
+| M14 | Rust 图形桌面与 C/C++/Rust GUI SDK（M14.1–M14.5） | M9、M13；具体依赖见 M14 文档 | M14.1–M14.3 本地通过；下一步 M14.4 |
 | M15 | 可选的工具链/内核自举 | M11–M13，资源满足 | 未开始 |
 
 可以交叉推进互不依赖的工作，但不得跳过实际前置条件。网络包获取、图形桌面和完整自举不阻塞第一次离线应用开发。
@@ -230,7 +230,7 @@ are outside this accepted profile.
 
 ## M14：Rust 图形桌面与三语言 GUI SDK
 
-**M14.1–M14.2 已通过本地验证；M14.3–M14.5 未实现。** 完整子阶段任务、体系边界、错误/所有权模型、
+**M14.1–M14.3 已通过本地验证；M14.4–M14.5 未实现。** 完整子阶段任务、体系边界、错误/所有权模型、
 验收负例与候选目录见 [M14 GUI 专项设计](docs/M14_GUI.md)。
 采用 Rust 实现用户态 compositor、GUI runtime 和稳定 C ABI；
 提供 C 头文件、C++ RAII SDK、Rust 安全 SDK，三者共享一个 API/协议语义。
@@ -268,12 +268,18 @@ QMP 注入按键/重复/扩展键/按钮，中心与四角画面逐像素比较�
 
 ### M14.3：用户态窗口合成器
 
-- [ ] 构建独立 Rust compositor 进程和有版本/所有权约束的 IPC、surface/缓冲接口。
-- [ ] 软件窗口合成、重绘区域、叠放顺序、移动、缩放、焦点与输入分发。
-- [ ] 两个隔离用户应用并存；错误 buffer、资源耗尽、客户端崩溃和 compositor 失败可诊断/回收。
+- [x] 构建独立 Rust compositor 进程和有版本/所有权约束的 IPC、surface/缓冲接口。
+- [x] 软件窗口合成、重绘区域、叠放顺序、移动、缩放、焦点与输入分发。
+- [x] 两个隔离用户应用并存；错误 buffer、资源耗尽、客户端崩溃和 compositor 失败可诊断/回收。
 
 **验收：** 至少两个独立进程的窗口可正确遮挡、移动和分发事件，故障不破坏
 内核或其他进程。
+
+本地 `cargo xtask gui-test` 已验证三个启动配置、两个隔离用户窗口、真实 QMP 焦点/移动/缩放、
+八张逐像素截图、客户端与合成器各自真实 #UD、重连及串口恢复。内核仅提供受检复制传输，
+每客户端一个 32×24 至 320×240 RGB surface，最多四个连接；实际堆耗尽回滚另有内核检查。
+窗口内容使用有界分块复制，无共享映射或原子多块提交。见 [M14.3 设计](docs/M14_COMPOSITOR.md)
+与 [验证](docs/validation/M14.3.md)。
 
 ### M14.4：Rust GUI runtime 与 C/C++/Rust SDK
 

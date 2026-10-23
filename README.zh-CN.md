@@ -10,7 +10,8 @@
 项目仓库：[ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS)。
 
 M14.1 已增加可选软件显示、受检 framebuffer 映射和真实 QEMU 逐像素/截图验证。
-M14.2 已实现轮询式 PS/2 物理输入与裁剪游标，并通过本地 QEMU 验收；窗口及 GUI SDK
+M14.2 已实现轮询式 PS/2 物理输入与裁剪游标。M14.3 已通过本地 QEMU 验收，交付独立
+Rust 用户态窗口合成器、焦点输入与崩溃/重启恢复；GUI runtime/SDK 与 GPU 渲染
 仍按后续阶段推进。
 
 日常开发与 Pull Request 的目标分支为 **`dev`**；`main` 保留阶段验收后的稳定快照。分支约定见 [GitHub 协作说明](docs/GITHUB_SETUP.md)。
@@ -141,7 +142,7 @@ cargo xtask run --disk build/disks/work.ext2 # 复用此盘，在系统内 shutd
 
 ## 下一步
 
-M13 已交付版本化 SDK 与应用格式，见 [M13 SDK](docs/M13_SDK.md)。M14.1 已交付受检软件绘制，M14.2 已实现有界 PS/2 输入/游标诊断；下一阶段为 [GUI 计划](docs/M14_GUI.md) 的 M14.3 用户态合成器。当前 Rust/Cargo 范围见 [M12 Rust](docs/M12_RUST.md)，另见 [当前状态](docs/STATUS.md) 和 [路线图](ROADMAP.md)。
+M13 已交付版本化 SDK 与应用格式，见 [M13 SDK](docs/M13_SDK.md)。M14.1 已交付受检软件绘制，M14.2 已实现有界 PS/2 输入/游标诊断；M14.3 用户态合成器已通过本地验收，下一阶段为 [GUI 计划](docs/M14_GUI.md) 的 M14.4 GUI runtime/SDK。当前 Rust/Cargo 范围见 [M12 Rust](docs/M12_RUST.md)，另见 [当前状态](docs/STATUS.md) 和 [路线图](ROADMAP.md)。
 
 ## 许可证
 
@@ -257,3 +258,23 @@ M14.2 本地 QEMU 验收已通过。USB、物理热插拔、外设 IRQ、用户�
 不属于当前 profile。
 见 [M14 设计](docs/M14_GUI.md)、[M14.1 证据](docs/validation/M14.1.md)
 与 [M14.2 证据](docs/validation/M14.2.md)。
+
+## M14.3 隔离的原生窗口
+
+```sh
+cargo xtask gui-image
+cargo xtask gui-test
+cargo xtask run --gui
+```
+
+交互模式中，在 COM1 shell 输入 `gui-test` 启动受监督的合成器和两个独立原生窗口。
+点击切换焦点，拖动标题栏移动，拖动右下角缩放。在红色窗口按 X 可触发客户端异常，
+F12 触发合成器异常及重启，重启后按 F11 结束并返回串口 shell。
+交互显示需要 GTK；自动化验收以无界面方式运行。
+
+本地三个启动配置已通过验收，包括八张完整逐像素截图、焦点输入、窗口重绘、
+客户端/合成器各自真实异常、新会话重连、堆耗尽回滚与串口/设备缺失恢复。
+每客户端拥有一个独立的 32×24 至 320×240 RGB surface，最多四个连接；
+画面通过有界 CPU 复制提交。文字/控件、图形终端、公共 C/C++/Rust GUI SDK
+和 GPU 加速仍按后续阶段推进。
+见 [M14.3 设计](docs/M14_COMPOSITOR.md) 与 [验收记录](docs/validation/M14.3.md)。

@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+# Defines the bounded internal GUI wire contract and allocation-free compositor policy.
+[package]
+name = "anova-gui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+anova-graphics = { path = "../graphics" }

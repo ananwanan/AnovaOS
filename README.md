@@ -27,8 +27,9 @@ M13 adds SDK 1.0.0, native C/C++/Rust templates, explicit ABI-bound packages,
 installer target-policy checks and real user-fault source symbolization.
 M14.1 adds opt-in software graphics, checked framebuffer mappings and actual
 QEMU pixel/screenshot verification. M14.2 implements polled PS/2 physical input
-and a clipped cursor; its local QEMU gate passed. Windows and GUI SDKs
-remain planned.
+and a clipped cursor. M14.3 adds an isolated Rust user-space compositor,
+bounded private windows, focused input and checked crash/restart recovery.
+The separate GUI runtime/SDK and GPU stages remain planned.
 General Linux/glibc remains future work; device IRQs stay masked.**
 
 Repository: [ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS).
@@ -200,7 +201,8 @@ is reported separately from [local validation](docs/validation/M12.md).
 M13 delivers the versioned SDK and application format described in
 [M13 SDK](docs/M13_SDK.md). M14.1 delivers checked software drawing and M14.2
 implements bounded PS/2 input/cursor diagnostics. M14.3 user-space composition
-is next under the [separate GUI plan](docs/M14_GUI.md). Current Rust/Cargo limits remain in
+is locally accepted; M14.4 GUI runtime/SDKs are next under the
+[separate GUI plan](docs/M14_GUI.md). Current Rust/Cargo limits remain in
 [M12 Rust](docs/M12_RUST.md). See [current status](docs/STATUS.md) and
 [roadmap](ROADMAP.md).
 
@@ -347,3 +349,27 @@ The M14.2 local QEMU gate passed. USB, physical hotplug, peripheral IRQs,
 user-space windows and GUI SDKs remain outside this profile.
 See [M14 GUI](docs/M14_GUI.md), [M14.1 evidence](docs/validation/M14.1.md)
 and [M14.2 evidence](docs/validation/M14.2.md).
+
+## M14.3 isolated native windows
+
+```sh
+cargo xtask gui-image
+cargo xtask gui-test
+cargo xtask run --gui
+```
+
+In the interactive profile, type `gui-test` in the COM1 shell to start the
+supervised compositor and two isolated native windows. Click to focus, drag a
+title to move, and drag the bottom-right corner to resize. The demonstration
+uses X in the red window for a deliberate client fault, F12 for a compositor
+fault/restart, and F11 after restart to finish and return to the serial shell.
+Interactive display requires GTK; the automated gate runs headlessly.
+
+The local three-boot gate passed with eight complete pixel comparisons,
+focused input, window redraw, actual client/server faults, fresh-session
+reconnection, heap-OOM rollback and serial/device fallback. Each client has
+one private 32x24 through 320x240 RGB surface, with four total connections.
+Presentation uses bounded CPU copies. Text/widgets, graphical terminal,
+the public GUI C/C++/Rust SDK and GPU acceleration remain separate stages.
+See [M14 compositor](docs/M14_COMPOSITOR.md) and
+[M14.3 evidence](docs/validation/M14.3.md).

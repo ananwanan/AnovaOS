@@ -119,6 +119,8 @@ struct Kernel {
     fs: Vfs<'static>,
     network: Option<crate::net::Stack>,
     terminal: fs::Terminal,
+    #[cfg(feature = "gui")]
+    gui: crate::gui::Gui,
 }
 impl Kernel {
     fn new(first_pid: u64) -> Result<Self, loader::LoadError> {
@@ -134,6 +136,8 @@ impl Kernel {
             fs: Vfs::new(boot::initramfs()).map_err(|_| anova_memory::Error::OutOfMemory)?,
             network: None,
             terminal: fs::Terminal::new().map_err(|_| anova_memory::Error::OutOfMemory)?,
+            #[cfg(feature = "gui")]
+            gui: crate::gui::Gui::default(),
         })
     }
     fn load_image(
@@ -213,6 +217,9 @@ impl Kernel {
         match result {
             Ok(process) => {
                 self.processes[i] = Some(process);
+                #[cfg(feature = "gui")]
+                self.gui
+                    .set_image(self.policy.entry(i).pid, bytes, personality == PERSONALITY);
                 self.metrics.spawns += 1;
                 Ok(i)
             }
@@ -317,6 +324,9 @@ impl Kernel {
         p.context = user::Context::new(image.entry, image.stack);
         let linux = image.linux;
         p.image = Some(image);
+        #[cfg(feature = "gui")]
+        self.gui
+            .set_image(self.policy.entry(i).pid, bytes, personality == PERSONALITY);
         if linux {
             serial::write(format_args!(
                 "[LINUX:EXEC] image={} dynamic={}\n",
@@ -332,6 +342,8 @@ impl Kernel {
     fn finish(&mut self, i: usize, outcome: Outcome) {
         self.linux_clear_tid(i);
         let pid = self.policy.entry(i).pid;
+        #[cfg(feature = "gui")]
+        self.gui.close_process(pid);
         match outcome {
             Outcome::Signal(signal) => {
                 serial::write(format_args!("[USER:SIGNAL] pid={pid} signal={signal}\n"))
@@ -454,6 +466,18 @@ impl Kernel {
         }
         let f = self.process(i).context.frame;
         let result = match f.rax {
+            #[cfg(feature = "gui")]
+            anova_gui::transport::SYS_GUI => {
+                let pid = self.policy.entry(i).pid;
+                let space = &self.processes[i]
+                    .as_ref()
+                    .unwrap()
+                    .image
+                    .as_ref()
+                    .unwrap()
+                    .space;
+                self.gui.syscall(pid, space, f.rdi, f.rsi, f.rdx)
+            }
             SYS_EXIT if f.rdi <= u32::MAX as u64 => {
                 self.finish(i, Outcome::Exit(f.rdi as u32));
                 return;

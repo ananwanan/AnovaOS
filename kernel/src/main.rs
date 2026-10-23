@@ -12,6 +12,8 @@ mod drivers;
 mod fs;
 #[cfg(feature = "graphics")]
 mod graphics;
+#[cfg(feature = "gui")]
+mod gui;
 mod mm;
 mod net;
 mod serial;
@@ -117,6 +119,8 @@ extern "C" fn kernel_main(timer_port: u64, timer_mask: u64) -> ! {
             mask: timer_mask as u32,
         });
     }
+    #[cfg(feature = "gui-test")]
+    cpu::without_interrupts(gui::verify_transport);
     task::start();
     serial::write(format_args!(
         "[BOOT:OK] M9 native/Linux runtime processes reclaimed; BSP idle, interrupts enabled\n"

@@ -2,10 +2,44 @@
 //! Present a bounded CPU test pattern through the validated, inherited WC video mapping.
 //! Reclaim the boot buffer, then save/restore only the clipped diagnostic cursor rectangle.
 //! All video access stays on the permanent kernel root; COM1 remains the recovery console.
+//! M14.3 additionally copies validated compositor damage without exposing device addresses.
 use crate::{boot, mm, serial};
 use alloc::vec::Vec;
 use anova_graphics::Surface;
 use core::arch::asm;
+
+#[cfg(feature = "gui")]
+pub fn present_region(
+    display: &boot::Display,
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+    pixels: &[u32],
+) {
+    for row in 0..height {
+        for column in 0..width {
+            let offset = display
+                .layout
+                .pixel_offset(x + column, y + row)
+                .expect("Validated GUI rectangle");
+            let pixel = display
+                .layout
+                .pack_rgb(pixels[(row * width + column) as usize]);
+            for byte in 0..display.layout.bytes_per_pixel() {
+                // SAFETY: GUI admission checks the reserved supervisor WC mapping;
+                // the caller checked the complete rectangle and owns copied pixels.
+                // Only the sole BSP scheduler writes here on its permanent kernel root.
+                unsafe {
+                    (display.address.0 as *mut u8)
+                        .add(offset + byte)
+                        .write_volatile((pixel >> (byte * 8)) as u8);
+                }
+            }
+        }
+    }
+    Cursor::fence();
+}
 
 /// Fixed-size device-pixel save area: no retained full-screen allocation or user mapping.
 pub struct Cursor {

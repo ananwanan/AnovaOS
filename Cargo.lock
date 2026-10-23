@@ -18,6 +18,13 @@ name = "anova-graphics"
 version = "0.1.0"
 
 [[package]]
+name = "anova-gui"
+version = "0.1.0"
+dependencies = [
+ "anova-graphics",
+]
+
+[[package]]
 name = "anova-input"
 version = "0.1.0"
 
@@ -28,6 +35,7 @@ dependencies = [
  "anova-abi",
  "anova-elf",
  "anova-graphics",
+ "anova-gui",
  "anova-input",
  "anova-memory",
  "anova-platform",
