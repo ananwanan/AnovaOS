@@ -56,9 +56,13 @@ ET_EXEC Linux package admission is separate from the wider M9 runtime profile.
 The mounted persistent ABI marker is immutable. M14.1 adds optional checked CPU
 graphics and actual QMP scanout/serial-fallback verification. Preserve
 `cargo xtask graphics-test` and the `graphics` kernel feature check alongside
-previous gates. See [M14 GUI](docs/M14_GUI.md) and
-[validation/M14.1](docs/validation/M14.1.md). M14.2 is next; GUI libraries,
-GDB stubs, native std and compiler bootstrap remain independently scoped.
+previous gates. M14.2 implements optional scheduler-polled PS/2 physical input,
+a bounded diagnostic queue and clipped cursor; its local three-boot QEMU gate passed.
+Preserve `cargo xtask input-test` and the `graphics,input-test` kernel feature
+check as well. See [M14 GUI](docs/M14_GUI.md),
+[validation/M14.1](docs/validation/M14.1.md) and
+[validation/M14.2](docs/validation/M14.2.md). M14.3 user-space composition is next;
+GUI libraries, GDB stubs, native std and compiler bootstrap remain independently scoped.
 
 本文件是后续 Codex 开发规范。用户明确指令优先；已有修改应保留。日常、可逆的实现选择可自主完成，不因普通阶段切换反复请求确认。
 

@@ -1,9 +1,9 @@
 <!-- Record locally verified subsystem capabilities, runtime limits and the next development task. -->
 # Implementation status
 
-Recorded 2026-10-23 (Asia/Shanghai). Online continuation baseline `e60e4e9`.
-Task branch: `feat/m12-validation`. See [M12 profile](M12_RUST.md) and
-[validation/M12.md](validation/M12.md).
+Recorded 2026-10-23 (Asia/Shanghai). M14.1 continuation baseline `a1d1d93`.
+Task branch: `feat/m14-framebuffer`. See [M14 GUI](M14_GUI.md),
+[validation/M14.1](validation/M14.1.md) and [validation/M14.2](validation/M14.2.md).
 Remote CI and publication are separate from local acceptance.
 
 ## Implemented and locally verified
@@ -54,9 +54,10 @@ Remote CI and publication are separate from local acceptance.
   retention, installed ELF execution and preserved user data. Online acquisition
   is restricted to the controlled host peer and generated test CA.
 - DEV-001 remains mandatory: English purpose headers plus the checked
-  [file inventory](FILE_PURPOSES.md). Current command results are in validation/M12.
-- 83 host tests, host/kernel/user Clippy, formatting and all 13 QEMU scenarios
-  pass. Ordinary UART and persistence/error sessions consume ordered stdout
+  [file inventory](FILE_PURPOSES.md). Current command results are in
+  [validation/M14.2](validation/M14.2.md).
+- Historical M12 acceptance recorded 83 host tests, host/kernel/user Clippy,
+  formatting and all 13 QEMU scenarios passing. Ordinary UART and persistence/error sessions consume ordered stdout
   directly; diagnostic-log snapshots cannot invalidate their matching cursors.
 
 | Capability | Status |
@@ -168,9 +169,9 @@ bounds recorded here. Native limits remain separate.
   heap OOM/reuse. Writable shared-file mappings and truncating live mapped files
   are rejected. Nested ext2 cache directories import iteratively within the node
   bound instead of the former eight-level recursion bound.
-- 83 host tests, 228-file purpose coverage, strict host/user/kernel Clippy,
-  formatting, all 13 QEMU scenarios and every earlier terminal, storage, network,
-  package and C/C++/Rust gate pass. Complete results and remaining resource limits
+- Historical M12 acceptance recorded 83 host tests, 228-file purpose coverage,
+  strict host/user/kernel Clippy, formatting, all 13 QEMU scenarios and every
+  earlier terminal, storage, network, package and C/C++/Rust gate passing. Complete results and remaining resource limits
   are in [validation/M12](validation/M12.md) and [M12_NETWORK](M12_NETWORK.md).
   The deterministic online gate is included in CI; remote execution is separate.
 
@@ -202,8 +203,10 @@ bounds recorded here. Native limits remain separate.
 
 ## Next task
 
-M14.2: bounded keyboard/pointer events and a clipped cursor under the five independent
-[M14 GUI stages](M14_GUI.md). Preserve every previous runtime/storage/network,
+M14.3: an isolated user-space compositor, two native windows and explicit focus/
+input routing under the five independent [M14 GUI stages](M14_GUI.md).
+M14.2 bounded PS/2 input and cursor passed their local QEMU gate. Preserve
+every previous runtime/storage/network,
 C/C++/Rust/Cargo and new SDK/workflow/package/diagnostic gate. Broader Cargo
 projects, native AnovaOS std, full user debugging, LTO/OpenMP/sanitizers and
 compiler self-bootstrap remain independently scoped.
@@ -219,7 +222,7 @@ constraints, candidate dependency policy and five independent gates are in
 | Planned stage | Intended observable result | Current status |
 | --- | --- | --- |
 | M14.1 | Validated framebuffer with bounded CPU/software graphics | Local QEMU gate passed |
-| M14.2 | Keyboard/pointer events and visible cursor | Not started |
+| M14.2 | Keyboard/pointer events and visible cursor | Local QEMU gate passed |
 | M14.3 | Isolated user-space compositor; two windows and correct focus | Not started |
 | M14.4 | GUI runtime and C/C++/Rust SDK demos compiled/run in guest | Not started |
 | M14.5 | Verified GPU-rendered path with CPU fallback | Not started |
@@ -234,9 +237,41 @@ Both boots execute a recovery command and shut down cleanly. See
 [validation/M14.1](validation/M14.1.md) for commands, artifacts and the exact
 regression scope. `graphics-image`, `graphics-test` and `run --graphics` exist.
 
-No GUI SDK binaries, input routing, compositor or GPU acceleration are delivered;
+No GUI SDK binaries, user-space input routing, compositor or GPU acceleration are delivered;
 the framebuffer diagnostic is not a window system. CPU presentation has no
 vblank/atomic page-flip guarantee. Only QEMU 800×600×32 is accepted as a scanout;
 other pixel formats are host-tested. M12 supplies the bounded Rust/Cargo prerequisite and M13
 supplies SDK/package delivery; M14.4 still requires its own GUI developer acceptance. SMP, physical
 devices and Linux GUI compatibility remain separately scoped workstreams.
+
+## M14.2 polled PS/2 input and cursor — locally verified (2026-10-23)
+
+The optional `graphics` profile now owns the QEMU i8042 keyboard and standard
+ID-0 relative mouse. Initialization explicitly selects native scan-code set 1,
+checks controller sources and device ACKs, and bounds PM-timer waits/retries.
+The BSP scheduler polls at IF=0, reading at most 64 bytes and draining at most
+64 events per pass. IRQ1/12 remain masked; per-device incomplete sequences expire
+before late bytes are accepted. No input or cursor allocation uses the heap.
+
+A dependency-free `no_std` decoder separates physical press/release/repeat and
+extended keys from text. It handles Pause/PrintScreen, modifiers, full nine-bit
+mouse axes and three button transitions. Malformed input, queue overflow and
+consumer detach/reconnect discard stale history and invalidate held state.
+A fixed diagnostic target is the only consumer; application focus and routing
+remain M14.3 user-space responsibilities.
+
+The 7×9 cursor saves/restores at most 63 packed device pixels, including unused
+channels, and clips every framebuffer access. The boot pattern stays unchanged until a pointer event. The implemented
+`cargo xtask input-test` runs standard-VGA, no-VGA and i8042-disabled boots. It
+injects ordered QMP key/button/motion events, compares all 480,000 pixels at
+five cursor positions and requires COM1 recovery plus clean ACPI shutdown.
+Test-only selfchecks exercise overflow, malformed input, consumer disconnect/
+reconnect, independent PM-timer partial-sequence expiry and actual controller-port
+disable/reinitialization.
+
+The local three-boot gate passed; [validation/M14.2](validation/M14.2.md)
+records actual acceptance and regression scope independently. Current host
+coverage is 149 tests, including 22 pure input tests, the pinned cursor raster
+and host input-gate negatives. USB, physical hotplug, external IRQ delivery,
+real-hardware input, graphical text/terminal, compositor and GUI ABI/SDK remain
+outside this profile. M14.3 is next.

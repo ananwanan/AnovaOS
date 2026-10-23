@@ -15,6 +15,25 @@ pub const MAX_FRAMEBUFFER_BYTES: usize = 16 * 1024 * 1024;
 
 const RGB_MASK: u32 = 0x00ff_ffff;
 
+/// Diagnostic pointer dimensions; presentation and background ownership stay with the caller.
+pub const CURSOR_WIDTH: u32 = 7;
+pub const CURSOR_HEIGHT: u32 = 9;
+
+/// A small arrow with black outline and white interior, anchored at its upper-left pixel.
+/// Return no color for transparent/out-of-shape pixels; callers must clip screen coordinates.
+pub fn cursor_color(x: u32, y: u32) -> Option<u32> {
+    if x >= CURSOR_WIDTH || y >= CURSOR_HEIGHT || x > y.min(CURSOR_WIDTH - 1) {
+        return None;
+    }
+    Some(
+        if x == 0 || x == y || y == CURSOR_HEIGHT - 1 || x == CURSOR_WIDTH - 1 {
+            0
+        } else {
+            0x00ff_ffff
+        },
+    )
+}
+
 /// Rejections are independent of allocation, physical mapping and device lifetime.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Error {

@@ -9,7 +9,7 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | --- | --- |
 | `.cargo/config.toml` | Routes host commands through xtask and confines kernel code-generation flags to its target. |
 | `.gitattributes` | Normalize first-party text to LF while preserving binary images and archives. |
-| `.github/workflows/boot.yml` | Gate host/user/kernel checks, complete QEMU regressions and a separate source-built guest compiler job. |
+| `.github/workflows/boot.yml` | Gate host/user/kernel checks, graphics/PS2 input and QEMU regressions, retain build/input evidence, and run a separate source-built guest compiler job. |
 | `.gitignore` | Ignore generated host/user builds, images, toolchains and local machine secrets. |
 | `AGENTS.md` | Define mandatory repository development, safety, validation and delivery conventions. |
 | `ARCHITECTURE.md` | Describe implemented subsystem boundaries and the planned operating-system architecture. |
@@ -131,11 +131,22 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | File | Purpose |
 | --- | --- |
 | `crates/graphics/Cargo.toml` | Build the dependency-free no_std layout and software drawing library for kernel and host checks. |
-| `crates/graphics/src/lib.rs` | Validate bounded RGB modes and render clipped pixels, rectangles and blits into caller-owned buffers. |
-| `crates/graphics/src/tests.rs` | Check RGB packing, bounds, canaries, overflow, clipping and the deterministic pattern independently of hardware. |
-| `kernel/src/graphics.rs` | Validate display mappings, fallibly allocate a back buffer, present/read back WC video memory and reclaim temporary RAM. |
+| `crates/graphics/src/lib.rs` | Validate bounded RGB modes, provide a fixed cursor raster and render clipped pixels, rectangles and blits into caller-owned buffers. |
+| `crates/graphics/src/tests.rs` | Check RGB packing, bounds, canaries, overflow, clipping, literal cursor shape and deterministic pattern independently of hardware. |
+| `kernel/src/graphics.rs` | Validate display mappings, present/read back and reclaim the temporary RGB buffer, then save/restore a bounded clipped diagnostic cursor. |
 | `xtask/src/graphics.rs` | Verify actual QMP pixels, bounded capture parsing, serial recovery and clean shutdown with and without VGA. |
 | `docs/validation/M14.1.md` | Record actual graphics/negative tests, artifacts and the scope of preserved local regression checks. |
+
+## M14.2 input and cursor files
+
+| File | Purpose |
+| --- | --- |
+| `crates/input/Cargo.toml` | Build dependency-free no_std PS/2 decoding and bounded diagnostic event delivery for kernel and host checks. |
+| `crates/input/src/lib.rs` | Normalize physical set-1 keys, three-byte mouse packets, bounded queue/reset/reconnect semantics and clipped pointer state without allocation or GUI policy. |
+| `crates/input/src/tests.rs` | Check key/modifier/special-sequence state, full nine-bit motion, malformed/overflow recovery, consumer lifecycle and pointer bounds. |
+| `kernel/src/drivers/input.rs` | Own i8042 source/ACK setup, bounded scheduler polling and incomplete-packet expiry, diagnostic delivery and test-only controller lifecycle checks. |
+| `xtask/src/input.rs` | Inject QMP keyboard/mouse sequences, compare all cursor/background pixels and require missing-device serial recovery and clean shutdown. |
+| `docs/validation/M14.2.md` | Record actual polled PS/2/cursor gate results, bounded recovery cases, artifacts and regression limits. |
 
 ## M7 storage and editor files
 
@@ -148,7 +159,7 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `crates/storage/tests/ext2.rs` | Verify on-disk ext2 bytes, indirection, sparse data, exhaustion, reboot and injected I/O failures. |
 | `docs/M7_STORAGE.md` | Define PCI/DMA/queue ownership, ext2 bounds, native durability ABI, disk images and source editor. |
 | `docs/validation/M7.md` | Record actual M7 host/guest/editor/reboot/error checks, integrity evidence and remaining limits. |
-| `kernel/src/drivers/mod.rs` | Hand off validated boot PCI mappings to the one BSP-owned persistent VFS device. |
+| `kernel/src/drivers/mod.rs` | Own BSP device initialization, persistent VFS handoff and optional scheduler-polled PS/2 input. |
 | `kernel/src/drivers/pci.rs` | Enumerate PCI bridges/functions and admit bounded modern virtio MMIO capabilities/BARs. |
 | `kernel/src/drivers/virtio.rs` | Own a coherent split block queue, checked transfers/FLUSH, timeout, reset and DMA quarantine. |
 | `user/editor/Cargo.toml` | Build the standalone native serial source editor with the no_std SDK. |

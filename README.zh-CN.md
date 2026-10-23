@@ -9,8 +9,9 @@
 
 项目仓库：[ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS)。
 
-M14.1 已增加可选软件显示、受检 framebuffer 映射和真实 QEMU 逐像素/截图验证；
-下一步为 M14.2 输入与游标，窗口及 GUI SDK 仍按后续阶段推进。
+M14.1 已增加可选软件显示、受检 framebuffer 映射和真实 QEMU 逐像素/截图验证。
+M14.2 已实现轮询式 PS/2 物理输入与裁剪游标，并通过本地 QEMU 验收；窗口及 GUI SDK
+仍按后续阶段推进。
 
 日常开发与 Pull Request 的目标分支为 **`dev`**；`main` 保留阶段验收后的稳定快照。分支约定见 [GitHub 协作说明](docs/GITHUB_SETUP.md)。
 
@@ -140,7 +141,7 @@ cargo xtask run --disk build/disks/work.ext2 # 复用此盘，在系统内 shutd
 
 ## 下一步
 
-M13 已交付版本化 SDK 与应用格式，见 [M13 SDK](docs/M13_SDK.md)。下一阶段为 [GUI 计划](docs/M14_GUI.md) 的 M14.1 framebuffer/软件绘制。当前 Rust/Cargo 范围见 [M12 Rust](docs/M12_RUST.md)，另见 [当前状态](docs/STATUS.md) 和 [路线图](ROADMAP.md)。
+M13 已交付版本化 SDK 与应用格式，见 [M13 SDK](docs/M13_SDK.md)。M14.1 已交付受检软件绘制，M14.2 已实现有界 PS/2 输入/游标诊断；下一阶段为 [GUI 计划](docs/M14_GUI.md) 的 M14.3 用户态合成器。当前 Rust/Cargo 范围见 [M12 Rust](docs/M12_RUST.md)，另见 [当前状态](docs/STATUS.md) 和 [路线图](ROADMAP.md)。
 
 ## 许可证
 
@@ -237,15 +238,22 @@ cargo xtask diagnostics-test
 
 用 `cpp` 或 `rust` 创建另外两种原生模板。`app-run PACKAGE SHA256` 会把已校验的自建包放入镜像，创建匹配 ABI 的临时磁盘并打印可直接使用的 guest 安装和运行命令；`--disk` 可复用显式持久镜像。完整创建、构建、安装和升级步骤见 [M13 SDK](docs/M13_SDK.md)。原生 SDK 与 M11/M12 的 Linux-musl 系统内编译器分别验收。权限声明用于安装准入；GUI runtime、GDB stub、进程沙箱和原生 Rust std 不属于当前成果。
 
-## M14.1 软件显示
+## M14.1–M14.2 软件显示与输入
 
 ```sh
 cargo xtask graphics-image
 cargo xtask graphics-test
+cargo xtask input-test
 cargo xtask run --graphics
 ```
 
-可选 profile 绘制有界 CPU 测试图案并保留 COM1 shell。无头测试验证真实 QMP
-截图，并分别在有/无 VGA 时验证串口恢复；交互运行需要 GTK 显示环境。
-当前交付范围是软件显示，窗口、输入与 GUI SDK 按后续阶段分别验收。
-见 [M14 设计](docs/M14_GUI.md) 与 [M14.1 证据](docs/validation/M14.1.md)。
+可选 profile 绘制有界 CPU 测试图案并保留 COM1 shell；同时轮询 QEMU PS/2 键盘与
+三按钮相对鼠标，向一个诊断消费者投递物理事件并绘制裁剪游标。文本和窗口焦点策略
+另行实现。输入与游标存储不分配堆内存；交互运行需要 GTK 显示环境。
+
+`graphics-test` 验证启动截图与有/无 VGA 的串口恢复；`input-test` 验证有序 QMP 输入、
+五个游标位置的全部像素、有界 reset/重连，以及缺少显示设备或控制器时的恢复。
+M14.2 本地 QEMU 验收已通过。USB、物理热插拔、外设 IRQ、用户态窗口及 GUI SDK
+不属于当前 profile。
+见 [M14 设计](docs/M14_GUI.md)、[M14.1 证据](docs/validation/M14.1.md)
+与 [M14.2 证据](docs/validation/M14.2.md)。

@@ -6,6 +6,7 @@ mod assets;
 mod debug;
 mod disk;
 mod graphics;
+mod input;
 mod linux;
 mod network;
 mod packages;
@@ -37,6 +38,7 @@ const TARGET: &str = "x86_64-unknown-none";
 enum Mode {
     Normal,
     Graphics,
+    Input,
     Boot,
     Panic,
     Timeout,
@@ -57,6 +59,7 @@ impl Mode {
         match self {
             Self::Normal => "normal",
             Self::Graphics => "graphics",
+            Self::Input => "input",
             Self::Boot => "boot",
             Self::Panic => "panic",
             Self::Timeout => "timeout",
@@ -76,6 +79,7 @@ impl Mode {
         match self {
             Self::Normal => None,
             Self::Graphics => Some("graphics"),
+            Self::Input => Some("graphics,input-test"),
             Self::Boot => Some("qemu-test"),
             Self::Panic => Some("test-panic"),
             Self::Timeout => Some("test-timeout"),
@@ -187,6 +191,7 @@ fn execute() -> Result<()> {
         }
         "graphics-image" => image(&root, Mode::Graphics).map(|_| ()),
         "graphics-test" => graphics::verify(&root),
+        "input-test" => input::verify(&root),
         "run" => {
             let mut disk = None;
             let mut network = false;
@@ -322,6 +327,8 @@ fn execute() -> Result<()> {
                 "anova-storage",
                 "-p",
                 "anova-graphics",
+                "-p",
+                "anova-input",
             ]))?;
             command(Command::new("cargo").args([
                 "test",
@@ -348,7 +355,7 @@ fn execute() -> Result<()> {
         }
         "help" | "--help" | "-h" => {
             println!(
-                "AnovaOS host tools\n\n  cargo xtask doctor\n  cargo xtask fetch\n  cargo xtask build\n  cargo xtask image\n  cargo xtask run [--graphics] [--network] [--toolchain | --rust] [--disk build/disks/NAME.ext2]\n  cargo xtask smoke [--case CASE] [--timeout-secs 1..300]\n  cargo xtask verify\n  cargo xtask test-host\n  cargo xtask test-compat\n  cargo xtask trace-compat\n  cargo xtask apps\n  cargo xtask check-apps\n  cargo xtask check-files\n  cargo xtask network-test\n  cargo xtask package-test\n  cargo xtask sdk\n  cargo xtask app-new <c|cpp|rust> PROJECT\n  cargo xtask app-build PROJECT\n  cargo xtask app-pack MANIFEST OUTPUT\n  cargo xtask app-image PACKAGE SHA256\n  cargo xtask app-run PACKAGE SHA256 [--disk build/disks/NAME.ext2]\n  cargo xtask app-test\n  cargo xtask sdk-test\n  cargo xtask package-v2-test\n  cargo xtask diagnostics-test\n  cargo xtask symbolize ELF [--base 0xBIAS] ADDRESS... | --log LOG [--pid PID]\n  cargo xtask toolchain-build\n  cargo xtask toolchain-image\n  cargo xtask toolchain-test\n  cargo xtask rust-build\n  cargo xtask rust-image\n  cargo xtask rust-cross-test\n  cargo xtask rust-runtime-test\n  cargo xtask rust-test\n  cargo xtask rust-online-test\n  cargo xtask rust-public-test\n  cargo xtask terminal-test\n  cargo xtask root-image [--linux] build/disks/NAME.ext2\n  cargo xtask persistence-test\n  cargo xtask graphics-image\n  cargo xtask graphics-test\n\nCASE: boot, panic, timeout, invalid-opcode, general-protection, page-fault, double-fault, stack-guard, read-only, no-execute, direct-no-execute, unmapped, oom.\nOutputs stay in build/; run uses disposable OVMF variables and a temporary data disk unless --disk is explicit. Use guest shutdown for persistent images. TCG is mandatory."
+                "AnovaOS host tools\n\n  cargo xtask doctor\n  cargo xtask fetch\n  cargo xtask build\n  cargo xtask image\n  cargo xtask run [--graphics] [--network] [--toolchain | --rust] [--disk build/disks/NAME.ext2]\n  cargo xtask smoke [--case CASE] [--timeout-secs 1..300]\n  cargo xtask verify\n  cargo xtask test-host\n  cargo xtask test-compat\n  cargo xtask trace-compat\n  cargo xtask apps\n  cargo xtask check-apps\n  cargo xtask check-files\n  cargo xtask network-test\n  cargo xtask package-test\n  cargo xtask sdk\n  cargo xtask app-new <c|cpp|rust> PROJECT\n  cargo xtask app-build PROJECT\n  cargo xtask app-pack MANIFEST OUTPUT\n  cargo xtask app-image PACKAGE SHA256\n  cargo xtask app-run PACKAGE SHA256 [--disk build/disks/NAME.ext2]\n  cargo xtask app-test\n  cargo xtask sdk-test\n  cargo xtask package-v2-test\n  cargo xtask diagnostics-test\n  cargo xtask symbolize ELF [--base 0xBIAS] ADDRESS... | --log LOG [--pid PID]\n  cargo xtask toolchain-build\n  cargo xtask toolchain-image\n  cargo xtask toolchain-test\n  cargo xtask rust-build\n  cargo xtask rust-image\n  cargo xtask rust-cross-test\n  cargo xtask rust-runtime-test\n  cargo xtask rust-test\n  cargo xtask rust-online-test\n  cargo xtask rust-public-test\n  cargo xtask terminal-test\n  cargo xtask root-image [--linux] build/disks/NAME.ext2\n  cargo xtask persistence-test\n  cargo xtask graphics-image\n  cargo xtask graphics-test\n  cargo xtask input-test\n\nCASE: boot, panic, timeout, invalid-opcode, general-protection, page-fault, double-fault, stack-guard, read-only, no-execute, direct-no-execute, unmapped, oom.\nOutputs stay in build/; run uses disposable OVMF variables and a temporary data disk unless --disk is explicit. Use guest shutdown for persistent images. TCG is mandatory."
             );
             Ok(())
         }

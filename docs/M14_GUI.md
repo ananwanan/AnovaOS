@@ -1,8 +1,9 @@
 <!-- Specify software display implementation and planned Rust GUI/SDK stages with independent gates. -->
 # M14: GUI architecture and five-stage delivery
 
-Status: **M14.1 implemented; M14.2–M14.5 remain planned** (2026-10-23).
-Actual local acceptance is recorded separately in [M14.1 validation](validation/M14.1.md).
+Status: **M14.1–M14.2 implemented and locally verified; M14.3–M14.5 remain planned**
+(2026-10-23). Actual local acceptance is recorded separately in
+[M14.1 validation](validation/M14.1.md) and [M14.2 validation](validation/M14.2.md).
 This design is subordinate to [AGENTS](../AGENTS.md), [architecture](../ARCHITECTURE.md),
 [roadmap](../ROADMAP.md), and [implementation status](STATUS.md). Do not interpret the
 Limine framebuffer boot response or any rendered host mockup as a functioning desktop.
@@ -159,18 +160,20 @@ a window server or GPU acceleration.
 Dependencies: M14.1, a selected/tested virtual input controller and its
 poll/IRQ delivery contract.
 
-- [ ] Support documented QEMU keyboard and pointing-device path (PS/2 may be the
-      first target); normalize scan codes, key state, buttons and relative motion.
-- [ ] Route bounded events to an input dispatcher and render a clipped cursor.
-      Separate physical key events from text input and define focus behavior.
-- [ ] Enable external IRQs only with appropriate verified routing/EOI/lifecycle;
-      temporary polling must be labeled as such.
-- [ ] Handle event overflow, malformed input, device absence and client disconnect
-      without corrupting the display or blocking scheduling.
+- [x] Support the QEMU i8042 native set-1 keyboard and standard ID-0 three-byte
+      relative mouse; normalize key state, buttons and nine-bit relative motion.
+- [x] Route a bounded queue to one diagnostic target and render a clipped cursor.
+      Physical keys remain separate from text; user-space window focus is M14.3.
+- [x] Use explicitly temporary scheduler polling with bounded work; external
+      IRQ1/12 remain masked and require separate routing/EOI/lifecycle validation.
+- [x] Reset held state/history after overflow, malformed input or consumer detach;
+      preserve serial operation when the display or controller is absent.
 
 **Gate:** injected key/button/movement sequences produce ordered events and
 visible cursor updates; bounds/overflow/disconnect cases are checked in QEMU.
 A working virtual PS/2 path does not imply USB or real-hardware input support.
+The local three-boot `input-test` gate passed; the exact profile, artifacts and
+regression scope are in [M14.2 validation](validation/M14.2.md).
 
 ### M14.3 — User-space compositor and native windows
 
@@ -282,8 +285,9 @@ volatile stores, executes MFENCE and compares every byte read back before
 reporting `[GRAPHICS:PRESENT]`. Temporary storage is dropped before user startup,
 with an asserted heap baseline and `[GRAPHICS:RECLAIM]`. Errors report
 `[GRAPHICS:FALLBACK]` and leave the normal COM1 shell available. Hardware
-access occurs only on the BSP boot path, before any process runs; no IRQ or
-application receives access to this memory.
+for this initial presentation occurs only on the BSP boot path, before any process
+runs. M14.2 later accesses the same reservation only from the BSP scheduler on
+its permanent kernel root; no IRQ or application receives access to this memory.
 
 `graphics-image`, `graphics-test` and `run --graphics` are implemented host
 commands. The independent host gate captures a real QMP PPM image from QEMU
@@ -297,6 +301,105 @@ This CPU copy does not synchronize to vblank or promise tear-free animation;
 the standard-VGA backend supplies no page-flip/completion interface. Only the
 fixed 800×600×32 QEMU scanout is accepted in hardware; other admitted pixel
 packings are host-tested. There is no GPU drawing, graphical text terminal,
-input, compositor, GUI syscall or public GUI ABI at this stage. The temporary
-kernel diagnostic will yield presentation ownership to the future user-space
-compositor; it adds no window, focus, font or widget policy to the kernel.
+compositor, GUI syscall or public GUI ABI. M14.2 extends the temporary kernel
+diagnostic with physical input/cursor only. It will yield presentation ownership
+to the future user-space compositor and adds no window, focus, font or widget policy.
+
+
+## 8. Implemented M14.2 polled PS/2 diagnostic contract
+
+### Device and scheduling ownership
+
+The same optional `graphics` feature selects the QEMU q35 i8042 controller,
+a keyboard explicitly configured for native scan-code set 1 with controller
+translation disabled, and a standard ID-0, three-button, three-byte relative
+mouse. `kernel/src/drivers/input.rs` owns ports `0x60`/`0x64`, controller/interface
+checks, command responses and device enablement. Every command argument needs
+its own ACK; AUX-source/status checks keep keyboard and mouse replies separate.
+Initialization waits use the calibrated ACPI PM timer with a 100 ms bound plus
+an attempt cap, bounded flushes and at most three device-command sends.
+Unsupported/missing devices preserve the COM1 shell.
+
+Input uses **temporary scheduler polling**, not external IRQ delivery. The sole
+BSP scheduler accesses the driver at IF=0 on the permanent kernel root and
+consumes at most 64 controller bytes and 64 queued events per pass. IRQ1/12
+remain masked; no IRQ handler allocates, logs or accesses input/cursor state.
+Each device tracks its own last-byte PM-timer timestamp. A partial keyboard
+prefix or mouse packet older than 100 ms is invalidated before late continuation
+bytes are consumed, even while the other device is active. PM wrap arithmetic
+and independent-source expiry have test-image checks.
+
+The protocol was checked against the selected primary implementation,
+[QEMU 8.2.2 i8042 controller](https://github.com/qemu/qemu/blob/v8.2.2/hw/input/pckbd.c)
+and [PS/2 device model](https://github.com/qemu/qemu/blob/v8.2.2/hw/input/ps2.c),
+and [Microsoft's standard PS/2 packet format](https://learn.microsoft.com/en-us/windows-hardware/drivers/hid/keyboard-and-mouse-hid-client-drivers).
+No upstream implementation code is copied into the decoder.
+
+### Physical events, bounds and recovery
+
+`crates/input` is dependency-free `no_std` logic with no port I/O or allocator.
+It exposes physical press/release/repeat state, extended-key identity, modifier
+state and pointer/button events. PrintScreen fake shifts do not modify held
+Shift, Alt+PrintScreen/SysRq normalizes to the same physical key, and canonical
+Pause emits one press without a persistent held state because it has no break
+sequence. Physical key numbers are diagnostic identifiers, not characters or
+a frozen GUI ABI. No layout conversion, Unicode/text event, IME or shell text
+injection is provided.
+
+Mouse axes use the header's sign bit with the unsigned data byte, preserving
+the full nine-bit `-256..=255` wire range. The dispatcher converts upward-positive
+wire Y into downward-positive screen Y. Three button states and changes remain
+explicit. An overflow packet discards both motion axes and retains button
+changes; a bad header or transport error invalidates state. Header bit 3 is
+used only while searching for a header, because data bytes may also contain
+that bit. Arbitrary missing bytes cannot always be detected by this format;
+controller errors and partial-packet expiry provide explicit recovery.
+
+The queue has 64 fixed entries. When full, it discards the buffered history and
+the triggering event, clears decoder/held state and publishes one reset before
+later events. Malformed input and device errors use the same invalidation.
+Consumer disconnect discards history/state and ignores bytes until reconnect;
+reconnect begins with another reset. Pointer position stays clipped and retained,
+while every reset releases all buttons. Consumers must invalidate all held
+keys/buttons after a reset.
+
+For this stage, **one kernel diagnostic consumer is the only input target**.
+It logs physical events and updates the cursor; there are no user connections,
+window focus changes or application event destinations. User-space focus,
+authenticated client lifecycle and routing remain M14.3. The test-only consumer
+detach/reconnect exercise is not evidence of physical device hotplug.
+
+### Cursor and local gate
+
+The diagnostic cursor has a fixed 7×9 footprint with space for 63 saved device
+pixels, retaining their packed device bytes and unused channels. It restores
+its prior background, saves the newly clipped footprint
+and draws a black/white arrow through the validated supervisor WC mapping.
+All coordinates/offsets are checked and writes are fenced. Input, queue and
+cursor state allocate no heap; M14.1's temporary full-screen buffer is still
+reclaimed. The boot pattern remains untouched until the first pointer event,
+so `graphics-test` retains its original screenshot contract. A reset hides the
+cursor and restores its background.
+
+`cargo xtask input-test` builds an independent `graphics,input-test` image and
+runs three 60-second-watchdog boots: standard VGA, `-vga none`, and
+`-machine i8042=off`. QMP injects ordered key/release/repeat, extended-key,
+modifier, relative-motion and all three button sequences. The display boot
+compares every one of 480,000 screenshot pixels at the center and four corners,
+checking cursor clipping and restoration of the old footprint. The no-display
+boot still exercises input and serial fallback. Every boot requires a working
+COM1 recovery command and clean ACPI shutdown; unexpected healthy-stream resets,
+fatal markers, premature exit, wrong pixels and timeout fail the gate.
+
+The test image independently exercises queue overflow, malformed input,
+diagnostic consumer detach/reconnect, stale per-device sequence expiry and real
+controller-port disable/reinitialization before announcing readiness. These
+checks do not claim a general device removal/replug mechanism. Evidence,
+source/artifact hashes and exact regression scope belong in
+[M14.2 validation](validation/M14.2.md); remote CI execution is separate.
+CI runs `input-test` and retains its `build/input/` artifacts.
+
+Only the documented QEMU PS/2 profile and software cursor are accepted. USB,
+physical hotplug, peripheral IRQ routing, real-hardware keyboard/mouse support,
+graphical terminal/text, user-space compositor, public GUI event ABI and GUI
+SDK remain outside M14.2. M14.3 is the next required GUI stage.

@@ -1,7 +1,7 @@
 <!-- Track milestone dependencies, implementation checklists and acceptance criteria. -->
 # 开发路线与阶段验收
 
-日期：2026-10-23。**M0–M13（受限离线与联网范围）及 M14.1 软件显示已通过本地 q35/TCG 验收；M14.2–M14.5 与 M15 尚未实现，外设 IRQ 路由启用待对应驱动。** 证据见 [M13 验证记录](docs/validation/M13.md)、[M14.1 验证记录](docs/validation/M14.1.md) 与 [STATUS](docs/STATUS.md)。[FIRST_TASK](docs/FIRST_TASK.md) 记录 M0/M1 原始实现顺序；当前 M2 边界见 [CPU 基线](docs/M2_CPU.md)。
+日期：2026-10-23。**M0–M13（受限离线与联网范围）及 M14.1 软件显示已通过本地 q35/TCG 验收；M14.2 输入与游标已通过本地 q35/TCG 验收；M14.3–M14.5 与 M15 尚未实现，外设 IRQ 路由启用待对应驱动。** 证据见 [M13 验证记录](docs/validation/M13.md)、[M14.1 验证记录](docs/validation/M14.1.md)、[M14.2 验证记录](docs/validation/M14.2.md) 与 [STATUS](docs/STATUS.md)。[FIRST_TASK](docs/FIRST_TASK.md) 记录 M0/M1 原始实现顺序；当前 M2 边界见 [CPU 基线](docs/M2_CPU.md)。
 
 ## 阶段总览
 
@@ -21,7 +21,7 @@
 | M11 | 系统内 GCC/G++ 应用开发 | M7–M9；可先离线 | 本地离线 C/C++/make 验收通过 |
 | M12 | 系统内 Rust/Cargo 应用开发 | M11、M9；联网依赖 M10 | 离线与受限 HTTPS registry/Git 本地验收通过；原生端口独立推进 |
 | M13 | 可发布的 SDK 与应用包 | M4 基础 SDK、M11/M12 | 本地 SDK/包/诊断验收通过 |
-| M14 | Rust 图形桌面与 C/C++/Rust GUI SDK（M14.1–M14.5） | M9、M13；具体依赖见 M14 文档 | M14.1 本地通过；下一步 M14.2 |
+| M14 | Rust 图形桌面与 C/C++/Rust GUI SDK（M14.1–M14.5） | M9、M13；具体依赖见 M14 文档 | M14.1–M14.2 本地通过；下一步 M14.3 |
 | M15 | 可选的工具链/内核自举 | M11–M13，资源满足 | 未开始 |
 
 可以交叉推进互不依赖的工作，但不得跳过实际前置条件。网络包获取、图形桌面和完整自举不阻塞第一次离线应用开发。
@@ -230,7 +230,7 @@ are outside this accepted profile.
 
 ## M14：Rust 图形桌面与三语言 GUI SDK
 
-**M14.1 已实现并通过本地验证；其余阶段未实现。** 完整子阶段任务、体系边界、错误/所有权模型、
+**M14.1–M14.2 已通过本地验证；M14.3–M14.5 未实现。** 完整子阶段任务、体系边界、错误/所有权模型、
 验收负例与候选目录见 [M14 GUI 专项设计](docs/M14_GUI.md)。
 采用 Rust 实现用户态 compositor、GUI runtime 和稳定 C ABI；
 提供 C 头文件、C++ RAII SDK、Rust 安全 SDK，三者共享一个 API/协议语义。
@@ -252,12 +252,19 @@ are outside this accepted profile.
 
 ### M14.2：输入事件与鼠标
 
-- [ ] 先验证 QEMU 输入设备（可先 PS/2），将键盘、鼠标、按键状态标准化为事件。
-- [ ] 游标绘制、裁剪、焦点和有界事件队列；设备缺失、溢出、断开可恢复。
-- [ ] 外设 IRQ 仅在真实验证路由/EOI 后启用；如先轮询需明确记录限制。
+- [x] QEMU i8042 原生 set-1 键盘与 ID-0 三字节鼠标，标准化物理按键、重复、按钮与九位相对移动。
+- [x] 64 项事件队列、7×9 裁剪游标及单一诊断消费者；溢出、坏输入和消费者断开/重连清除状态。
+- [x] 调度器每轮最多读取 64 字节，外设 IRQ 继续屏蔽；初始化使用 PM 时钟及次数上限，半包超时分设备检查。
 
 **验收：** QEMU 输入注入能得到顺序一致的按键/移动/按钮事件和光标反馈；
 不能因此宣称实机 USB 可用。
+
+已实现 `cargo xtask input-test`：标准 VGA、无显示设备和关闭 i8042 三次启动；
+QMP 注入按键/重复/扩展键/按钮，中心与四角画面逐像素比较，测试镜像检查队列溢出、
+坏输入、消费者断开/重连与真实控制器端口停用/重新初始化，均要求串口恢复和正常关机。
+本地三次启动验收通过，具体结果与回归范围由 [M14.2 验证](docs/validation/M14.2.md) 单独记录。
+物理按键不转换为文本；焦点仅指固定内核诊断目标，用户态窗口和输入路由属于 M14.3。
+不声称 USB、物理热插拔、外设 IRQ、真实硬件或 GUI SDK 支持。
 
 ### M14.3：用户态窗口合成器
 

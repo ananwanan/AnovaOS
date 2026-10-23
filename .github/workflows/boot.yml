@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Gate software graphics, SDK/packages, isolated runtime and source-built C/locked Rust tools.
+# Gate software graphics/PS2 input, SDK/packages, isolated runtime and guest development tools.
 name: Bare-metal boot
 
 on:
@@ -32,7 +32,7 @@ jobs:
       - name: Check file-purpose explanations
         run: cargo xtask check-files
       - name: Check host tools
-        run: cargo clippy --locked -p xtask -p anova-platform -p anova-memory -p anova-abi -p anova-elf -p anova-sched -p anova-vfs -p anova-storage -p anova-graphics --all-targets -- -D warnings
+        run: cargo clippy --locked -p xtask -p anova-platform -p anova-memory -p anova-abi -p anova-elf -p anova-sched -p anova-vfs -p anova-storage -p anova-graphics -p anova-input --all-targets -- -D warnings
       - name: Check and build native Rust/C applications
         run: |
           cargo xtask check-apps
@@ -45,6 +45,7 @@ jobs:
           cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features test-double-fault -- -D warnings
           cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features test-no-execute -- -D warnings
           cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features graphics -- -D warnings
+          cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features input-test -- -D warnings
       - name: Test host logic
         run: cargo xtask test-host
       - name: Build the kernel
@@ -59,6 +60,8 @@ jobs:
         run: cargo xtask terminal-test
       - name: Verify software graphics, QMP screenshot and serial fallback
         run: cargo xtask graphics-test
+      - name: Verify polled PS2 keyboard, pointer, cursor pixels and device fallback
+        run: cargo xtask input-test
       - name: Verify persistent sources, binaries, clean shutdown and device failures
         run: cargo xtask persistence-test
       - name: Verify controlled virtio networking, DNS and socket boundaries
@@ -76,7 +79,9 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: qemu-boot-evidence
-          path: build/logs/
+          path: |
+            build/logs/
+            build/input/
           if-no-files-found: ignore
 
 

@@ -239,10 +239,11 @@ native SDK 从 M4 的 `no_std` 应用与最小 runtime 开始。开发者可先�
 
 系统软件包安装在约定根目录；编译器有独立 sysroot；`/tmp`、`/dev`、必要的 `/proc` 接口和动态解释器路径按实测需要提供。包内容和内核不是同一种发布单元。
 
-## 9. Planned M14 graphical userland and SDK architecture
+## 9. M14 display/input and planned graphical userland/SDK architecture
 
-The optional **M14.1 software display is implemented**; input, user-space GUI
-and SDK components remain planned. The authoritative design and the
+The optional **M14.1 software display and M14.2 polled PS/2 input/cursor are
+implemented and locally verified**. User-space GUI and SDK
+components remain planned. The authoritative design and the
 independently accepted M14.1–M14.5 stages are in
 [M14_GUI](docs/M14_GUI.md), with stage status in [ROADMAP](ROADMAP.md)
 and [STATUS](docs/STATUS.md).
@@ -290,7 +291,7 @@ distinct. Build and execute independently validated Rust, C and C++ GUI apps,
 with incompatible-version and malformed-input tests.
 
 M14.1 establishes validated framebuffer + software drawing. M14.2 delivers
-keyboard/pointer event routing. M14.3 introduces an isolated user-space
+bounded physical keyboard/pointer events to a diagnostic consumer and clips a cursor. M14.3 introduces an isolated user-space
 compositor and two-window behavior. M14.4 adds GUI runtime, graphical terminal,
 C/C++/Rust SDKs and separately tested demo applications. M14.5 optionally
 adds actual GPU-accelerated rendering with software fallback. A bootloader
@@ -307,6 +308,25 @@ the test pattern through volatile byte accesses and MFENCE. Temporary heap
 storage is reclaimed before user startup. COM1 remains the recovery console.
 This adds no window/widget/font policy or application display capability.
 See [M14.1 evidence](docs/validation/M14.1.md).
+
+`crates/input` is dependency-free `no_std` logic for native set-1 keyboard and
+standard ID-0 three-byte mouse decoding, a 64-entry dispatcher and clipped
+pointer state. The optional `kernel/src/drivers/input.rs` owns i8042 ports,
+source/ACK validation and bounded PM-timer initialization. The sole BSP scheduler
+polls at IF=0 on its permanent kernel root, consuming at most 64 bytes and
+64 events per pass; IRQ1/12 remain masked. Per-device partial-sequence timeouts
+and malformed/overflow/disconnect resets invalidate held keys/buttons.
+The temporary diagnostic consumer receives physical events only; it does not
+convert them to COM1 text or implement user-space focus/routing policy.
+
+The cursor keeps one fixed 7×9 packed device-pixel save area, restores the prior footprint,
+preserves unused pixel channels, clips every device access and orders WC stores. Input/cursor state allocates no
+heap. The original boot pattern stays intact until a pointer event displays
+the cursor. `input-test` supplies QMP input and checks every pixel at five
+positions, plus no-display/no-controller serial recovery and test-only reset,
+consumer reconnect and actual controller-port stop/reinitialization cases.
+See [M14.2 evidence](docs/validation/M14.2.md) for acceptance status. This path
+adds no USB, physical hotplug, external IRQ or real-hardware support claim.
 
 Planned source boundaries (do not create empty skeletons): `crates/gui-protocol/`
 for wire types, `user/compositor/` for the window server,

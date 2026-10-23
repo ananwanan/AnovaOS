@@ -309,11 +309,12 @@ hashes. Kernel resource logs describe global counters, not process accounting.
 Preserve all M0–M12 gates alongside the four new SDK/workflow/package/diagnostic
 gates. Remote CI results remain separate from local evidence.
 
-## M14.1 software display
+## M14.1–M14.2 software display and input
 
 ```sh
 cargo xtask graphics-image
 cargo xtask graphics-test
+cargo xtask input-test
 cargo xtask run --graphics
 ```
 
@@ -329,3 +330,30 @@ boot without VGA must retain serial recovery. The shell remains the text
 diagnostic fallback; this stage does not provide a graphical terminal or fonts.
 See [M14 GUI](M14_GUI.md) for format, memory, cache and stage boundaries and
 [M14.1 validation](validation/M14.1.md) for actual local results.
+
+The same opt-in graphics profile also initializes the QEMU i8042 keyboard in
+native scan-code set 1 and its standard ID-0 three-button mouse. Input delivery
+is temporary scheduler polling, bounded to 64 bytes and a 64-event queue per
+pass. External device IRQs remain masked. Physical input goes to one diagnostic
+consumer and never becomes shell text; keep COM1 available for all commands.
+The cursor saves/restores a fixed 7×9 footprint and clips at all four edges;
+input/cursor storage allocates no heap. It first appears on a pointer event,
+leaving the original boot screenshot intact for `graphics-test`.
+
+`input-test` builds `build/images/anova-input.iso` with `graphics,input-test`.
+Its three 60-second-watchdog scenarios use standard VGA, `-vga none` and
+`-machine i8042=off`. QMP injects ordered key/repeat/extended/modifier, pointer
+and three-button sequences. The display scenario saves center/four-corner PPMs
+and compares all 480,000 pixels, including restored background. The test image
+also checks bounded queue overflow, malformed input, diagnostic consumer detach/
+reconnect, independent PM-timer partial-sequence expiry and real controller-port
+disable/reinitialization before readiness.
+Every boot must retain COM1 command recovery and clean ACPI shutdown.
+
+Artifacts are under `build/input/`, including per-scenario serial,
+QMP/QEMU logs, result files, PPM images and SHA-256 evidence. The local
+three-boot gate passed; see [M14.2 validation](validation/M14.2.md).
+CI retains `build/input/`; remote execution remains separate from local evidence.
+These cases establish neither physical hotplug nor USB, external IRQ, real
+hardware or user-space GUI routing. Preserve `graphics-test`, `input-test`,
+their kernel feature checks and all earlier gates.

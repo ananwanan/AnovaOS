@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Prepare isolated block/network PCI handoffs before page-table import and attach polled ext2 storage.
+//! Prepare PCI handoffs, attach polled storage/network and optionally own scheduler-polled PS/2.
+#[cfg(feature = "graphics")]
+pub mod input;
 pub mod network;
 pub mod pci;
 pub mod virtio;

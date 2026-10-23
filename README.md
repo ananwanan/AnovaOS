@@ -26,7 +26,9 @@ rebuilds; public crates.io/GitHub are tested through a configured host proxy.
 M13 adds SDK 1.0.0, native C/C++/Rust templates, explicit ABI-bound packages,
 installer target-policy checks and real user-fault source symbolization.
 M14.1 adds opt-in software graphics, checked framebuffer mappings and actual
-QEMU pixel/screenshot verification; input, windows and GUI SDKs remain planned.
+QEMU pixel/screenshot verification. M14.2 implements polled PS/2 physical input
+and a clipped cursor; its local QEMU gate passed. Windows and GUI SDKs
+remain planned.
 General Linux/glibc remains future work; device IRQs stay masked.**
 
 Repository: [ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS).
@@ -196,8 +198,9 @@ is reported separately from [local validation](docs/validation/M12.md).
 ## Next steps
 
 M13 delivers the versioned SDK and application format described in
-[M13 SDK](docs/M13_SDK.md). M14.1 delivers checked software drawing; M14.2 is next
-under the [separate GUI plan](docs/M14_GUI.md). Current Rust/Cargo limits remain in
+[M13 SDK](docs/M13_SDK.md). M14.1 delivers checked software drawing and M14.2
+implements bounded PS/2 input/cursor diagnostics. M14.3 user-space composition
+is next under the [separate GUI plan](docs/M14_GUI.md). Current Rust/Cargo limits remain in
 [M12 Rust](docs/M12_RUST.md). See [current status](docs/STATUS.md) and
 [roadmap](ROADMAP.md).
 
@@ -322,16 +325,25 @@ M11/M12 Linux-musl guest compilers. Package permissions are admission metadata;
 GUI runtime, GDB stubs, per-process sandboxes and native Rust std remain outside
 this accepted profile.
 
-## M14.1 software display
+## M14.1–M14.2 software display and input
 
 ```sh
 cargo xtask graphics-image
 cargo xtask graphics-test
+cargo xtask input-test
 cargo xtask run --graphics
 ```
 
 The opt-in profile draws a bounded CPU test pattern and retains the COM1 shell.
-The headless test checks the actual QMP screenshot and serial recovery with and
-without VGA; interactive runs need a GTK display. This is the software display
-stage; windows, input and GUI SDKs have independent later gates.
-See [M14 GUI](docs/M14_GUI.md) and [M14.1 evidence](docs/validation/M14.1.md).
+It also polls the QEMU PS/2 keyboard and three-button relative mouse, delivers
+physical events to one diagnostic consumer and draws a clipped cursor. Text
+and window focus policy remain separate. Input and cursor storage allocate no heap.
+Interactive runs need a GTK display.
+
+`graphics-test` checks the boot screenshot and serial fallback with/without VGA.
+`input-test` checks ordered QMP input, every pixel at five cursor positions,
+bounded reset/reconnect cases and recovery with no display or no controller.
+The M14.2 local QEMU gate passed. USB, physical hotplug, peripheral IRQs,
+user-space windows and GUI SDKs remain outside this profile.
+See [M14 GUI](docs/M14_GUI.md), [M14.1 evidence](docs/validation/M14.1.md)
+and [M14.2 evidence](docs/validation/M14.2.md).

@@ -235,14 +235,14 @@ fn check_exit(text: &str, code: Option<i32>, step: usize) -> Result<()> {
     Ok(())
 }
 
-struct Qmp {
+pub(super) struct Qmp {
     stream: UnixStream,
     log: File,
     id: u64,
 }
 
 impl Qmp {
-    fn connect(socket: &Path, log: &Path, start: Instant) -> Result<Self> {
+    pub(super) fn connect(socket: &Path, log: &Path, start: Instant) -> Result<Self> {
         let stream = loop {
             match UnixStream::connect(socket) {
                 Ok(stream) => break stream,
@@ -296,7 +296,7 @@ impl Qmp {
         }
     }
 
-    fn command(&mut self, name: &str, arguments: Value) -> Result<()> {
+    pub(super) fn command(&mut self, name: &str, arguments: Value) -> Result<()> {
         self.id += 1;
         let value = json!({ "execute": name, "arguments": arguments, "id": self.id });
         let encoded = serde_json::to_vec(&value)?;
@@ -325,13 +325,13 @@ impl Qmp {
     }
 }
 
-struct Ppm<'a> {
-    width: u32,
-    height: u32,
-    rgb: &'a [u8],
+pub(super) struct Ppm<'a> {
+    pub(super) width: u32,
+    pub(super) height: u32,
+    pub(super) rgb: &'a [u8],
 }
 
-fn read_ppm(path: &Path) -> Result<Vec<u8>> {
+pub(super) fn read_ppm(path: &Path) -> Result<Vec<u8>> {
     checked_file(path)?;
     let mut bytes = Vec::new();
     File::open(path)?
@@ -343,7 +343,7 @@ fn read_ppm(path: &Path) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 
-fn parse_ppm(bytes: &[u8]) -> Result<Ppm<'_>> {
+pub(super) fn parse_ppm(bytes: &[u8]) -> Result<Ppm<'_>> {
     fn token<'a>(bytes: &'a [u8], cursor: &mut usize) -> Result<&'a [u8]> {
         loop {
             while bytes.get(*cursor).is_some_and(u8::is_ascii_whitespace) {

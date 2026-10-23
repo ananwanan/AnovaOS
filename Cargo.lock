@@ -18,12 +18,17 @@ name = "anova-graphics"
 version = "0.1.0"
 
 [[package]]
+name = "anova-input"
+version = "0.1.0"
+
+[[package]]
 name = "anova-kernel"
 version = "0.1.0"
 dependencies = [
  "anova-abi",
  "anova-elf",
  "anova-graphics",
+ "anova-input",
  "anova-memory",
  "anova-platform",
  "anova-sched",

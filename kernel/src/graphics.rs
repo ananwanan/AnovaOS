@@ -1,10 +1,95 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Present a bounded CPU test pattern through the validated, inherited WC video mapping.
-//! The temporary back buffer is reclaimed before user startup; COM1 remains the recovery console.
+//! Reclaim the boot buffer, then save/restore only the clipped diagnostic cursor rectangle.
+//! All video access stays on the permanent kernel root; COM1 remains the recovery console.
 use crate::{boot, mm, serial};
 use alloc::vec::Vec;
 use anova_graphics::Surface;
 use core::arch::asm;
+
+/// Fixed-size device-pixel save area: no retained full-screen allocation or user mapping.
+pub struct Cursor {
+    display: boot::Display,
+    saved: [u32; (anova_graphics::CURSOR_WIDTH * anova_graphics::CURSOR_HEIGHT) as usize],
+    position: Option<(u32, u32)>,
+}
+
+impl Cursor {
+    pub fn new() -> Result<Self, &'static str> {
+        let display = boot::display()?;
+        mm::check_display(&display)?;
+        Ok(Self {
+            display,
+            saved: [0; (anova_graphics::CURSOR_WIDTH * anova_graphics::CURSOR_HEIGHT) as usize],
+            position: None,
+        })
+    }
+
+    pub fn dimensions(&self) -> (u32, u32) {
+        (self.display.layout.width(), self.display.layout.height())
+    }
+
+    pub fn hide(&mut self) {
+        if let Some((x, y)) = self.position.take() {
+            self.visit(x, y, false);
+            Self::fence();
+        }
+    }
+
+    pub fn show(&mut self, x: u32, y: u32) {
+        self.hide();
+        self.visit(x, y, true);
+        self.position = Some((x, y));
+        Self::fence();
+    }
+
+    fn visit(&mut self, x: u32, y: u32, draw: bool) {
+        let layout = self.display.layout;
+        for cy in 0..anova_graphics::CURSOR_HEIGHT {
+            for cx in 0..anova_graphics::CURSOR_WIDTH {
+                let Some((px, py)) = x.checked_add(cx).zip(y.checked_add(cy)) else {
+                    continue;
+                };
+                let Some(offset) = layout.pixel_offset(px, py) else {
+                    continue;
+                };
+                let index = (cy * anova_graphics::CURSOR_WIDTH + cx) as usize;
+                let mut packed = self.saved[index];
+                if draw {
+                    packed = 0;
+                    for byte in 0..layout.bytes_per_pixel() {
+                        // SAFETY: The checked visible pixel offset and admitted 24/32-bit
+                        // layout bound each byte. The retained mapping is supervisor RW/NX
+                        // WC, exclusively used on the BSP kernel root outside IRQ handlers.
+                        packed |= u32::from(unsafe {
+                            (self.display.address.0 as *const u8)
+                                .add(offset + byte)
+                                .read_volatile()
+                        }) << (byte * 8);
+                    }
+                    self.saved[index] = packed;
+                    if let Some(color) = anova_graphics::cursor_color(cx, cy) {
+                        packed = layout.pack_rgb(color);
+                    }
+                }
+                for byte in 0..layout.bytes_per_pixel() {
+                    // SAFETY: Same checked, exclusively owned visible pixel as the read
+                    // above. Restore saved device bytes exactly, including unused channels.
+                    unsafe {
+                        (self.display.address.0 as *mut u8)
+                            .add(offset + byte)
+                            .write_volatile((packed >> (byte * 8)) as u8);
+                    }
+                }
+            }
+        }
+    }
+
+    fn fence() {
+        // SAFETY: x86-64 MFENCE orders WC stores before the next cursor/readback operation.
+        unsafe { asm!("mfence", options(nostack, preserves_flags)) };
+    }
+}
 
 pub fn show() {
     let before = mm::heap_used();

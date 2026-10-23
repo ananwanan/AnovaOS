@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Schedule bounded native/Linux processes and shared-root threads with private stacks on one BSP.
-//! User traps capture state; lifecycle, polled networking, copying and reclamation run on the kernel root.
+//! User traps capture state; lifecycle, polled devices, copying and reclamation run on the kernel root.
 mod diagnostics;
 mod linux;
 pub(crate) fn network_seed(bytes: &mut [u8]) -> Result<(), i64> {
@@ -630,6 +630,8 @@ impl Kernel {
                 net.collect(|id| self.fs.socket_live(id));
                 net.poll();
             }
+            #[cfg(feature = "graphics")]
+            crate::drivers::input::poll();
             self.terminal.poll();
             self.linux_wake();
             for i in 0..CAPACITY {

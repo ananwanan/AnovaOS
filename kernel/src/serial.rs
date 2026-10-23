@@ -9,7 +9,7 @@ const COM1: u16 = 0x3f8;
 
 pub fn out8(port: u16, value: u8) {
     // SAFETY: The BSP runs at CPL0. Callers restrict ports to the q35 UART,
-    // legacy PIC masks, and the test-only QEMU exit device.
+    // legacy PIC masks, scheduler-owned i8042, and the test-only QEMU exit device.
     unsafe {
         asm!("out dx, al", in("dx") port, in("al") value, options(nomem, nostack, preserves_flags));
     }

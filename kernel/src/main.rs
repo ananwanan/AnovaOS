@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #![no_std]
 #![no_main]
-//! Boot owned CPU/memory/devices, optional checked software graphics, and isolated user workloads.
+//! Boot owned CPU/memory/devices, optional checked graphics/PS/2, and isolated user workloads.
 
 extern crate alloc;
 
@@ -110,7 +110,13 @@ extern "C" fn kernel_main(timer_port: u64, timer_mask: u64) -> ! {
     PHASE.store(6, Ordering::Relaxed);
     mm::inject_fault();
     #[cfg(feature = "graphics")]
-    graphics::show();
+    {
+        graphics::show();
+        drivers::input::init(anova_platform::acpi::PmTimer {
+            port: timer_port as u16,
+            mask: timer_mask as u32,
+        });
+    }
     task::start();
     serial::write(format_args!(
         "[BOOT:OK] M9 native/Linux runtime processes reclaimed; BSP idle, interrupts enabled\n"

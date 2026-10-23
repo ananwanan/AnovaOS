@@ -429,3 +429,23 @@ fn presentation_visits_only_visible_offsets_once_and_in_row_order() {
         ]
     );
 }
+#[test]
+fn cursor_has_a_pinned_visible_outline_interior_and_transparent_exterior() {
+    let rows = [
+        "#......", "##.....", "#o#....", "#oo#...", "#ooo#..", "#oooo#.", "#ooooo#", "#ooooo#",
+        "#######",
+    ];
+    for (y, row) in rows.iter().enumerate() {
+        for (x, byte) in row.bytes().enumerate() {
+            let expected = match byte {
+                b'#' => Some(0),
+                b'o' => Some(0x00ff_ffff),
+                _ => None,
+            };
+            assert_eq!(cursor_color(x as u32, y as u32), expected);
+        }
+    }
+    for (x, y) in [(7, 0), (0, 9), (u32::MAX, 0), (0, u32::MAX)] {
+        assert_eq!(cursor_color(x, y), None);
+    }
+}
