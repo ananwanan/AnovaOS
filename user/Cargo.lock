@@ -65,6 +65,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "gui-run"
+version = "0.1.0"
+dependencies = [
+ "anova-gui",
+ "anova-gui-user",
+ "anova-rt",
+]
+
+[[package]]
 name = "gui-test"
 version = "0.1.0"
 dependencies = [

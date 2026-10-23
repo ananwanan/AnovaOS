@@ -29,7 +29,9 @@ M14.1 adds opt-in software graphics, checked framebuffer mappings and actual
 QEMU pixel/screenshot verification. M14.2 implements polled PS/2 physical input
 and a clipped cursor. M14.3 adds an isolated Rust user-space compositor,
 bounded private windows, focused input and checked crash/restart recovery.
-The separate GUI runtime/SDK and GPU stages remain planned.
+M14.4 adds the Rust GUI runtime, C/C++/Rust SDKs and graphical applications,
+with independent guest builds, physical input and reboot retention verified.
+M14.5 GPU rendering remains planned.
 General Linux/glibc remains future work; device IRQs stay masked.**
 
 Repository: [ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS).
@@ -201,7 +203,7 @@ is reported separately from [local validation](docs/validation/M12.md).
 M13 delivers the versioned SDK and application format described in
 [M13 SDK](docs/M13_SDK.md). M14.1 delivers checked software drawing and M14.2
 implements bounded PS/2 input/cursor diagnostics. M14.3 user-space composition
-is locally accepted; M14.4 GUI runtime/SDKs are next under the
+and M14.4 GUI runtime/SDKs are locally accepted; M14.5 GPU rendering remains under the
 [separate GUI plan](docs/M14_GUI.md). Current Rust/Cargo limits remain in
 [M12 Rust](docs/M12_RUST.md). See [current status](docs/STATUS.md) and
 [roadmap](ROADMAP.md).
@@ -369,7 +371,33 @@ The local three-boot gate passed with eight complete pixel comparisons,
 focused input, window redraw, actual client/server faults, fresh-session
 reconnection, heap-OOM rollback and serial/device fallback. Each client has
 one private 32x24 through 320x240 RGB surface, with four total connections.
-Presentation uses bounded CPU copies. Text/widgets, graphical terminal,
-the public GUI C/C++/Rust SDK and GPU acceleration remain separate stages.
+Presentation uses bounded CPU copies. M14.4 below delivers text/widgets,
+a graphical terminal and the public C/C++/Rust GUI SDK. GPU acceleration
+remains a separate stage.
 See [M14 compositor](docs/M14_COMPOSITOR.md) and
 [M14.3 evidence](docs/validation/M14.3.md).
+
+## M14.4 GUI runtime and C/C++/Rust SDKs
+
+```sh
+cargo xtask gui-sdk
+cargo xtask gui-sdk-image
+cargo xtask gui-sdk-test
+cargo xtask run --gui-sdk
+```
+
+The allocation-free Rust runtime implements a separate versioned C ABI,
+original bitmap text, clipped drawing, layout, buttons, text fields and a
+bounded process-private clipboard. C headers, C++ move-only RAII and safe Rust
+wrappers share its semantics. The development image includes the accepted
+GCC/G++ and Rust tools; `gui-build c`, `gui-build cpp` and `gui-build rust`
+compile independent native client sources in the guest. A native data disk
+keeps sources and executable output across clean reboot.
+
+The Rust note application exercises editing/copying. The bounded graphical
+terminal accepts `echo TEXT` and `pwd`, uses real native command processes and
+pipes, and displays their output. It has no PTY/job control or ANSI emulation.
+Run `gui-run /persist/gui-c` after building; use physical `a`, the button and
+`q`, then F11 to stop the compositor and return to serial input. See the
+[development walkthrough](docs/DEVELOPMENT.md), [runtime contract](docs/M14_RUNTIME.md)
+and [M14.4 evidence](docs/validation/M14.4.md). GPU acceleration remains M14.5.

@@ -391,3 +391,67 @@ are exported. See [M14_COMPOSITOR](M14_COMPOSITOR.md) for exact ownership,
 backpressure and restart semantics and [M14.3 validation](validation/M14.3.md)
 for actual verification and exclusions. M14.4 GUI runtime/SDKs and M14.5 GPU
 rendering remain separate stages.
+
+## M14.4 GUI runtime and independent language SDKs
+
+The GUI source SDK has its own `anova.gui.v1` C library ABI. The Rust runtime
+implements text, layout, buttons, text fields, event polling and private
+clipboard storage. Generated C declarations, move-only C++ RAII and safe Rust
+wrappers share those semantics. The compositor and kernel isolation from
+M14.3 remain in use; no Linux GUI framework or native `std` port is added.
+See [runtime contract](M14_RUNTIME.md) and [GUI SDK](../sdk/gui/README.md).
+
+```sh
+cargo xtask gui-sdk
+cargo xtask gui-sdk-image
+cargo xtask gui-sdk-test
+cargo xtask gui-sdk-replay # Recheck retained outputs after a successful build gate
+cargo xtask root-image build/disks/gui-dev.ext2
+cargo xtask run --gui-sdk --disk build/disks/gui-dev.ext2
+```
+
+`gui-sdk` exports a checksummed source distribution to
+`build/sdk/anova-gui-sdk-1.0.0`. Copy it before independently building its
+`crates/gui-runtime/Cargo.toml`, so generated Cargo outputs do not enter the
+immutable release. The GUI image requires the prepared M11/M12 compiler
+profiles and uses 3 GiB guest memory, one BSP, standard VGA and polled PS/2.
+The interactive command opens QEMU GTK; headless acceptance uses QMP.
+Use a native data disk, whose immutable marker is `anova.native.v1`.
+Compiler executables remain explicitly Linux-personality initramfs entries.
+
+Inside that GUI development image:
+
+```sh
+cd /persist
+cp /gui/templates/main.c main.c
+gui-build c
+gui-run /persist/gui-c
+```
+
+Type physical `a`, click the button, then type `q` to close the demo. Press F11
+to stop its compositor and return to the serial shell. For C++ or Rust, copy
+`main.cpp` or `main.rs` and select `gui-build cpp` or `gui-build rust`; run the
+corresponding `/persist/gui-cpp` or `/persist/gui-rust`. `gui-build note` and
+`gui-build terminal` accept `note.rs` and `terminal.rs`. The Rust graphical
+terminal executes `echo TEXT` and `pwd` through a pre-GUI helper and real pipes;
+Enter submits the field and `q` in an empty field closes/reaps it. This bounded
+terminal does not implement a PTY or ANSI escape sequences.
+
+GCC/G++ compile independent freestanding objects; guest rustc compiles the
+runtime rlib and links the objects with native startup/intrinsics/panic code.
+The generated application ABI follows the native disk policy. No runtime libc,
+C++ exceptions, dynamic Rust standard library or host-prebuilt GUI client is
+used. A failed compilation retains the preceding runnable executable.
+
+`gui-sdk-replay` rechecks the successful build gate's exact retained ISO, source
+and native executable hashes, then runs another physical-input/scanout boot
+without recompilation. It requires successful build evidence and records a
+separate replay result. It cannot replace the original compilation gate.
+
+The gate saves each source through the actual serial editor, compiles it in
+guest, verifies physical input and literal scanout samples, checks a real client
+page fault and both child wait statuses, then compares exact source/ELF hashes
+across clean shutdown/reboot. Run image-building tests sequentially: their
+verified `build/apps` snapshots are intentionally invalidated by concurrent
+writers. [M14.4 validation](validation/M14.4.md) records actual results and the
+boundary between host checks, QEMU verification and untested physical hardware.

@@ -1,10 +1,10 @@
-<!-- Specify software display implementation and planned Rust GUI/SDK stages with independent gates. -->
+<!-- Specify delivered software GUI/input/runtime SDK stages and the independent planned GPU gate. -->
 # M14: GUI architecture and five-stage delivery
 
-Status: **M14.1–M14.3 implemented and locally verified; M14.4–M14.5 remain planned**
+Status: **M14.1–M14.4 implemented and locally verified; M14.5 GPU remains planned**
 (2026-10-23). Actual local acceptance is recorded separately in
-[M14.1 validation](validation/M14.1.md), [M14.2 validation](validation/M14.2.md)
-and [M14.3 validation](validation/M14.3.md).
+[M14.1 validation](validation/M14.1.md), [M14.2 validation](validation/M14.2.md),
+[M14.3 validation](validation/M14.3.md) and [M14.4 validation](validation/M14.4.md).
 This design is subordinate to [AGENTS](../AGENTS.md), [architecture](../ARCHITECTURE.md),
 [roadmap](../ROADMAP.md), and [implementation status](STATUS.md). Do not interpret the
 Limine framebuffer boot response or any rendered host mockup as a functioning desktop.
@@ -76,7 +76,8 @@ on compositor restart. CPU/software paths must not depend on GPU availability.
 
 ## 3. SDK/ABI contract (design target)
 
-The ABI shall document, before freezing v1:
+The ABI contract below guides the implementation; [M14 runtime](M14_RUNTIME.md)
+and the [SDK contract](../sdk/gui/README.md) specify the delivered v1 choices:
 
 1. A separate `ANOVA_GUI_ABI_VERSION` and capability/feature negotiation, with
    clear unsupported-version errors. Do not confuse GUI library ABI with the
@@ -101,10 +102,12 @@ The ABI shall document, before freezing v1:
 8. Header generation (candidate: `cbindgen`), library packaging, symbol/export
    version policy, compatibility tests and separate SDK/toolchain targets.
 
-Potential API functions like `anova_gui_query_version`, `anova_app_create`,
-`anova_window_create`, `anova_window_show`, `anova_app_poll_event` and
-`anova_window_destroy` are **illustrative names only** until M14.4 freezes
-the public API. No implementation is claimed.
+M14.4 implements the separate `anova.gui.v1` library contract described in
+[M14 runtime](M14_RUNTIME.md). Exported names include
+`anova_gui_query_version`, `anova_gui_window_create`, `anova_gui_window_show`,
+`anova_gui_poll_event` and `anova_gui_window_destroy`. The allocation-free v1
+profile uses one process-local window and polling; there are no app objects,
+callbacks or public shared-buffer mappings.
 
 SDK validation must compile and run one independently built C, C++ and Rust GUI
 client, plus an incompatible-version probe and negative cases for malformed
@@ -200,15 +203,15 @@ stale handles, memory pressure and compositor restart/failure.
 Dependencies: M14.3, M13's app packaging/SDK discipline, and the toolchains
 actually verified for each language (M11 C/C++, M12 Rust/Cargo).
 
-- [ ] Implement the Rust GUI runtime: 2D primitives, glyph/text, layout,
+- [x] Implement the Rust GUI runtime: 2D primitives, glyph/text, layout,
       widgets (button/text field), event loop and window API.
-- [ ] Define/freeze a versioned C ABI in Rust with header generation,
+- [x] Define/freeze a versioned C ABI in Rust with header generation,
       error/handle/ownership contracts and ABI compatibility tests.
-- [ ] Ship a C header/library, C++ RAII wrapper and ergonomic safe Rust SDK.
+- [x] Ship a C header/library, C++ RAII wrapper and ergonomic safe Rust SDK.
       Provide build templates and ABI-specific linkage/install metadata.
-- [ ] Add a basic graphical terminal, clipboard policy and at least one native
+- [x] Add a basic graphical terminal, clipboard policy and at least one native
       desktop GUI application; state any deferred features explicitly.
-- [ ] Compile/link/run separate Rust, C and C++ window demos in the guest when
+- [x] Compile/link/run separate Rust, C and C++ window demos in the guest when
       the relevant guest toolchain is accepted. Host cross-build alone is
       preliminary evidence, not completion of an in-OS development objective.
 
@@ -409,4 +412,15 @@ physical hotplug, peripheral IRQ routing, real-hardware keyboard/mouse support,
 graphical terminal/text, user-space compositor, public GUI event ABI and GUI
 SDK remain outside M14.2. M14.3 is accepted separately under
 [M14_COMPOSITOR](M14_COMPOSITOR.md) and [its validation](validation/M14.3.md);
-M14.4 is the next required GUI stage.
+M14.4 is separately accepted under [runtime](M14_RUNTIME.md) and
+[validation](validation/M14.4.md); M14.5 GPU rendering remains open.
+
+## 9. M14.4 runtime implementation
+
+The Rust runtime, generated C ABI and three language SDKs are implemented in
+`crates/gui-runtime` and `sdk/gui`. The graphical Rust note and bounded interactive
+terminal use the same runtime as the independent language demos. The guest build
+profile uses the accepted GCC/G++ and Rust compilers to generate native outputs;
+it does not establish native libc or Rust `std`. See [runtime contract](M14_RUNTIME.md)
+and [M14.4 validation](validation/M14.4.md) for concrete API/ownership details,
+actual gate results and exclusions. M14.5 still requires a separately proven GPU path.

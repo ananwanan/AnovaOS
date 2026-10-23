@@ -11,8 +11,9 @@
 
 M14.1 已增加可选软件显示、受检 framebuffer 映射和真实 QEMU 逐像素/截图验证。
 M14.2 已实现轮询式 PS/2 物理输入与裁剪游标。M14.3 已通过本地 QEMU 验收，交付独立
-Rust 用户态窗口合成器、焦点输入与崩溃/重启恢复；GUI runtime/SDK 与 GPU 渲染
-仍按后续阶段推进。
+Rust 用户态窗口合成器、焦点输入与崩溃/重启恢复。M14.4 已交付 Rust GUI runtime、
+C/C++/Rust SDK 与图形应用，系统内独立构建、真实键鼠输入和重启保留通过验收；
+M14.5 GPU 渲染仍待实现。
 
 日常开发与 Pull Request 的目标分支为 **`dev`**；`main` 保留阶段验收后的稳定快照。分支约定见 [GitHub 协作说明](docs/GITHUB_SETUP.md)。
 
@@ -142,7 +143,7 @@ cargo xtask run --disk build/disks/work.ext2 # 复用此盘，在系统内 shutd
 
 ## 下一步
 
-M13 已交付版本化 SDK 与应用格式，见 [M13 SDK](docs/M13_SDK.md)。M14.1 已交付受检软件绘制，M14.2 已实现有界 PS/2 输入/游标诊断；M14.3 用户态合成器已通过本地验收，下一阶段为 [GUI 计划](docs/M14_GUI.md) 的 M14.4 GUI runtime/SDK。当前 Rust/Cargo 范围见 [M12 Rust](docs/M12_RUST.md)，另见 [当前状态](docs/STATUS.md) 和 [路线图](ROADMAP.md)。
+M13 已交付版本化 SDK 与应用格式，见 [M13 SDK](docs/M13_SDK.md)。M14.1 已交付受检软件绘制，M14.2 已实现有界 PS/2 输入/游标诊断；M14.3 用户态合成器和 M14.4 GUI runtime/SDK 已通过本地验收；[GUI 计划](docs/M14_GUI.md) 的 M14.5 GPU 渲染仍待实现。当前 Rust/Cargo 范围见 [M12 Rust](docs/M12_RUST.md)，另见 [当前状态](docs/STATUS.md) 和 [路线图](ROADMAP.md)。
 
 ## 许可证
 
@@ -275,6 +276,28 @@ F12 触发合成器异常及重启，重启后按 F11 结束并返回串口 shel
 本地三个启动配置已通过验收，包括八张完整逐像素截图、焦点输入、窗口重绘、
 客户端/合成器各自真实异常、新会话重连、堆耗尽回滚与串口/设备缺失恢复。
 每客户端拥有一个独立的 32×24 至 320×240 RGB surface，最多四个连接；
-画面通过有界 CPU 复制提交。文字/控件、图形终端、公共 C/C++/Rust GUI SDK
-和 GPU 加速仍按后续阶段推进。
+画面通过有界 CPU 复制提交。下文 M14.4 已交付文字/控件、图形终端及公共
+C/C++/Rust GUI SDK；GPU 加速仍按独立阶段推进。
 见 [M14.3 设计](docs/M14_COMPOSITOR.md) 与 [验收记录](docs/validation/M14.3.md)。
+
+## M14.4 GUI runtime 与 C/C++/Rust SDK
+
+```sh
+cargo xtask gui-sdk
+cargo xtask gui-sdk-image
+cargo xtask gui-sdk-test
+cargo xtask run --gui-sdk
+```
+
+无动态分配的 Rust runtime 实现独立版本化 C ABI、原创位图文字、裁剪绘图、布局、
+按钮、文本框及有界进程内剪贴板。C 头文件、C++ move-only RAII 和 Rust 安全封装
+使用同一套语义。开发镜像包含已验收的 GCC/G++ 和 Rust 工具，guest 中通过
+`gui-build c`、`gui-build cpp`、`gui-build rust` 分别编译独立的原生应用源码；
+原生数据盘在正常关机、重启后保留源码和可执行产物。
+
+Rust note 应用演示编辑和复制。受限图形终端支持输入 `echo TEXT` 与 `pwd`，
+通过真实原生命令进程和管道取得、显示输出；不提供 PTY/作业控制或 ANSI 模拟。
+构建后运行 `gui-run /persist/gui-c`，使用物理按键 `a`、点击按钮，再按 `q`
+关闭应用，最后 F11 结束合成器并返回串口输入。完整步骤与边界见
+[开发说明](docs/DEVELOPMENT.md)、[runtime 契约](docs/M14_RUNTIME.md) 和
+[M14.4 验收](docs/validation/M14.4.md)。GPU 加速仍属于 M14.5。

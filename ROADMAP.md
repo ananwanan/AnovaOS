@@ -1,7 +1,7 @@
 <!-- Track milestone dependencies, implementation checklists and acceptance criteria. -->
 # 开发路线与阶段验收
 
-日期：2026-10-23。**M0–M13（受限离线与联网范围）及 M14.1 软件显示已通过本地 q35/TCG 验收；M14.2 输入与游标已通过本地 q35/TCG 验收；M14.3 用户态合成器已通过本地 q35/TCG 验收；M14.4–M14.5 与 M15 尚未实现，外设 IRQ 路由启用待对应驱动。** 证据见 [M13 验证记录](docs/validation/M13.md)、[M14.1 验证记录](docs/validation/M14.1.md)、[M14.2 验证记录](docs/validation/M14.2.md)、[M14.3 验证记录](docs/validation/M14.3.md) 与 [STATUS](docs/STATUS.md)。[FIRST_TASK](docs/FIRST_TASK.md) 记录 M0/M1 原始实现顺序；当前 M2 边界见 [CPU 基线](docs/M2_CPU.md)。
+日期：2026-10-23。**M0–M13（受限离线与联网范围）及 M14.1 软件显示已通过本地 q35/TCG 验收；M14.2 输入与游标已通过本地 q35/TCG 验收；M14.3 用户态合成器已通过本地 q35/TCG 验收；M14.4 GUI runtime/三语言 SDK 已通过本地验收；M14.5 与 M15 尚未实现，外设 IRQ 路由启用待对应驱动。** 证据见 [M13 验证记录](docs/validation/M13.md)、[M14.1 验证记录](docs/validation/M14.1.md)、[M14.2 验证记录](docs/validation/M14.2.md)、[M14.3 验证记录](docs/validation/M14.3.md)、[M14.4 验证记录](docs/validation/M14.4.md) 与 [STATUS](docs/STATUS.md)。[FIRST_TASK](docs/FIRST_TASK.md) 记录 M0/M1 原始实现顺序；当前 M2 边界见 [CPU 基线](docs/M2_CPU.md)。
 
 ## 阶段总览
 
@@ -21,7 +21,7 @@
 | M11 | 系统内 GCC/G++ 应用开发 | M7–M9；可先离线 | 本地离线 C/C++/make 验收通过 |
 | M12 | 系统内 Rust/Cargo 应用开发 | M11、M9；联网依赖 M10 | 离线与受限 HTTPS registry/Git 本地验收通过；原生端口独立推进 |
 | M13 | 可发布的 SDK 与应用包 | M4 基础 SDK、M11/M12 | 本地 SDK/包/诊断验收通过 |
-| M14 | Rust 图形桌面与 C/C++/Rust GUI SDK（M14.1–M14.5） | M9、M13；具体依赖见 M14 文档 | M14.1–M14.3 本地通过；下一步 M14.4 |
+| M14 | Rust 图形桌面与 C/C++/Rust GUI SDK（M14.1–M14.5） | M9、M13；具体依赖见 M14 文档 | M14.1–M14.4 本地通过；M14.5 GPU 仍待验证 |
 | M15 | 可选的工具链/内核自举 | M11–M13，资源满足 | 未开始 |
 
 可以交叉推进互不依赖的工作，但不得跳过实际前置条件。网络包获取、图形桌面和完整自举不阻塞第一次离线应用开发。
@@ -230,7 +230,7 @@ are outside this accepted profile.
 
 ## M14：Rust 图形桌面与三语言 GUI SDK
 
-**M14.1–M14.3 已通过本地验证；M14.4–M14.5 未实现。** 完整子阶段任务、体系边界、错误/所有权模型、
+**M14.1–M14.4 已通过本地验证；M14.5 GPU 尚未实现。** 完整子阶段任务、体系边界、错误/所有权模型、
 验收负例与候选目录见 [M14 GUI 专项设计](docs/M14_GUI.md)。
 采用 Rust 实现用户态 compositor、GUI runtime 和稳定 C ABI；
 提供 C 头文件、C++ RAII SDK、Rust 安全 SDK，三者共享一个 API/协议语义。
@@ -283,15 +283,22 @@ QMP 注入按键/重复/扩展键/按钮，中心与四角画面逐像素比较�
 
 ### M14.4：Rust GUI runtime 与 C/C++/Rust SDK
 
-- [ ] Rust 用户态控件、布局、字体/文本、绘图、事件循环、图形终端和首个原生 GUI app。
-- [ ] 冻结版本化 C ABI：`extern "C"`、`#[repr(C)]`、固定宽度数据、
+- [x] Rust 用户态控件、布局、字体/文本、绘图、事件循环、图形终端和首个原生 GUI app。
+- [x] 冻结版本化 C ABI：`extern "C"`、`#[repr(C)]`、固定宽度数据、
       不透明句柄、错误码、生命周期、线程/回调语义；不跨 ABI unwind。
-- [ ] 提供 C 头文件/链接库、C++ RAII 封装和 Rust 安全 API，以及各语言构建模板。
-- [ ] 受测 guest 中分别编辑、编译、链接、运行 C、C++、Rust GUI 示例；
+- [x] 提供 C 头文件/链接库、C++ RAII 封装和 Rust 安全 API，以及各语言构建模板。
+- [x] 受测 guest 中分别编辑、编译、链接、运行 C、C++、Rust GUI 示例；
       SDK 版本不匹配、句柄失效、非法参数与故障资源回收均验证。
 
 **验收：** 三种语言都能独立打开窗口、处理事件、绘制并退出；
 宿主交叉编译成功不等于系统内开发验收。依赖 M11/M12/M13 的实际能力。
+
+已通过 `cargo xtask gui-sdk-test`：独立 C/C++/Rust guest 编辑、构建和真实键鼠事件；
+Rust note 与交互式 echo/pwd 图形终端；ABI/UTF-8/句柄/限额负例，真实用户页故障，
+失败构建保留与两次启动文件哈希一致。28 张实际截图校验独立像素样本，
+不将抽样说成全屏逐像素比较。边界见 [M14 runtime](docs/M14_RUNTIME.md) 与
+[验收](docs/validation/M14.4.md)；字体采用原创 ASCII 位图及 Unicode 替代框，
+剪贴板为进程私有，终端无 PTY/ANSI，未实现动态 GUI 服务包准入。
 
 ### M14.5：可选 GPU 硬件加速
 

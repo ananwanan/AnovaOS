@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# Builds the allocation-free native GUI runtime and versioned C/Rust application boundary.
+[package]
+name = "anova-gui-runtime"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+
+[lib]
+crate-type = ["rlib"]

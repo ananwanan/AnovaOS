@@ -25,6 +25,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "anova-gui-runtime"
+version = "0.1.0"
+
+[[package]]
 name = "anova-input"
 version = "0.1.0"
 

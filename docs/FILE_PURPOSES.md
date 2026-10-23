@@ -334,3 +334,33 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `xtask/src/gui.rs` | Inject actual QMP input and compare native windows, failure recovery and every scanout pixel. |
 | `docs/M14_COMPOSITOR.md` | Specify experimental GUI authority, copied surfaces, damage, input and restart semantics. |
 | `docs/validation/M14.3.md` | Record actual M14.3 execution, scanouts, fault/OOM recovery and regression evidence. |
+
+## M14.4 Rust GUI runtime and independent SDKs
+
+| File | Purpose |
+| --- | --- |
+| `crates/gui-runtime/Cargo.toml` | Package the dependency-free user-space GUI C ABI and safe Rust library. |
+| `crates/gui-runtime/src/lib.rs` | Implement frozen GUI v1 FFI, bounded widgets, UTF-8 storage and Rust handle ownership. |
+| `crates/gui-runtime/src/runtime.rs` | Own copied native RPC, private raster lifetime and ordered loss-reset input delivery. |
+| `crates/gui-runtime/src/render.rs` | Clip RGB primitives and rasterize original ASCII glyphs with Unicode replacement boxes. |
+| `crates/gui-runtime/src/tests.rs` | Check ABI rejection, lifecycle, rendering, UTF-8, resize and queue-pressure recovery. |
+| `sdk/gui/generate.py` | Generate and verify fixed GUI v1 C layouts, capabilities and function declarations. |
+| `sdk/gui/include/anova_gui.h` | Declare generated fixed-width GUI v1 C calls and compile-time layout assertions. |
+| `sdk/gui/include/anova_gui.hpp` | Transfer GUI window ownership with exception-free C++ move-only RAII. |
+| `sdk/gui/README.md` | Specify GUI ABI versions, ownership, errors, linkage and bounded guest SDK usage. |
+| `tests/guest/gui/main.c` | Compile an independent native C GUI client with physical key and button handling. |
+| `tests/guest/gui/main.cpp` | Compile an independent C++ GUI client and exercise move/RAII ownership. |
+| `tests/guest/gui/main.rs` | Compile an independent safe Rust GUI client with equivalent visible behavior. |
+| `tests/guest/gui/contract.h` | Exercise real C/C++ version, UTF-8, lifecycle, layout and capacity failure contracts. |
+| `tests/guest/gui/contract.c` | Run an independent guest-compiled ABI boundary probe with a real compositor. |
+| `tests/guest/gui/fault.c` | Deliberately fault a GUI caller pointer to verify process isolation and cleanup. |
+| `tests/guest/gui/note.rs` | Provide a bounded editable Rust GUI note and explicit private clipboard copying. |
+| `tests/guest/gui/terminal.rs` | Run keyboard-entered native commands through a pre-GUI helper and render pipe output. |
+| `user/gui-link.rs` | Link independent guest client objects with the Rust GUI library, native CRT and panic boundary. |
+| `user/gui-run/Cargo.toml` | Package the native compositor/client lifecycle supervisor for guest SDK applications. |
+| `user/gui-run/src/main.rs` | Launch isolated GUI processes and require actual expected wait statuses and reaping. |
+| `user/linux/gui-build.c` | Run real guest GCC/G++/rustc and publish native GUI executables only after successful linking. |
+| `xtask/src/gui_sdk.rs` | Verify guest edits/builds, physical GUI input, literal scanout, faults and retained reboot hashes. |
+| `xtask/src/gui_sdk_build.rs` | Export an independent checksummed source SDK and package its guest compiler/display image. |
+| `docs/M14_RUNTIME.md` | Specify implemented GUI ABI, rendering, event ownership and native guest build boundaries. |
+| `docs/validation/M14.4.md` | Record actual independent language, graphical terminal, fault and reboot validation evidence. |

@@ -477,9 +477,31 @@ ANOVAPK2 declares architecture, ABI, entry, dependencies and admission
 requirements. The VFS pins `/persist/.anova-abi` as immutable mount authority,
 and the installer rejects a target mismatch before writing. Native and static
 Linux package profiles remain distinct. Permission declarations do not add a
-process sandbox. GUI libraries require a separate future ABI/capability.
+process sandbox. The GUI library uses the independent versioned ABI described below; dynamic GUI
+service admission remains separate.
 
 `kernel/src/task/diagnostics.rs` copies bounded user frame-pointer records after
 a captured hardware fault; `xtask/src/debug.rs` resolves addresses on the host
 against retained exact ELF symbols. The kernel does not parse DWARF or run a
 GDB stub. See [M13 validation](docs/validation/M13.md).
+
+## M14.4 user GUI library boundary
+
+`crates/gui-runtime` adds the allocation-free Rust user-library boundary
+`anova.gui.v1`, separate from native syscall v1 and the experimental compositor
+wire version. Fixed C records and process-local generation handles back generated
+C declarations, C++ move-only RAII and safe Rust wrappers. The library owns one
+private RGB raster, original bitmap glyphs, clipped primitives, layout, immediate
+widgets, a 32-event reset queue and bounded private UTF-8 clipboard. The accepted
+M14.3 compositor retains authenticated owner/session checks and window policy.
+No client receives display addresses or another process's raster storage.
+
+`user/linux/gui-build.c` executes the existing guest C/C++ and Rust compilers.
+Their runtime/compiler personality remains Linux-musl; their freestanding
+client output is explicitly admitted as native by the persistent volume marker.
+`user/gui-link.rs` links native startup, memory intrinsics and panic termination
+with the guest-built Rust rlib. `user/gui-run` supervises the isolated compositor
+and client using actual wait statuses. The Rust graphical terminal starts its
+pipe/command helper before GUI initialization so it never forks a live GUI owner.
+This developer profile provides no native libc/`std`, GPU driver or Linux GUI ABI.
+See [runtime contract](docs/M14_RUNTIME.md).

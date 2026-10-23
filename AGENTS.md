@@ -65,7 +65,12 @@ check as well. See [M14 GUI](docs/M14_GUI.md),
 private surfaces, focused input and actual client/server-fault restart verification.
 Preserve `cargo xtask gui-test` and both `graphics,gui` and
 `graphics,gui,gui-test` kernel checks. Read [M14 compositor](docs/M14_COMPOSITOR.md)
-and [validation/M14.3](docs/validation/M14.3.md). M14.4 GUI runtime/SDKs are next;
+and [validation/M14.3](docs/validation/M14.3.md). M14.4 adds the bounded Rust
+GUI runtime, versioned C ABI, C++/Rust ownership wrappers, note/interactive
+graphical terminal and independently guest-built native clients. Preserve
+`cargo xtask gui-sdk-test`, `anova-gui-runtime` host tests and generated GUI
+header checks. Read [M14 runtime](docs/M14_RUNTIME.md) and
+[validation/M14.4](docs/validation/M14.4.md). M14.5 GPU rendering remains open;
 GDB stubs, native std and compiler bootstrap remain independently scoped.
 
 本文件是后续 Codex 开发规范。用户明确指令优先；已有修改应保留。日常、可逆的实现选择可自主完成，不因普通阶段切换反复请求确认。

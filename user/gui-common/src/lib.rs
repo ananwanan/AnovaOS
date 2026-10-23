@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #![no_std]
-//! Checked copied-message transport and serial formatting for experimental native GUI programs.
-//! This is internal M14.3 plumbing, not the future public C/C++/Rust GUI SDK.
+//! Checked copied-message transport and atomic bounded serial records for native GUI programs.
+//! Internal compositor/supervisor plumbing remains separate from the public GUI library ABI.
 
 use anova_gui::{Reply, Request, transport as t};
 use anova_rt as rt;
@@ -96,13 +96,30 @@ pub fn connect() -> Result<u64, i64> {
     Err(rt::abi::NOT_FOUND)
 }
 
-struct Serial;
+struct Serial {
+    bytes: [u8; 512],
+    length: usize,
+}
 impl Write for Serial {
     fn write_str(&mut self, text: &str) -> fmt::Result {
-        rt::write_all(1, text.as_bytes()).map_err(|_| fmt::Error)
+        let end = self.length.checked_add(text.len()).ok_or(fmt::Error)?;
+        let output = self.bytes.get_mut(self.length..end).ok_or(fmt::Error)?;
+        output.copy_from_slice(text.as_bytes());
+        self.length = end;
+        Ok(())
     }
 }
 
 pub fn log(arguments: fmt::Arguments<'_>) {
-    let _ = Serial.write_fmt(arguments);
+    let mut record = Serial {
+        bytes: [0; 512],
+        length: 0,
+    };
+    if record.write_fmt(arguments).is_ok() {
+        // Emit the complete bounded record in one syscall. A preempted formatter must
+        // never splice another process's record into a PID/session or wait-status field.
+        let _ = rt::write_all(1, &record.bytes[..record.length]);
+    } else {
+        rt::write(b"[GUI:FAIL] serial record exceeds its bounded buffer\n");
+    }
 }

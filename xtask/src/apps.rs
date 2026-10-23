@@ -4,7 +4,7 @@
 use super::*;
 use sha2::{Digest, Sha256};
 
-pub const NAMES: [&str; 11] = [
+pub const NAMES: [&str; 12] = [
     "hello-rust",
     "hello-c",
     "probe",
@@ -16,6 +16,7 @@ pub const NAMES: [&str; 11] = [
     "compositor",
     "gui-client",
     "gui-test",
+    "gui-run",
 ];
 const USER_TARGET: &str = "x86_64-unknown-linux-gnu";
 
@@ -131,6 +132,7 @@ pub fn build(root: &Path, clippy: bool) -> Result<()> {
         "compositor",
         "gui-client",
         "gui-test",
+        "gui-run",
     ] {
         let path = apps.join(format!("{name}.elf"));
         output_path(&path)?;

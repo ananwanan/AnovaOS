@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Gate software graphics, physical input, isolated native windows and guest development tools.
+# Gate software graphics, physical input, native GUI SDKs and guest development tools.
 name: Bare-metal boot
 
 on:
@@ -32,7 +32,7 @@ jobs:
       - name: Check file-purpose explanations
         run: cargo xtask check-files
       - name: Check host tools
-        run: cargo clippy --locked -p xtask -p anova-platform -p anova-memory -p anova-abi -p anova-elf -p anova-sched -p anova-vfs -p anova-storage -p anova-graphics -p anova-input -p anova-gui --all-targets -- -D warnings
+        run: cargo clippy --locked -p xtask -p anova-platform -p anova-memory -p anova-abi -p anova-elf -p anova-sched -p anova-vfs -p anova-storage -p anova-graphics -p anova-input -p anova-gui -p anova-gui-runtime --all-targets -- -D warnings
       - name: Check and build native Rust/C applications
         run: |
           cargo xtask check-apps
@@ -120,6 +120,10 @@ jobs:
           cargo xtask rust-runtime-test
       - name: Verify guest Rust, offline Cargo, build scripts, C FFI, macros and reboot
         run: cargo xtask rust-test
+      - name: Verify guest-built native GUI SDK clients, scanout, input and reboot
+        run: |
+          cargo xtask gui-sdk-test
+          cargo xtask gui-sdk-replay
       - name: Verify online Cargo, strict TLS, transport failures and offline rebuild
         run: cargo xtask rust-online-test
       - name: Upload compiler build and guest evidence
@@ -135,4 +139,5 @@ jobs:
             build/toolchain/archive.sha256
             build/rust/stage.sha256
             build/rust/archive.sha256
+            build/gui-sdk/
           if-no-files-found: ignore

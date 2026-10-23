@@ -128,7 +128,7 @@ fn validate_previous_export(candidate: &Path, previous: &Path) -> Result<()> {
     Ok(())
 }
 
-fn publish_export(candidate: &Path, destination: &Path, backup: &Path) -> Result<()> {
+pub(super) fn publish_export(candidate: &Path, destination: &Path, backup: &Path) -> Result<()> {
     let previous = match fs::symlink_metadata(destination) {
         Ok(metadata) if metadata.file_type().is_dir() => {
             validate_previous_export(candidate, destination)?;
@@ -381,7 +381,7 @@ fn project_path(root: &Path, value: &str) -> Result<PathBuf> {
     })
 }
 
-fn safe_directory(path: &Path) -> Result<()> {
+pub(super) fn safe_directory(path: &Path) -> Result<()> {
     let mut current = PathBuf::new();
     for component in path.components() {
         current.push(component);
@@ -408,7 +408,7 @@ fn write_file(path: &Path, content: &str) -> Result<()> {
     Ok(())
 }
 
-fn copy_file(source: &Path, destination: &Path) -> Result<()> {
+pub(super) fn copy_file(source: &Path, destination: &Path) -> Result<()> {
     checked_file(source)?;
     safe_directory(destination.parent().ok_or("Output has no parent")?)?;
     output_path(destination)?;
@@ -416,7 +416,7 @@ fn copy_file(source: &Path, destination: &Path) -> Result<()> {
     Ok(())
 }
 
-fn copy_tree(source: &Path, destination: &Path) -> Result<()> {
+pub(super) fn copy_tree(source: &Path, destination: &Path) -> Result<()> {
     safe_directory(destination)?;
     for entry in fs::read_dir(source)? {
         let entry = entry?;
@@ -430,7 +430,11 @@ fn copy_tree(source: &Path, destination: &Path) -> Result<()> {
     Ok(())
 }
 
-fn collect_files(base: &Path, directory: &Path, output: &mut Vec<PathBuf>) -> Result<()> {
+pub(super) fn collect_files(
+    base: &Path,
+    directory: &Path,
+    output: &mut Vec<PathBuf>,
+) -> Result<()> {
     for entry in fs::read_dir(directory)? {
         let entry = entry?;
         if entry.file_type()?.is_dir() {
