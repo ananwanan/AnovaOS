@@ -447,9 +447,11 @@ pub(super) fn session_network(
             output.finish()?;
         }
         let text = output.text();
+        let mut status_ready = true;
         if step < exchanges.len() && exchanges[step].0 == "[SHELL:STATUS] code=0" {
-            let tail = String::from_utf8_lossy(text.as_bytes().get(cursor..).unwrap_or_default());
-            if tail.contains("[SHELL:STATUS] code=") && !tail.contains("[SHELL:STATUS] code=0") {
+            let status = output.shell_status_from(cursor);
+            status_ready = status == Some(0);
+            if status.is_some_and(|status| status != 0) {
                 return Err(format!(
                     "{name}: command failed at step {step}; see {}",
                     serial.display()
@@ -472,7 +474,8 @@ pub(super) fn session_network(
         {
             return Err(format!("{name}: guest failure; see {}", serial.display()).into());
         }
-        if step < exchanges.len()
+        if status_ready
+            && step < exchanges.len()
             && let Some(at) = output.find_from(cursor, exchanges[step].0)
         {
             cursor = at + exchanges[step].0.len();

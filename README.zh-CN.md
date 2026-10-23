@@ -5,7 +5,7 @@
 
 用 Rust 从零开发的 x86_64 操作系统，目标是在自己的系统中编辑、编译、调试和运行应用，并逐步兼容部分现有 Linux 软件。
 
-**当前状态：M0–M12（受限离线与联网范围）已通过本地 QEMU q35/TCG 验证。原生应用、VFS、管道、init/shell、现代 virtio-blk 和 `/persist` 受限 ext2 已支持源码编辑、sync/fsync、正常关机及重启保留。受限 Linux profile 已运行 musl 1.2.4 静态、静态 PIE 和动态程序，验证 pthread/TLS/futex、真实信号处理与中断/重启、poll、非阻塞 I/O、四组 PTY，以及启动共享库、dlopen 和动态 TLS；保留固定 BusyBox 1.36.1 echo/ls/cat/ash 子集。当前单核，共 32 个进程/线程槽；M10 新增可选 virtio-net IPv4 TCP/UDP/DNS、可中断 socket、严格证书验证的用户态 TLS，以及锁定软件包的安装、升级、回滚与卸载。M11 新增可选离线 GCC/G++/make 开发镜像，已验证系统内编译运行 C/C++、异常、线程及重启保留。M12 新增系统内 Rust 1.90.0/std 与离线 Cargo，分别验证 vendor 依赖、build.rs、C FFI 和系统内编译的过程宏。可选在线 Cargo 已验证严格 HTTPS registry/Git 下载、缓存保留及断网重编译；公网 crates.io/GitHub 通过配置的宿主代理验证。通用 Linux/glibc 仍待实现，外设 IRQ 保持屏蔽。**
+**当前状态：M0–M13（受限离线与联网范围）已通过本地 QEMU q35/TCG 验证。原生应用、VFS、管道、init/shell、现代 virtio-blk 和 `/persist` 受限 ext2 已支持源码编辑、sync/fsync、正常关机及重启保留。受限 Linux profile 已运行 musl 1.2.4 静态、静态 PIE 和动态程序，验证 pthread/TLS/futex、真实信号处理与中断/重启、poll、非阻塞 I/O、四组 PTY，以及启动共享库、dlopen 和动态 TLS；保留固定 BusyBox 1.36.1 echo/ls/cat/ash 子集。当前单核，共 32 个进程/线程槽；M10 新增可选 virtio-net IPv4 TCP/UDP/DNS、可中断 socket、严格证书验证的用户态 TLS，以及锁定软件包的安装、升级、回滚与卸载。M11 新增可选离线 GCC/G++/make 开发镜像，已验证系统内编译运行 C/C++、异常、线程及重启保留。M12 新增系统内 Rust 1.90.0/std 与离线 Cargo，分别验证 vendor 依赖、build.rs、C FFI 和系统内编译的过程宏。可选在线 Cargo 已验证严格 HTTPS registry/Git 下载、缓存保留及断网重编译；公网 crates.io/GitHub 通过配置的宿主代理验证。M13 新增 SDK 1.0.0、原生 C/C++/Rust 模板、显式 ABI 应用包、安装目标策略校验和真实用户故障源码符号化。通用 Linux/glibc 仍待实现，外设 IRQ 保持屏蔽。**
 
 项目仓库：[ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS)。
 
@@ -76,6 +76,8 @@
 | [docs/validation/M9.md](docs/validation/M9.md) | 运行时哈希、宿主对照、QEMU 验收与回归证据 |
 | [docs/M10_NETWORK_PACKAGES.md](docs/M10_NETWORK_PACKAGES.md) | 受控 IPv4、DNS、TLS 与持久软件包范围 |
 | [docs/validation/M10.md](docs/validation/M10.md) | 网络、软件包、TLS、重启与回归证据 |
+| [docs/M13_SDK.md](docs/M13_SDK.md) | 版本化 SDK、应用清单、安装升级流程与故障符号 |
+| [docs/validation/M13.md](docs/validation/M13.md) | SDK、应用包、诊断和保留回归的实际证据 |
 | [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) | 强制开发需求，包括文件用途说明 |
 | [docs/FILE_PURPOSES.md](docs/FILE_PURPOSES.md) | 仓库中每个文件的用途 |
 | [docs/STATUS.md](docs/STATUS.md) | 当前已实现能力和下一步 |
@@ -135,7 +137,7 @@ cargo xtask run --disk build/disks/work.ext2 # 复用此盘，在系统内 shutd
 
 ## 下一步
 
-M13 将把已验证的应用工具链整理为带版本的 SDK 和应用格式。当前 Rust/Cargo 范围见 [M12 Rust](docs/M12_RUST.md)，另见 [当前状态](docs/STATUS.md) 和 [路线图](ROADMAP.md)。
+M13 已交付版本化 SDK 与应用格式，见 [M13 SDK](docs/M13_SDK.md)。下一阶段为 [GUI 计划](docs/M14_GUI.md) 的 M14.1 framebuffer/软件绘制。当前 Rust/Cargo 范围见 [M12 Rust](docs/M12_RUST.md)，另见 [当前状态](docs/STATUS.md) 和 [路线图](ROADMAP.md)。
 
 ## 许可证
 
@@ -216,3 +218,18 @@ Cargo 构建锁定的 vendor crate，执行 build.rs，并链接系统内编译�
 crates.io 与 GitHub 来源；本地公网验收使用可达的宿主代理和公开 PEM 根证书。
 配置与资源限制见 [M12 联网范围](docs/M12_NETWORK.md)。AnovaOS 原生 std、任意
 Cargo 项目与编译器自举仍独立推进。
+
+## M13 SDK 与应用包
+
+```sh
+cargo xtask sdk
+cargo xtask app-new c build/hello-c
+cargo xtask app-build build/hello-c
+cargo xtask app-pack build/hello-c/app.toml build/hello-c/hello-c.apkg
+cargo xtask sdk-test
+cargo xtask app-test
+cargo xtask package-v2-test
+cargo xtask diagnostics-test
+```
+
+用 `cpp` 或 `rust` 创建另外两种原生模板。`app-run PACKAGE SHA256` 会把已校验的自建包放入镜像，创建匹配 ABI 的临时磁盘并打印可直接使用的 guest 安装和运行命令；`--disk` 可复用显式持久镜像。完整创建、构建、安装和升级步骤见 [M13 SDK](docs/M13_SDK.md)。原生 SDK 与 M11/M12 的 Linux-musl 系统内编译器分别验收。权限声明用于安装准入；GUI runtime、GDB stub、进程沙箱和原生 Rust std 不属于当前成果。

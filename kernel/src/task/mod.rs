@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Schedule bounded native/Linux processes and shared-root threads with private stacks on one BSP.
 //! User traps capture state; lifecycle, polled networking, copying and reclamation run on the kernel root.
+mod diagnostics;
 mod linux;
 pub(crate) fn network_seed(bytes: &mut [u8]) -> Result<(), i64> {
     linux::random(bytes)
@@ -791,6 +792,11 @@ impl Kernel {
                     active = Some(i);
                 }
             } else {
+                diagnostics::fault(
+                    self.policy.entry(i).pid,
+                    &self.process(i).image.as_ref().unwrap().space,
+                    &f,
+                );
                 let outcome = Outcome::Fault {
                     vector: f.vector,
                     error: f.error,

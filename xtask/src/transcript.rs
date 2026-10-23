@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Capture ordered guest stdout directly while retaining an on-disk UART log for diagnostics.
-//! Match raw bytes so partial UTF-8 and changing filesystem snapshots cannot invalidate cursors.
+//! Match raw bytes and complete status lines so fragmented UART data cannot invalidate results.
 use std::{
     borrow::Cow,
     io::{self, Read, Write},
@@ -105,11 +105,57 @@ impl Transcript {
             .position(|window| window == marker.as_bytes())
             .map(|offset| start + offset)
     }
+
+    /// Status output may split at any byte, including between '=' and the exit code.
+    /// Consume only a complete line so a partial success cannot be classified as failure.
+    pub fn shell_status_from(&self, start: usize) -> Option<u32> {
+        for line in self
+            .bytes
+            .get(start..)?
+            .split_inclusive(|byte| *byte == b'\n')
+        {
+            let Some(line) = line.strip_suffix(b"\n") else {
+                continue;
+            };
+            let line = line.strip_suffix(b"\r").unwrap_or(line);
+            let marker = b"[SHELL:STATUS] code=";
+            if let Some(at) = line.windows(marker.len()).position(|bytes| bytes == marker) {
+                return std::str::from_utf8(&line[at + marker.len()..])
+                    .ok()?
+                    .parse()
+                    .ok();
+            }
+        }
+        None
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shell_status_waits_for_the_complete_fragmented_line() {
+        let (sender, receiver) = mpsc::sync_channel(4);
+        let mut transcript = Transcript {
+            receiver,
+            bytes: Vec::new(),
+            closed: false,
+        };
+        sender.send(Ok(b"[SHELL:STATUS] code=".to_vec())).unwrap();
+        transcript.poll().unwrap();
+        assert_eq!(transcript.shell_status_from(0), None);
+        sender.send(Ok(b"0\r".to_vec())).unwrap();
+        transcript.poll().unwrap();
+        assert_eq!(transcript.shell_status_from(0), None);
+        sender
+            .send(Ok(b"\nanova> [SHELL:STATUS] code=101\r\n".to_vec()))
+            .unwrap();
+        transcript.poll().unwrap();
+        assert_eq!(transcript.shell_status_from(0), Some(0));
+        assert_eq!(transcript.shell_status_from(23), Some(101));
+        assert_eq!(transcript.shell_status_from(1000), None);
+    }
 
     #[test]
     fn split_markers_and_incomplete_utf8_keep_raw_cursors_stable() {

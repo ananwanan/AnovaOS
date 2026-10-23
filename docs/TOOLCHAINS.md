@@ -158,3 +158,18 @@ remain separate. Run `cargo xtask rust-build`, `rust-cross-test`,
 能够在 AnovaOS 中使用预先交叉构建好的编译器，产出并运行自己的 app，已经达到用户的系统内开发目标。
 
 能够在 AnovaOS 中重建 GCC、Rust、LLVM 或自身内核是更高等级的自举能力，单列 M15；需要额外资源和构建生态，不能作为应用开发的隐性前置条件。
+
+## M13 SDK delivery
+
+The source-distributed [SDK 1.0.0](M13_SDK.md) gives host C/C++/Rust developers
+independent native v1 projects, an offline Rust dependency, stable errors and
+explicit package metadata. Native templates are freestanding, without libc,
+C++ STL/exceptions or Rust std; normal user flags and the SDK linker stay
+separate from kernel compilation. The runtime argument helper now follows the
+already-implemented native loader limits of 64 entries and 1,023 bytes/string,
+with tests for the boundary and rejection above it.
+
+M11/M12 guest-hosted compilation continues to use the separately accepted
+Linux-musl tools and explicit Linux disk profile. A native SDK export is not a
+native libc/std port or proof of compiler self-bootstrap. GUI SDK delivery
+remains independently versioned and accepted at M14.4.

@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: Apache-2.0
+# Builds the exported standalone native Rust template with SDK-local offline dependencies.
+[package]
+name = "anova-app"
+version = "1.0.0"
+edition = "2024"
+license = "Apache-2.0"
+
+[[bin]]
+name = "anova-app"
+path = "main.rs"
+test = false
+bench = false
+
+[dependencies]
+anova-rt = { path = "../../rust/rt", version = "=1.0.0" }
+offline-message = { path = "offline-message", version = "=1.0.0" }
+
+[workspace]
+
+[profile.release]
+panic = "abort"
+opt-level = 1
+debug = true
+codegen-units = 1

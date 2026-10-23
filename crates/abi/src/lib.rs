@@ -6,6 +6,9 @@
 pub mod linux;
 
 pub const VERSION: u32 = 1;
+/// SDK releases are independent from the frozen native syscall wire version.
+pub const SDK_VERSION: &str = "1.0.0";
+pub const SDK_MAJOR: u32 = 1;
 pub const PERSONALITY: &str = "anova.native.v1";
 pub const SYS_WRITE: u64 = 0;
 pub const SYS_EXIT: u64 = 1;
@@ -96,6 +99,80 @@ pub const NOT_FOUND: i64 = -7;
 pub const PROCESS_LIMIT: i64 = -8;
 pub const BAD_DESCRIPTOR: i64 = -9;
 pub const MAX_NAME: usize = 128;
+/// Native startup limits; the combined strings/pointer table must also fit the startup page.
+pub const MAX_ARGS: usize = 64;
+pub const MAX_ARGUMENT_BYTES: usize = 1023;
+
+/// A negative native v1 error, preserving unknown future values without errno conversion.
+///
+/// Native errors are process return values, never thread-local Linux `errno` values.
+/// SDK additions may introduce names, but existing values and meanings never change in v1.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(transparent)]
+pub struct Error(i64);
+
+impl Error {
+    pub const BAD_ADDRESS: Self = Self(BAD_ADDRESS);
+    pub const UNSUPPORTED: Self = Self(UNSUPPORTED);
+    pub const INVALID_ARGUMENT: Self = Self(INVALID_ARGUMENT);
+    pub const NOT_FOUND: Self = Self(NOT_FOUND);
+    pub const BAD_DESCRIPTOR: Self = Self(BAD_DESCRIPTOR);
+
+    pub const fn from_raw(value: i64) -> Option<Self> {
+        if value < 0 { Some(Self(value)) } else { None }
+    }
+
+    pub const fn raw(self) -> i64 {
+        self.0
+    }
+
+    pub const fn name(self) -> &'static str {
+        match self.0 {
+            BAD_ADDRESS => "bad_address",
+            UNSUPPORTED => "unsupported",
+            INVALID_ARGUMENT => "invalid_argument",
+            TOO_LONG => "too_long",
+            NO_CHILD => "no_child",
+            NO_MEMORY => "no_memory",
+            NOT_FOUND => "not_found",
+            PROCESS_LIMIT => "process_limit",
+            BAD_DESCRIPTOR => "bad_descriptor",
+            FILE_LIMIT => "file_limit",
+            READ_ONLY => "read_only",
+            NOT_DIRECTORY => "not_directory",
+            IS_DIRECTORY => "is_directory",
+            ALREADY_EXISTS => "already_exists",
+            WOULD_BLOCK => "would_block",
+            BROKEN_PIPE => "broken_pipe",
+            NOT_SEEKABLE => "not_seekable",
+            NO_SPACE => "no_space",
+            LINK_LOOP => "link_loop",
+            PERMISSION_DENIED => "permission_denied",
+            IO_ERROR => "io_error",
+            INVALID_FILESYSTEM => "invalid_filesystem",
+            DEVICE_TIMEOUT => "device_timeout",
+            BUSY => "busy",
+            NOT_EMPTY => "not_empty",
+            _ => "unknown_native_error",
+        }
+    }
+}
+
+impl core::fmt::Display for Error {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(formatter, "{} ({})", self.name(), self.raw())
+    }
+}
+
+impl core::error::Error for Error {}
+
+/// Decode a native syscall result while retaining every negative error verbatim.
+pub const fn decode(value: i64) -> Result<u64, Error> {
+    match Error::from_raw(value) {
+        Some(error) => Err(error),
+        None => Ok(value as u64),
+    }
+}
 
 /// Explicit little-endian wire values; fields contain user addresses, never references.
 #[derive(Clone, Copy)]
@@ -181,6 +258,99 @@ const _: () = assert!(size_of::<SystemInfo>() == 32 && align_of::<SystemInfo>() 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn native_v1_numbers_and_layouts_are_frozen() {
+        assert_eq!(VERSION, 1);
+        assert_eq!(PERSONALITY, "anova.native.v1");
+        assert_eq!(
+            [
+                SYS_WRITE,
+                SYS_EXIT,
+                SYS_INFO,
+                SYS_YIELD,
+                SYS_SLEEP,
+                SYS_SPAWN,
+                SYS_EXEC,
+                SYS_WAIT,
+                SYS_FORK,
+                SYS_CLOSE,
+                SYS_READ,
+                SYS_OPEN,
+                SYS_SEEK,
+                SYS_DUP2,
+                SYS_PIPE,
+                SYS_READDIR,
+                SYS_MKDIR,
+                SYS_CHDIR,
+                SYS_GETCWD,
+                SYS_UNLINK,
+                SYS_SYNC,
+                SYS_FSYNC,
+                SYS_SHUTDOWN,
+                SYS_SET_EXECUTABLE
+            ],
+            core::array::from_fn::<_, 24, _>(|index| index as u64)
+        );
+        assert_eq!(size_of::<ExecRequest>(), 32);
+        assert_eq!(align_of::<ExecRequest>(), 8);
+        assert_eq!(core::mem::offset_of!(ExecRequest, argument), 16);
+        assert_eq!(size_of::<WaitStatus>(), 16);
+        assert_eq!(core::mem::offset_of!(WaitStatus, status), 8);
+        assert_eq!(size_of::<DirEntry>(), 80);
+        assert_eq!(align_of::<DirEntry>(), 8);
+        assert_eq!(core::mem::offset_of!(DirEntry, name), 16);
+        assert_eq!(core::mem::offset_of!(SystemInfo, process_id), 24);
+        assert_eq!(OPEN_FLAGS, 127);
+        assert_eq!(MAX_ARGS, 64);
+        assert_eq!(MAX_ARGUMENT_BYTES, 1023);
+    }
+
+    #[test]
+    fn native_errors_keep_numeric_identity_and_unknown_values() {
+        let errors = [
+            BAD_ADDRESS,
+            UNSUPPORTED,
+            INVALID_ARGUMENT,
+            TOO_LONG,
+            NO_CHILD,
+            NO_MEMORY,
+            NOT_FOUND,
+            PROCESS_LIMIT,
+            BAD_DESCRIPTOR,
+            FILE_LIMIT,
+            READ_ONLY,
+            NOT_DIRECTORY,
+            IS_DIRECTORY,
+            ALREADY_EXISTS,
+            WOULD_BLOCK,
+            BROKEN_PIPE,
+            NOT_SEEKABLE,
+            NO_SPACE,
+            LINK_LOOP,
+            PERMISSION_DENIED,
+            IO_ERROR,
+            INVALID_FILESYSTEM,
+            DEVICE_TIMEOUT,
+            BUSY,
+            NOT_EMPTY,
+        ];
+        for (index, raw) in errors.into_iter().enumerate() {
+            assert_eq!(raw, -(index as i64 + 1));
+            let error = Error::from_raw(raw).unwrap();
+            assert_eq!(error.raw(), raw);
+            assert_ne!(error.name(), "unknown_native_error");
+            assert_eq!(decode(raw), Err(error));
+        }
+        for raw in [i64::MIN, -26, -4096] {
+            let error = Error::from_raw(raw).unwrap();
+            assert_eq!(error.raw(), raw);
+            assert_eq!(error.name(), "unknown_native_error");
+            assert_eq!(decode(raw), Err(error));
+        }
+        assert_eq!(Error::from_raw(0), None);
+        assert_eq!(Error::from_raw(1), None);
+        assert_eq!(decode(i64::MAX), Ok(i64::MAX as u64));
+    }
     #[test]
     fn user_range_rejects_overflow_kernel_and_noncanonical_addresses() {
         for address in [0, USER_MIN - 1, USER_LIMIT, 0xffff_8000_0000_0000, u64::MAX] {

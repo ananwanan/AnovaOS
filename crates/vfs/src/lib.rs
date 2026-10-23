@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #![no_std]
-//! Bounded mounts, shared descriptors/readonly file maps, packet pairs, pipes, PTYs and timestamps.
+//! Bounded mounts with immutable ABI policy, shared files/maps, packet pairs, pipes and PTYs.
 //! One non-preemptible owner serializes all mutations; no hardware, locks or user pointers.
 extern crate alloc;
 pub mod archive;
@@ -98,6 +98,8 @@ pub struct Vfs<'a> {
     opens: Vec<Option<Open>>,
     pipes: Vec<Option<Pipe>>,
     disk: Option<Ext2>,
+    // This inode owns the mount-time executable ABI policy and cannot change while mounted.
+    policy_node: Option<usize>,
     linux: [bool; NODE_LIMIT],
     pty_unlocked: [bool; 4],
     clock: u64,
@@ -132,6 +134,7 @@ impl<'a> Vfs<'a> {
             opens: slots(OPEN_LIMIT, || None)?,
             pipes: slots(PIPE_LIMIT, || None)?,
             disk: None,
+            policy_node: None,
             linux: [false; NODE_LIMIT],
             pty_unlocked: [false; 4],
             clock: 0,
@@ -205,6 +208,7 @@ impl<'a> Vfs<'a> {
                 *policy = linux;
             }
             self.linux[root] = linux;
+            self.policy_node = Some(manifest);
             Ok(())
         })();
         if let Err(e) = result {
@@ -357,6 +361,7 @@ impl<'a> Vfs<'a> {
     }
     pub fn set_executable(&mut self, cwd: usize, path: &str) -> Result<(), i64> {
         let node = self.resolve(cwd, path)?;
+        self.mutable_node(node)?;
         let number = self.nodes[node].inode.ok_or(READ_ONLY)?;
         if !matches!(self.nodes[node].data, Data::Persistent { .. }) {
             return Err(IS_DIRECTORY);
@@ -372,6 +377,7 @@ impl<'a> Vfs<'a> {
         Ok(())
     }
     fn chmod_node(&mut self, node: usize, permissions: u16) -> Result<(), i64> {
+        self.mutable_node(node)?;
         if permissions & !0o777 != 0 {
             return Err(UNSUPPORTED);
         }
@@ -706,6 +712,7 @@ impl<'a> Vfs<'a> {
     pub fn unlink(&mut self, cwd: usize, path: &str) -> Result<(), i64> {
         let (parent, name) = self.parent(cwd, path)?;
         let node = self.child(parent, name).ok_or(NOT_FOUND)?;
+        self.mutable_node(node)?;
         if !matches!(self.nodes[node].mount, Mount::Tmpfs | Mount::Ext2) {
             return Err(READ_ONLY);
         }
@@ -745,11 +752,15 @@ impl<'a> Vfs<'a> {
         let (old_parent, old_name) = self.parent(cwd, from)?;
         let (parent, name) = self.parent(cwd, to)?;
         let node = self.child(old_parent, old_name).ok_or(NOT_FOUND)?;
+        self.mutable_node(node)?;
         let mount = self.nodes[node].mount;
         if !matches!(mount, Mount::Tmpfs | Mount::Ext2) || self.nodes[parent].mount != mount {
             return Err(READ_ONLY);
         }
         let target = self.child(parent, name);
+        if let Some(target) = target {
+            self.mutable_node(target)?;
+        }
         if target == Some(node) {
             return Ok(());
         }
@@ -901,6 +912,7 @@ impl<'a> Vfs<'a> {
         let Target::Node(node) = open.target else {
             return Err(INVALID_ARGUMENT);
         };
+        self.mutable_node(node)?;
         let inode = self.nodes[node].inode;
         if self.nodes[node]
             .mapping
@@ -955,7 +967,17 @@ impl<'a> Vfs<'a> {
     }
     pub fn writable(&self, cwd: usize, path: &str) -> Result<bool, i64> {
         let n = self.resolve(cwd, path)?;
-        Ok(matches!(self.nodes[n].mount, Mount::Tmpfs | Mount::Ext2))
+        Ok(
+            self.policy_node != Some(n)
+                && matches!(self.nodes[n].mount, Mount::Tmpfs | Mount::Ext2),
+        )
+    }
+    fn mutable_node(&self, node: usize) -> Result<(), i64> {
+        if self.policy_node == Some(node) {
+            Err(READ_ONLY)
+        } else {
+            Ok(())
+        }
     }
     pub fn read_link(&self, cwd: usize, path: &str) -> Result<&'a str, i64> {
         let (parent, name) = self.parent(cwd, path)?;
@@ -1346,6 +1368,7 @@ impl<'a> Vfs<'a> {
             return Err(NOT_DIRECTORY);
         }
         if flags & OPEN_WRITE != 0 {
+            self.mutable_node(node)?;
             match self.nodes[node].data {
                 Data::Directory => return Err(IS_DIRECTORY),
                 Data::Borrowed(..) | Data::Link(..) => return Err(READ_ONLY),
@@ -1686,6 +1709,7 @@ impl<'a> Vfs<'a> {
                 n
             }
             Target::Node(n) => {
+                self.mutable_node(n)?;
                 let inode = self.nodes[n].inode;
                 match &mut self.nodes[n].data {
                     Data::Persistent { size, .. } => {
