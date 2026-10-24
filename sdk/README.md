@@ -1,5 +1,7 @@
-<!-- Explain the released native SDK contract, offline templates and separate future GUI ABI delivery. -->
+<!-- Explain the released native SDK contract, checked startup bounds and independent GUI companion. -->
 # AnovaOS SDK 1.0.0
+
+**English** | [简体中文](README.zh-CN.md)
 
 The released SDK targets `anova.native.v1` on little-endian x86_64. Its wire
 version remains 1 independently of the SDK release number. Existing syscall
@@ -9,7 +11,7 @@ independent compatibility tests. Unknown negative errors retain their numeric
 value and use `unknown_native_error` as their diagnostic name.
 
 Native startup allows up to 64 argv entries and 1023 bytes per string; the
-combined strings and pointer table must fit the loader's 4096-byte startup page.
+combined strings and pointer table must fit the loader's checked 32 KiB startup block.
 The runtime argument iterator accepts those current bounds and rejects excessive
 counts or unterminated strings without silently truncating them.
 
@@ -64,4 +66,7 @@ wrapper generated or checked against the same semantic contract. GUI protocol
 version negotiation, handle lifetime/error mapping, cross-language behavior and
 resource failure tests are checked independently. This native SDK 1.0.0 contains no GUI runtime;
 use `cargo xtask gui-sdk` for the independent companion release. See the
-[GUI SDK contract](gui/README.md) and [runtime profile](../docs/M14_RUNTIME.md).
+[GUI SDK contract](gui/README.md) and [runtime profile](../docs/en/milestones/M14_RUNTIME.md).
+
+The source export includes both `README.md` and `README.zh-CN.md` in its
+checksum inventory, so language switching is available in the exported SDK.

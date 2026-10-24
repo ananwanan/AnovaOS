@@ -29,6 +29,8 @@ jobs:
           cargo fmt --all -- --check
           cargo fmt --manifest-path user/Cargo.toml --all -- --check
           rustfmt --edition 2024 --check sdk/templates/rust/main.rs sdk/templates/rust/offline-message/src/lib.rs
+      - name: Check bilingual documentation
+        run: python3 scripts/check_docs.py
       - name: Check file-purpose explanations
         run: cargo xtask check-files
       - name: Check host tools

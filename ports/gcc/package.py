@@ -54,7 +54,7 @@ for source, name in [
     (work/'gcc-11.2.0/COPYING.RUNTIME', 'gcc-COPYING.RUNTIME'),
     (work/'binutils-2.37/COPYING3', 'binutils-COPYING3'),
     (work/'make-4.4.1/COPYING', 'make-COPYING'),
-    (root/'docs/third-party/m11.md', 'PROFILE.md'),
+    (root/'docs/en/third-party/m11.md', 'PROFILE.md'),
     (work/'musl-1.2.4/COPYRIGHT', 'musl-COPYRIGHT'),
     (work/'gmp-6.2.1/COPYING.LESSERv3', 'gmp-COPYING.LESSERv3'),
     (work/'mpfr-4.1.0/COPYING.LESSER', 'mpfr-COPYING.LESSER'),

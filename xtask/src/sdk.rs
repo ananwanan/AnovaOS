@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Export the versioned native SDK and create/build independently usable C/C++/Rust projects.
+//! Export the versioned native SDK with bilingual guides and create/build C/C++/Rust projects.
 //! Builds use an isolated user target, explicit ABI tags and locked local offline Rust dependencies.
 use super::*;
 use serde::{Deserialize, Serialize};
@@ -36,6 +36,7 @@ pub fn build(root: &Path) -> Result<PathBuf> {
         ("sdk/native-v1.ld", "native-v1.ld"),
         ("sdk/build.py", "build.py"),
         ("sdk/README.md", "README.md"),
+        ("sdk/README.zh-CN.md", "README.zh-CN.md"),
         ("LICENSE", "LICENSE"),
         ("NOTICE", "NOTICE"),
     ] {
@@ -61,7 +62,7 @@ pub fn build(root: &Path) -> Result<PathBuf> {
     )?;
     write_file(
         &destination.join("sdk.toml"),
-        "# SPDX-License-Identifier: Apache-2.0\n# Released SDK identity; GUI remains a separately versioned future delivery.\nschema = 1\nversion = \"1.0.0\"\nabi = \"anova.native.v1\"\narchitecture = \"x86_64\"\nwire_version = 1\n\n[gui]\nreserved_abi = \"anova.gui.v1\"\nimplemented = false\n",
+        "# SPDX-License-Identifier: Apache-2.0\n# Released SDK identity; GUI is a separately exported versioned companion SDK.\nschema = 1\nversion = \"1.0.0\"\nabi = \"anova.native.v1\"\narchitecture = \"x86_64\"\nwire_version = 1\n\n[gui]\nreserved_abi = \"anova.gui.v1\"\nimplemented = false\n",
     )?;
     command(
         Command::new("cargo")

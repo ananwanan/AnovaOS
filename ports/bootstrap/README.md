@@ -1,5 +1,7 @@
-<!-- Describe locked source-reconstruction recipes, compiler feasibility preparation and host boundaries. -->
+<!-- Describe locked reconstruction recipes, compiler feasibility inputs and host/guest responsibilities. -->
 # Bounded bzip2 reconstruction
+
+**English** | [简体中文](README.zh-CN.md)
 
 This recipe selects the unmodified C sources, headers, notices, upstream
 Makefile/manual and three sample/reference pairs from official bzip2 1.0.8.
@@ -42,10 +44,10 @@ arbitrary upstream configure/Makefile compatibility or compiler bootstrap.
 ## Compiler source assessments
 
 `gcc_probe.py` audits the seven M11 compiler dependency archives and publishes
-bounded unchanged inputs for the [GCC feasibility gate](../../docs/M15_GCC.md).
+bounded unchanged inputs for the [GCC feasibility gate](../../docs/en/milestones/M15_GCC.md).
 `rust_probe.py` independently audits the locked official Rust 1.90.0 source
 distribution, including the LLVM fork, Cargo and vendor contents. Its bounded
-selection supports the [Rust/LLVM/Cargo feasibility gate](../../docs/M15_RUST.md).
+selection supports the [Rust/LLVM/Cargo feasibility gate](../../docs/en/milestones/M15_RUST.md).
 Each command supports `--verify` for read-only verification of its generated
 source cache, rejects changed or redirected outputs, and retains upstream
 notices. These source-only preparations do not execute upstream build scripts
@@ -71,4 +73,4 @@ rustc and rust-lld, publishes only a checked kernel ELF and captures real syntax
 failure while retaining the prior kernel. `cargo xtask bootstrap-kernel-test`
 packages the retained ELF without rebuilding it on the host, compares extracted
 ISO bytes and verifies actual boot identity plus recovery. See
-[M15 kernel](../../docs/M15_KERNEL.md) for exact seed/source roles and bounds.
+[M15 kernel](../../docs/en/milestones/M15_KERNEL.md) for exact seed/source roles and bounds.

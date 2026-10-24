@@ -1,5 +1,7 @@
-<!-- Explain GUI v1 layout, lifetime, linkage and the bounded three-language development profile. -->
+<!-- Explain GUI ABI layouts, lifetimes, linkage and the bounded three-language guest SDK workflow. -->
 # AnovaOS GUI SDK 1.0.0
+
+**English** | [简体中文](README.zh-CN.md)
 
 This source SDK targets `anova.gui.v1` on little-endian x86_64 with the System V
 function calling convention. The GUI ABI version is `0x00010000`, independent
@@ -77,3 +79,6 @@ command. Commands and output are bounded to 128 bytes. Press `q` with an empty
 command field to close and reap the helper. Shell expansion, history, PTY job
 control, arbitrary executables and terminal escape sequences remain outside
 this initial graphical terminal profile.
+
+The source export includes both `README.md` and `README.zh-CN.md` in its
+checksum inventory, so language switching is available in the exported SDK.

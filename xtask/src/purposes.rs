@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Check file-purpose inventory coverage and top-of-file comments for first-party code.
+//! Check existing tracked/untracked file-purpose coverage and first-party source headers.
 //! Human review still verifies that each explanation describes its actual responsibility.
 use super::*;
 use std::collections::BTreeSet;
 
 pub fn check(root: &Path) -> Result<()> {
-    let inventory = fs::read_to_string(root.join("docs/FILE_PURPOSES.md"))?;
+    let inventory = fs::read_to_string(root.join("docs/en/guides/FILE_PURPOSES.md"))?;
     let output = Command::new("git")
         .args([
             "ls-files",
@@ -19,7 +19,10 @@ pub fn check(root: &Path) -> Result<()> {
         return Err("Cannot enumerate project files with git".into());
     }
     let paths = String::from_utf8(output.stdout)?;
-    let paths: BTreeSet<_> = paths.split('\0').filter(|path| !path.is_empty()).collect();
+    let paths: BTreeSet<_> = paths
+        .split('\0')
+        .filter(|path| !path.is_empty() && root.join(path).is_file())
+        .collect();
     let mut errors = Vec::new();
     for path in &paths {
         if !inventory.contains(&format!("`{path}`")) {

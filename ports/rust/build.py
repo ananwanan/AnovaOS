@@ -28,7 +28,7 @@ def inventory():
 
 recipe = hashlib.sha256(b''.join((root/name).read_bytes() for name in [
     'ports/rust/build.py', 'ports/rust/inputs.json', 'ports/gcc/inputs.json',
-    'docs/third-party/m12.md'])).hexdigest()+'\n'
+    'docs/en/third-party/m12.md'])).hexdigest()+'\n'
 stamp = work/'recipe.sha256'
 if sys.argv[1:] == ['--verify']:
     if not stamp.exists() or stamp.read_text() != recipe:
@@ -147,7 +147,7 @@ shutil.copytree(dist/(vendor['name']+'-'+vendor['version']), vendored)
 files = {str(p.relative_to(vendored)): digest(p) for p in sorted(vendored.rglob('*')) if p.is_file()}
 (vendored/'.cargo-checksum.json').write_text(json.dumps({'files': files, 'package': vendor['sha256']})+'\n')
 copy(root/'ports/rust/inputs.json', stage/'licenses/inputs.json')
-copy(root/'docs/third-party/m12.md', stage/'licenses/PROFILE.md')
+copy(root/'docs/en/third-party/m12.md', stage/'licenses/PROFILE.md')
 ca = config['ca_bundle']
 for item, destination in [(ca, 'certs/ca-certificates.crt'),
                           (ca['license'], 'licenses/certs/MPL-2.0.txt')]:

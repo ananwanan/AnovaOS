@@ -209,7 +209,7 @@ pub fn build_m9(root: &Path, apps: &Path) -> Result<()> {
         != "6e8ff8ad02f4a3a0b70029577e2eb9df8f6526aea302a60a8d649874d6fa45ea"
     {
         return Err(
-            "M9 requires the pinned Ubuntu musl 1.2.4-2 runtime; see docs/M9_RUNTIME.md".into(),
+            "M9 requires the pinned Ubuntu musl 1.2.4-2 runtime; see docs/en/milestones/M9_RUNTIME.md".into(),
         );
     }
     fs::write(apps.join("ld-musl-x86_64.so.1"), runtime)?;

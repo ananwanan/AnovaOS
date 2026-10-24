@@ -94,7 +94,7 @@ pub fn build(root: &Path, apps: &Path) -> Result<()> {
     }
     fs::copy(source.join("LICENSE"), apps.join("mbedtls.LICENSE"))?;
     fs::copy(
-        root.join("docs/third-party/network-licenses.md"),
+        root.join("docs/en/third-party/network-licenses.md"),
         apps.join("network.LICENSE"),
     )?;
     let tls = work.join("tls-fixture");

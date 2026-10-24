@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Package a source-distributed GUI SDK with existing guest-hosted compilers and native scanout.
+//! Package a GUI source SDK with bilingual guides, guest-hosted compilers and native scanout.
 //! GUI applications and their Rust runtime are built by the guest, never substituted by host ELFs.
 use super::*;
 use sha2::{Digest, Sha256};
@@ -26,6 +26,7 @@ pub fn export(root: &Path) -> Result<PathBuf> {
         ("user/rt/src/memory.rs", "rt/src/memory.rs"),
         ("crates/gui/src/wire.rs", "crates/gui/src/wire.rs"),
         ("sdk/gui/README.md", "README.md"),
+        ("sdk/gui/README.zh-CN.md", "README.zh-CN.md"),
         ("user/linux/gui-build.c", "gui-build.c"),
         ("tests/guest/gui/contract.h", "include/contract.h"),
         ("tests/guest/gui/main.c", "templates/main.c"),

@@ -257,7 +257,7 @@ fn initramfs(apps: &Path) -> Result<()> {
                 .unwrap()
                 .parent()
                 .unwrap()
-                .join("docs/third-party/musl.md"),
+                .join("docs/en/third-party/musl.md"),
         )?,
     ));
     entries.push((
