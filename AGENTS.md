@@ -83,7 +83,13 @@ recovery. Preserve `cargo xtask bootstrap-test`, source preparation rejection
 tests and the `bootstrap-metrics` kernel check. Read [M15 bootstrap](docs/M15_BOOTSTRAP.md)
 and [validation/M15.1-M15.2](docs/validation/M15.1-M15.2.md). Sampling at
 scheduler boundaries does not establish exact peak RSS; inherited compilers
-are seeds, not compiler-bootstrap evidence. M15.3–M15.6 remain separate.
+are seeds, not compiler-bootstrap evidence. M15.3 adds locked full-source audits
+and actual guest C++11/dependency/configure-startup probes with reboot evidence.
+Preserve `cargo xtask bootstrap-gcc-test` and
+`python3 ports/bootstrap/test_gcc_probe.py`; read [M15 GCC](docs/M15_GCC.md)
+and [validation/M15.3](docs/validation/M15.3.md). The current profile is blocked
+for compiler reconstruction; a successful assessment is not a new GCC stage.
+Full-tree inventories are not minimum build requirements. M15.4–M15.6 remain separate.
 
 本文件是后续 Codex 开发规范。用户明确指令优先；已有修改应保留。日常、可逆的实现选择可自主完成，不因普通阶段切换反复请求确认。
 

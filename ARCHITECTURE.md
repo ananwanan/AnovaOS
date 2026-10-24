@@ -537,5 +537,18 @@ bzip2 ELF. Physical-frame deltas include kernel allocations and omit transient
 syscall peaks; end-of-boot storage usage is separate from transient demand.
 The existing disk format, writable-file/heap/task/descriptor limits, native ABI
 and default kernel stay unchanged. See [M15 bootstrap](docs/M15_BOOTSTRAP.md) and
-[local evidence](docs/validation/M15.1-M15.2.md). Compiler source bootstrap and
+[local evidence](docs/validation/M15.1-M15.2.md).
+
+The separate `bootstrap-gcc-test` assessment audits seven locked source archives
+without extracting complete trees, packages a bounded configure-startup subset
+and reuses M11 seed tools. Actual guest probes compile/run a C++11 fixture,
+reject missing GMP/MPFR/MPC headers and build-tool execs, capture the upstream
+configure entry-point rejection and exercise resource recovery. A second boot
+checks retained fixture execution and exact persisted hashes. The host records
+its diagnostic compilation, imported sources, seed inventories and image
+identities explicitly. A successful assessment may conclude that construction
+is blocked; no new compiler stage or capacity enlargement is implied. Full
+source inventories include optional tests/docs and are not minimum build
+requirements. See [M15 GCC feasibility](docs/M15_GCC.md) and
+[execution evidence](docs/validation/M15.3.md). Compiler source bootstrap and
 guest kernel reconstruction remain separate future stages.

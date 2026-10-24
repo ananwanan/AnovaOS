@@ -164,7 +164,12 @@ separates capacity/build-environment work, a small guest-built C/C++ tool,
 the GCC route, the Rust/LLVM route, kernel rebuilding/booting and repeated
 build/comparison/recovery evidence. M15.1/M15.2 now have a bounded
 [bzip2 guest reconstruction profile](M15_BOOTSTRAP.md) with
-[local acceptance](validation/M15.1-M15.2.md); M15.3–M15.6 remain unimplemented.
+[local acceptance](validation/M15.1-M15.2.md). The separate M15.3
+[GCC feasibility assessment](M15_GCC.md) audits locked GCC/GMP/MPFR/MPC and
+build-tool sources, tests the inherited C++11 seed and diagnoses actual
+missing-header/tool/configure-startup and capacity blockers. Acceptance is
+recorded in [validation/M15.3](validation/M15.3.md); a successful assessment
+does not mean a GCC stage was rebuilt. M15.4–M15.6 remain unimplemented.
 GCC and Rust/LLVM start with separate pinned feasibility evaluations; full
 compiler bootstrap is conditional on the resulting dependencies and resources.
 Kernel reconstruction may use the already accepted guest rustc without first

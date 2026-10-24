@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Prepare a locked offline bzip2 workspace and verify guest reconstruction, limits and reboot.
 //! Host work supplies sources, seed compilers and diagnostics; only the guest creates bzip2.
+//! Share checked disk, session and sampled-resource helpers with the separate GCC assessment.
 use super::*;
 use anova_storage::ext2::{Ext2, MAX_FILE};
 use serde_json::{Value, json};
@@ -87,7 +88,7 @@ fn storage(error: i64) -> Box<dyn Error> {
     format!("M15 ext2 operation failed: {error}").into()
 }
 
-fn mount(path: &Path) -> Result<Ext2> {
+pub(super) fn mount(path: &Path) -> Result<Ext2> {
     Ext2::mount(Box::new(disk::Image::open(path)?)).map_err(storage)
 }
 
@@ -143,7 +144,7 @@ fn source_files(root: &Path) -> Result<Files> {
     Ok(files)
 }
 
-fn disk_capacity(path: &Path) -> Result<Value> {
+pub(super) fn disk_capacity(path: &Path) -> Result<Value> {
     let mut file = File::open(path)?;
     file.seek(SeekFrom::Start(1024))?;
     let mut superblock = [0; 1024];
@@ -160,18 +161,23 @@ fn disk_capacity(path: &Path) -> Result<Value> {
     }))
 }
 
-fn hash(bytes: &[u8]) -> String {
+pub(super) fn hash(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
-fn hashes(files: &Files) -> BTreeMap<String, String> {
+pub(super) fn hashes(files: &Files) -> BTreeMap<String, String> {
     files
         .iter()
         .map(|(name, bytes)| (name.clone(), hash(bytes)))
         .collect()
 }
 
-fn read_tree(disk: &mut Ext2, parent: u32, prefix: &str, files: &mut Files) -> Result<()> {
+pub(super) fn read_tree(
+    disk: &mut Ext2,
+    parent: u32,
+    prefix: &str,
+    files: &mut Files,
+) -> Result<()> {
     for entry in disk.entries(parent).map_err(storage)? {
         let name = std::str::from_utf8(&entry.name[..entry.length])?;
         if matches!(name, "." | "..") {
@@ -253,7 +259,7 @@ fn inspect(root: &Path, path: &Path, name: &str) -> Result<Files> {
     Ok(files)
 }
 
-fn checked(steps: &mut Vec<(String, Vec<u8>)>, command: &str, status: u32) {
+pub(super) fn checked(steps: &mut Vec<(String, Vec<u8>)>, command: &str, status: u32) {
     steps.push(("anova> ".into(), format!("{command}\r").into_bytes()));
     steps.push(("anova> ".into(), b"status\r".to_vec()));
     let marker = if status == 0 {
@@ -264,7 +270,7 @@ fn checked(steps: &mut Vec<(String, Vec<u8>)>, command: &str, status: u32) {
     steps.push((marker, Vec::new()));
 }
 
-fn session(
+pub(super) fn session(
     root: &Path,
     iso: &Path,
     path: &Path,

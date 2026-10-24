@@ -6,7 +6,9 @@ reconstruction path. It selects official bzip2 1.0.8 as the capacity target,
 reuses the [M11 guest tools](M11_TOOLCHAIN.md), and creates an independent
 persistent work disk. Implementation and intended checks are described here;
 acceptance requires the actual command results recorded in
-[current status](STATUS.md). M15.3–M15.6 remain separate, unimplemented stages.
+[current status](STATUS.md). M15.3 has a separate [GCC feasibility
+assessment](M15_GCC.md); compiler construction and M15.4–M15.6 remain outside
+this bzip2 profile.
 
 ## Prepare and verify
 
@@ -160,6 +162,8 @@ This is a controlled C tool source-reconstruction profile. It does not establish
 general configure-project compatibility, GCC single-stage or multistage
 bootstrap, LLVM/rustc/Cargo source construction, a guest-built kernel, guest
 boot-image generation or two independent clean builds. M15.3 and M15.4 need
-separate pinned dependency/resource feasibility probes; M15.5 needs preserved
+separate pinned dependency/resource feasibility evidence; the implemented
+[GCC assessment](M15_GCC.md) supplies M15.3 source auditing and guest blocker
+probes without constructing a compiler. M15.5 needs preserved
 guest kernel ELF and actual boot evidence; M15.6 needs repeated clean builds,
 artifact comparison and recovery within its declared completed scope.

@@ -8,6 +8,13 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | File | Purpose |
 | --- | --- |
 | `kernel/src/task/bootstrap.rs` | Sample scheduler-instance frame, heap, task, descriptor and namespace use without allocation or a public ABI. |
+| `xtask/src/bootstrap_gcc.rs` | Audit GCC source capacity and verify actual guest seed, header/tool/configure rejection and reboot evidence without claiming compiler reconstruction. |
+| `ports/bootstrap/gcc_probe.py` | Verify seven locked compiler dependency archives and publish source inventory plus bounded unchanged configure-startup inputs. |
+| `ports/bootstrap/test_gcc_probe.py` | Reject unsafe or tampered compiler archives, oversized or missing probe inputs and changed or symlinked output caches. |
+| `tests/guest/m15/gcc_probe.c` | Diagnose actual missing build-tool exec errors and bounded upstream configure startup failure in the guest. |
+| `tests/guest/m15/gcc_seed.cpp` | Exercise C++11 compilation with the inherited guest seed without reconstructing a compiler. |
+| `docs/M15_GCC.md` | Define reproducible GCC feasibility assessment, pinned dependencies, measured blockers and conditions for a future compiler stage. |
+| `docs/validation/M15.3.md` | Record local GCC feasibility probes, exact artifacts, reboot checks and unverified compiler stages. |
 | `xtask/src/bootstrap.rs` | Prepare a locked bzip2 work disk and verify guest compilation, independent compression checks, limits and reboot recovery. |
 | `ports/bootstrap/inputs.json` | Lock official bzip2 1.0.8 checksums, source selection, version and licensing metadata. |
 | `ports/bootstrap/prepare.py` | Verify official source archives and safely publish a source-only offline guest workspace. |

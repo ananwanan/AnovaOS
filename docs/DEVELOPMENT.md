@@ -502,3 +502,18 @@ source/output hashes and sampled resource observations are retained in
 per-boot serial/QEMU evidence uses the `bootstrap-` log prefix. See
 [M15 bootstrap](M15_BOOTSTRAP.md) for prerequisites and measured-profile limits,
 and [local acceptance](validation/M15.1-M15.2.md) for exact executed scope.
+
+
+## GCC reconstruction feasibility
+
+After `cargo xtask toolchain-build`, run `cargo xtask bootstrap-gcc-test`.
+The command authenticates seven cached source archives, prepares a separate
+work disk and verifies the inherited C++11 seed, actual missing dependencies,
+selected upstream configure startup rejection, limit recovery and reboot.
+`python3 ports/bootstrap/test_gcc_probe.py` covers source/cache rejection;
+`python3 ports/bootstrap/gcc_probe.py --verify` independently checks the prepared
+source inventory without writes. The successful assessment reports current
+blockers; it does not produce a rebuilt GCC. See [M15 GCC](M15_GCC.md) and
+[local validation](validation/M15.3.md). The final report is
+`build/logs/bootstrap-gcc.result.json`, with per-boot `bootstrap-gcc-` logs and
+embedded source/seed/image identities.

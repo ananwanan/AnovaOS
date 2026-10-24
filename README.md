@@ -34,7 +34,9 @@ with independent guest builds, physical input and reboot retention verified.
 M14.5 verifies bounded hardware VirGL clear/readback with CPU fallback;
 ordinary desktop composition remains software-rendered. M15.1/M15.2 add
 measured capacity and guest-built bzip2 source reconstruction with reboot and
-failure recovery; compiler/kernel bootstrap remains unverified.
+failure recovery. M15.3 now assesses GCC feasibility with actual guest probes;
+current dependency/capacity blockers prevent compiler reconstruction. Compiler/kernel
+bootstrap remains unverified.
 General Linux/glibc remains future work; device IRQs stay masked.**
 
 Repository: [ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS).
@@ -209,8 +211,9 @@ implements bounded PS/2 input/cursor diagnostics. M14.3 user-space composition
 and M14.4 GUI runtime/SDKs are locally accepted. M14.5 verifies the bounded
 [hardware clear/readback profile](docs/M14_GPU.md) with CPU fallback. Current Rust/Cargo limits remain in
 [M12 Rust](docs/M12_RUST.md). See [current status](docs/STATUS.md) and
-[roadmap](ROADMAP.md). The next bootstrap task is the separate M15.3 GCC
-feasibility evaluation, following the bounded M15.1/M15.2 profile below.
+[roadmap](ROADMAP.md). M15.3 has a locally verified GCC feasibility assessment.
+The GCC route next needs build utilities, arithmetic development inputs and sufficient capacity
+before a first compiler stage; M15.4/M15.5 retain independent prerequisites.
 
 ## M15 controlled source reconstruction
 
@@ -225,7 +228,13 @@ compressed bytes match the official fixture. Three QEMU boots verify resource
 rejection/recovery, reconstruction, clean reboot and retained outputs after a
 real compiler error. Measurements report scheduler-boundary observations and
 end-of-boot disk use. See [M15 bootstrap](docs/M15_BOOTSTRAP.md) and
-[local evidence](docs/validation/M15.1-M15.2.md). M15.3–M15.6 remain unimplemented.
+[local evidence](docs/validation/M15.1-M15.2.md).
+
+`cargo xtask bootstrap-gcc-test` audits seven locked source archives and runs
+real C++11 seed, missing-header/tool, configure-startup and capacity/reboot
+probes. The successful assessment reports current GCC reconstruction blockers;
+it produces no new compiler stage. See [M15 GCC](docs/M15_GCC.md) and
+[local evidence](docs/validation/M15.3.md). M15.4–M15.6 remain unimplemented.
 
 ## License
 

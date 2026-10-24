@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Gate software GUI, bounded GPU CPU fallback, physical input, SDKs and guest development tools.
+# Gate graphical/serial runtimes, SDKs, guest tools and bounded bootstrap feasibility evidence.
 name: Bare-metal boot
 
 on:
@@ -54,7 +54,9 @@ jobs:
       - name: Test host logic
         run: cargo xtask test-host
       - name: Test bootstrap source integrity and archive rejection
-        run: python3 ports/bootstrap/test_prepare.py
+        run: |
+          python3 ports/bootstrap/test_prepare.py
+          python3 ports/bootstrap/test_gcc_probe.py
       - name: Build the kernel
         run: cargo xtask build
       - name: Fetch verified boot inputs
@@ -120,6 +122,8 @@ jobs:
         run: cargo xtask toolchain-test
       - name: Verify guest tool reconstruction, resource limits and reboot retention
         run: cargo xtask bootstrap-test
+      - name: Assess locked GCC source capacity and guest prerequisite blockers
+        run: cargo xtask bootstrap-gcc-test
       - name: Prepare locked upstream Rust musl tools and offline vendor
         run: |
           rustup target add x86_64-unknown-linux-musl
@@ -149,6 +153,8 @@ jobs:
             build/toolchain/archive.sha256
             build/bootstrap/inputs.json
             build/bootstrap/prepared.json
+            build/bootstrap-gcc/source-audit.json
+            build/bootstrap-gcc/prepared.json
             build/rust/stage.sha256
             build/rust/archive.sha256
             build/gui-sdk/
