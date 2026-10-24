@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Verify filesystem/IPC ownership, persistent/tmpfs timestamp precision, signals and readiness.
+// Verify backend file bounds, filesystem/IPC ownership, timestamps, signals and readiness.
 #define _GNU_SOURCE
 #include <assert.h>
 #include <errno.h>
@@ -322,7 +322,17 @@ int main(void) {
     assert(ftruncate(b, 6) == 0 && lseek(b, 0, SEEK_CUR) == 3);
     char grown[6];
     assert(pread(b, grown, 6, 0) == 6 && !memcmp(grown, "oX\0\0\0\0", 6));
-    assert(ftruncate(b, 1048577) == -1 && errno == EFBIG);
+    assert(ftruncate(b, 1048577) == 0 && lseek(b, 0, SEEK_CUR) == 3);
+    assert(ftruncate(b, 6) == 0 && lseek(b, 0, SEEK_CUR) == 3);
+    assert(ftruncate(b, 4194305) == -1 && errno == EFBIG);
+    assert(pread(b, grown, 6, 0) == 6 && !memcmp(grown, "oX\0\0\0\0", 6));
+    int temporary = open("/tmp/m12-file-bound", O_CREAT | O_EXCL | O_RDWR, 0600);
+    assert(temporary >= 0 && write(temporary, "tmp", 3) == 3);
+    assert(ftruncate(temporary, 1048577) == -1 && errno == EFBIG);
+    assert(fstat(temporary, &mode) == 0 && mode.st_size == 3);
+    assert(pread(temporary, bytes, 3, 0) == 3 && !memcmp(bytes, "tmp", 3));
+    assert(lseek(temporary, 0, SEEK_CUR) == 3);
+    assert(close(temporary) == 0 && unlink("/tmp/m12-file-bound") == 0);
     int c = open("rename-b", O_RDONLY);
     assert(ftruncate(c, 0) == -1 && errno == EBADF);
     assert(syscall(SYS_pread64, c, (void *)1, 1, 0) == -1 && errno == EFAULT);

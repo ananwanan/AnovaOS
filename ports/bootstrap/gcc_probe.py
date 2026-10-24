@@ -14,6 +14,8 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[2]
 WORK = ROOT / "build/bootstrap-gcc"
 CACHE = ROOT / "build/toolchain"
+# Preserve the accepted M15.3/M15.4 assessment capacity profile for comparable audits.
+# M15.5 raises current persistent files to 4 MiB; these full trees still exceed disk/node bounds.
 FILE_LIMIT = 1024 * 1024
 LIMITS = {
     "writable_file_bytes": FILE_LIMIT,

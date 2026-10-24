@@ -57,3 +57,18 @@ real missing-tool exec errors and an isolated offline dependency failure.
 Successful seed applications are preserved and executed again after reboot;
 they are distinct from source-built LLVM, rustc or Cargo. Exact artifact
 identities and host participation remain in each gate's generated result.
+
+## Guest kernel reconstruction
+
+`kernel_prepare.py` snapshots exact first-party kernel/local-crate sources,
+isolates Cargo metadata, authenticates the locked offline registry graph and
+prepares inherited official bare-metal target libraries. `--verify` is read-only
+and rejects stale or modified publications. `test_kernel_prepare.py` checks
+archive safety, lock drift, source integrity and publication boundaries.
+
+`kernel-build.c` is a host-built recipe/diagnostic that runs actual guest Cargo,
+rustc and rust-lld, publishes only a checked kernel ELF and captures real syntax
+failure while retaining the prior kernel. `cargo xtask bootstrap-kernel-test`
+packages the retained ELF without rebuilding it on the host, compares extracted
+ISO bytes and verifies actual boot identity plus recovery. See
+[M15 kernel](../../docs/M15_KERNEL.md) for exact seed/source roles and bounds.

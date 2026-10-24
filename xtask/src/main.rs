@@ -5,6 +5,7 @@ mod apps;
 mod assets;
 mod bootstrap;
 mod bootstrap_gcc;
+mod bootstrap_kernel;
 mod bootstrap_rust;
 mod debug;
 mod disk;
@@ -312,6 +313,7 @@ fn execute() -> Result<()> {
         "bootstrap-test" => bootstrap::verify(&root),
         "bootstrap-gcc-test" => bootstrap_gcc::verify(&root),
         "bootstrap-rust-test" => bootstrap_rust::verify(&root),
+        "bootstrap-kernel-test" => bootstrap_kernel::verify(&root),
         "rust-build" => rust::build(&root),
         "rust-cross-test" => rust::cross(&root),
         "rust-runtime-test" => rust::runtime(&root),
@@ -413,7 +415,7 @@ fn execute() -> Result<()> {
         }
         "help" | "--help" | "-h" => {
             println!(
-                "AnovaOS host tools\n\n  cargo xtask doctor\n  cargo xtask fetch\n  cargo xtask build\n  cargo xtask image\n  cargo xtask run [--graphics | --gui | --gui-sdk] [--network] [--toolchain | --rust] [--disk build/disks/NAME.ext2]\n  cargo xtask smoke [--case CASE] [--timeout-secs 1..300]\n  cargo xtask verify\n  cargo xtask test-host\n  cargo xtask test-compat\n  cargo xtask trace-compat\n  cargo xtask apps\n  cargo xtask check-apps\n  cargo xtask check-files\n  cargo xtask network-test\n  cargo xtask package-test\n  cargo xtask sdk\n  cargo xtask app-new <c|cpp|rust> PROJECT\n  cargo xtask app-build PROJECT\n  cargo xtask app-pack MANIFEST OUTPUT\n  cargo xtask app-image PACKAGE SHA256\n  cargo xtask app-run PACKAGE SHA256 [--disk build/disks/NAME.ext2]\n  cargo xtask app-test\n  cargo xtask sdk-test\n  cargo xtask package-v2-test\n  cargo xtask diagnostics-test\n  cargo xtask symbolize ELF [--base 0xBIAS] ADDRESS... | --log LOG [--pid PID]\n  cargo xtask toolchain-build\n  cargo xtask toolchain-image\n  cargo xtask toolchain-test\n  cargo xtask bootstrap-prepare\n  cargo xtask bootstrap-test\n  cargo xtask bootstrap-gcc-test\n  cargo xtask bootstrap-rust-test\n  cargo xtask rust-build\n  cargo xtask rust-image\n  cargo xtask rust-cross-test\n  cargo xtask rust-runtime-test\n  cargo xtask rust-test\n  cargo xtask rust-online-test\n  cargo xtask rust-public-test\n  cargo xtask terminal-test\n  cargo xtask root-image [--linux] build/disks/NAME.ext2\n  cargo xtask persistence-test\n  cargo xtask graphics-image\n  cargo xtask graphics-test\n  cargo xtask gpu-test\n  cargo xtask gpu-fallback-test\n  cargo xtask input-test\n  cargo xtask gui-image\n  cargo xtask gui-test\n  cargo xtask gui-sdk\n  cargo xtask gui-sdk-image\n  cargo xtask gui-sdk-test\n  cargo xtask gui-sdk-replay\n\nCASE: boot, panic, timeout, invalid-opcode, general-protection, page-fault, double-fault, stack-guard, read-only, no-execute, direct-no-execute, unmapped, oom.\nOutputs stay in build/; run uses disposable OVMF variables and a temporary data disk unless --disk is explicit. Use guest shutdown for persistent images. TCG is mandatory."
+                "AnovaOS host tools\n\n  cargo xtask doctor\n  cargo xtask fetch\n  cargo xtask build\n  cargo xtask image\n  cargo xtask run [--graphics | --gui | --gui-sdk] [--network] [--toolchain | --rust] [--disk build/disks/NAME.ext2]\n  cargo xtask smoke [--case CASE] [--timeout-secs 1..300]\n  cargo xtask verify\n  cargo xtask test-host\n  cargo xtask test-compat\n  cargo xtask trace-compat\n  cargo xtask apps\n  cargo xtask check-apps\n  cargo xtask check-files\n  cargo xtask network-test\n  cargo xtask package-test\n  cargo xtask sdk\n  cargo xtask app-new <c|cpp|rust> PROJECT\n  cargo xtask app-build PROJECT\n  cargo xtask app-pack MANIFEST OUTPUT\n  cargo xtask app-image PACKAGE SHA256\n  cargo xtask app-run PACKAGE SHA256 [--disk build/disks/NAME.ext2]\n  cargo xtask app-test\n  cargo xtask sdk-test\n  cargo xtask package-v2-test\n  cargo xtask diagnostics-test\n  cargo xtask symbolize ELF [--base 0xBIAS] ADDRESS... | --log LOG [--pid PID]\n  cargo xtask toolchain-build\n  cargo xtask toolchain-image\n  cargo xtask toolchain-test\n  cargo xtask bootstrap-prepare\n  cargo xtask bootstrap-test\n  cargo xtask bootstrap-gcc-test\n  cargo xtask bootstrap-rust-test\n  cargo xtask bootstrap-kernel-test\n  cargo xtask rust-build\n  cargo xtask rust-image\n  cargo xtask rust-cross-test\n  cargo xtask rust-runtime-test\n  cargo xtask rust-test\n  cargo xtask rust-online-test\n  cargo xtask rust-public-test\n  cargo xtask terminal-test\n  cargo xtask root-image [--linux] build/disks/NAME.ext2\n  cargo xtask persistence-test\n  cargo xtask graphics-image\n  cargo xtask graphics-test\n  cargo xtask gpu-test\n  cargo xtask gpu-fallback-test\n  cargo xtask input-test\n  cargo xtask gui-image\n  cargo xtask gui-test\n  cargo xtask gui-sdk\n  cargo xtask gui-sdk-image\n  cargo xtask gui-sdk-test\n  cargo xtask gui-sdk-replay\n\nCASE: boot, panic, timeout, invalid-opcode, general-protection, page-fault, double-fault, stack-guard, read-only, no-execute, direct-no-execute, unmapped, oom.\nOutputs stay in build/; run uses disposable OVMF variables and a temporary data disk unless --disk is explicit. Use guest shutdown for persistent images. TCG is mandatory."
             );
             Ok(())
         }
@@ -680,6 +682,39 @@ fn image_archive(root: &Path, mode: Mode, archive: Option<&Path>) -> Result<Path
     assets::check(root)?;
     apps::build(root, false)?;
     let kernel = build(root, mode)?;
+    let name = if mode == Mode::Bootstrap {
+        mode.name()
+    } else if archive.is_some() {
+        "devel"
+    } else {
+        mode.name()
+    };
+    image_contents(root, &kernel, archive, name)
+}
+
+// This path deliberately never builds a kernel: callers retain the exact guest ELF.
+fn image_preserved(root: &Path, kernel: &Path, archive: &Path, name: &str) -> Result<PathBuf> {
+    assets::check(root)?;
+    checked_file(kernel)?;
+    checked_file(archive)?;
+    validate_elf(&fs::read(kernel)?)?;
+    apps::build(root, false)?;
+    image_contents(root, kernel, Some(archive), name)
+}
+
+fn image_contents(
+    root: &Path,
+    kernel: &Path,
+    archive: Option<&Path>,
+    name: &str,
+) -> Result<PathBuf> {
+    if name.is_empty()
+        || !name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+    {
+        return Err("Invalid image profile name".into());
+    }
     let stage = Temporary::new(root, "iso")?;
     fs::create_dir_all(stage.0.join("boot/limine"))?;
     fs::create_dir_all(stage.0.join("EFI/BOOT"))?;
@@ -718,13 +753,6 @@ fn image_archive(root: &Path, mode: Mode, archive: Option<&Path>) -> Result<Path
     ] {
         fs::copy(root.join("build/cache").join(input), stage.0.join(output))?;
     }
-    let name = if mode == Mode::Bootstrap {
-        mode.name()
-    } else if archive.is_some() {
-        "devel"
-    } else {
-        mode.name()
-    };
     let iso = directory(root, "images")?.join(format!("anova-{name}.iso"));
     output_path(&iso)?;
     command(
@@ -778,10 +806,12 @@ fn qemu_disk(
         "-cpu",
         "qemu64,+rdrand",
         "-m",
-        if iso
-            .file_name()
-            .is_some_and(|name| name == "anova-rust.iso" || name == "anova-bootstrap-rust.iso")
-        {
+        if iso.file_name().is_some_and(|name| {
+            name == "anova-rust.iso"
+                || name == "anova-bootstrap-rust.iso"
+                || name == "anova-bootstrap-kernel-seed.iso"
+                || name == "anova-bootstrap-kernel-guest.iso"
+        }) {
             "3G"
         } else if iso
             .file_name()

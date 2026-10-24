@@ -1,7 +1,7 @@
 <!-- Record locally verified subsystem capabilities, runtime limits and the next development task. -->
 # Implementation status
 
-Recorded 2026-10-24 (Asia/Shanghai). M15.4 implementation base `f760d05`.
+Recorded 2026-10-24 (Asia/Shanghai). M15.5 implementation base `104cdab`.
 Task branch: `feat/m15-bootstrap`. M15.1/M15.2 are locally accepted for the
 bounded bzip2 reconstruction profile; see [M15 bootstrap](M15_BOOTSTRAP.md) and
 [validation/M15.1-M15.2](validation/M15.1-M15.2.md). M15.3 feasibility is locally assessed;
@@ -9,7 +9,10 @@ GCC reconstruction is blocked by current dependencies/capacity. See
 [M15 GCC](M15_GCC.md) and [validation/M15.3](validation/M15.3.md). M15.4 has
 independent locally verified Rust/LLVM/Cargo source audits and guest prerequisite
 probes; reconstruction remains blocked. See [M15 Rust](M15_RUST.md) and
-[validation/M15.4](validation/M15.4.md). See [M14 GUI](M14_GUI.md),
+[validation/M15.4](validation/M15.4.md). M15.5 is locally accepted for actual
+guest kernel reconstruction, exact retained-ELF host-assisted packaging and
+boot/failure/recovery checks; see [M15 kernel](M15_KERNEL.md) and
+[validation/M15.5](validation/M15.5.md). See [M14 GUI](M14_GUI.md),
 [validation/M14.1](validation/M14.1.md), [validation/M14.2](validation/M14.2.md)
 [validation/M14.3](validation/M14.3.md), [validation/M14.4](validation/M14.4.md)
 and [validation/M14.5](validation/M14.5.md).
@@ -157,7 +160,7 @@ bounds recorded here. Native limits remain separate.
   names support 512/255 bytes; native v1 path/directory wire capacities stay
   separate and reject unrepresentable names without consuming them.
 - The Rust QEMU profile uses 3 GiB RAM. One BSP, 32 task slots, 16 MiB kernel
-  heap, 1 MiB writable files and Linux stacks, 256 KiB scheduler stack and
+  heap, 1 MiB tmpfs files/Linux stacks, 4 MiB persistent files, 256 KiB scheduler stack and
   retained boot memory remain bounded. See M12_RUST for exact scope.
 
 ## M12 online Cargo implemented and locally verified
@@ -244,9 +247,25 @@ match persisted whole seconds, preserving tmpfs nanoseconds and the original
 exact Cargo dependency-rebuild assertions. Focused host/guest timestamp checks
 and the full offline Rust/Cargo reboot gate passed; see the same validation
 record for the initial failure and correction.
-M15.5 kernel reconstruction remains independently scoped. Full compiler bootstrap is unverified.
+M15.5 now has three-boot local acceptance for real guest Cargo/rustc/rust-lld
+kernel construction using exact sources, locked offline crates and inherited
+bare-metal target libraries. The retained 349,464-byte kernel is packaged
+without rebuilding it on the host, independently extracted from the ISO for
+byte comparison and booted with its matching embedded identity. Actual Rust
+syntax rejection preserves the old kernel, and another recovery boot preserves
+all 181 workspace files. Each stopped disk passes e2fsck. See
+[M15 kernel](M15_KERNEL.md) and [local evidence](validation/M15.5.md).
+The persistent file ceiling is now 4 MiB within the same ext2 format; tmpfs and
+readonly shared caches stay at 1 MiB. Per-write private indirect-table snapshots
+reduce the counted 2 MiB/512-byte-append fixture from 16,211,368 to 175,376 sector
+reads while preserving ordering and rejection/recovery behavior.
+Next, M15.6 should compare at least two independent clean builds in the declared
+bzip2/kernel scope and exercise retained tools/kernel after failures. Compiler
+reconstruction, guest-only image generation and GUI-enabled kernel rebuilding
+remain unverified; the original M15.3/M15.4 audits retain their historical
+1 MiB capacity profile rather than claiming to reassess a pruned source route.
 Preserve `cargo xtask bootstrap-test`, `bootstrap-gcc-test`, `bootstrap-rust-test`,
-all three source rejection suites and the `bootstrap-metrics` kernel check,
+`bootstrap-kernel-test`, all four source rejection suites and the `bootstrap-metrics` kernel check,
 as well as every previous runtime/storage/network, C/C++/Rust/Cargo, native SDK
 and graphical gate, plus `gpu-test` and headless `gpu-fallback-test`.
 Native libc/std, general Unicode/IME, PTY/ANSI graphical terminal behavior,
@@ -257,11 +276,11 @@ hardware and broad Linux GUI compatibility remain independently scoped.
 
 | Planned stage | Intended result | Current status |
 | --- | --- | --- |
-| M15.1 | Measured capacity, sufficient build environment and persistent work disk | Locally accepted for bzip2 1.0.8 within unchanged limits |
+| M15.1 | Measured capacity, sufficient build environment and persistent work disk | Locally accepted for the original bzip2 1.0.8 capacity profile |
 | M15.2 | Controlled C/C++ tool built in guest and executed again after reboot | Locally accepted: guest-built bzip2, golden sample, reboot and failure recovery |
 | M15.3 | GCC feasibility evidence, then a compiler stage or multistage bootstrap if viable | Assessment locally verified; current profile blocked; no compiler stage rebuilt |
 | M15.4 | Separate LLVM/rustc/Cargo feasibility and source builds where viable | Assessment locally verified; current profile blocked; no component rebuilt |
-| M15.5 | Guest-built kernel actually booted; image-generation scope reported separately | Not started |
+| M15.5 | Guest-built kernel actually booted; image-generation scope reported separately | Locally accepted: guest ELF, exact host-assisted packaging, boot identity and failure/recovery; guest-only image generation unverified |
 | M15.6 | Repeated clean builds, artifact comparison and failure recovery | Not started |
 
 Complete M15.1 before M15.2; then advance M15.3, M15.4 and M15.5 as their
@@ -271,8 +290,8 @@ bootstrap remain conditional on feasibility, with unexecuted capabilities
 explicitly unverified. Retain input manifests, commands, logs and hashes at
 each stage, and consolidate the declared scope in M15.6.
 
-The current Rust development disk is 16 MiB with 512 inodes, writable files
-are bounded at 1 MiB, and the VFS has 2,048 nodes. The 16 MiB kernel heap and
+The current Rust development disk is 16 MiB with 512 inodes; persistent files
+are bounded at 4 MiB, tmpfs/shared caches at 1 MiB, and the VFS has 2,048 nodes. The 16 MiB kernel heap and
 32 task slots remain bounded as documented above. Additional QEMU RAM alone
 does not remove these limits. The selected M15.1 bzip2 target fits without
 capacity changes; larger targets still require independent measurements and

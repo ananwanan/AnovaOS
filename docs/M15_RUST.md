@@ -172,3 +172,14 @@ Start with a sequential measured build and verify the resulting tool's actual
 function. Full Rust bootstrap, new LLVM/Cargo tools, native AnovaOS std and
 guest kernel/image construction remain independent unverified capabilities.
 M15.5 may use the existing verified guest rustc without first rebuilding it.
+
+## Capacity profile after M15.5
+
+This assessment intentionally retains its accepted 1 MiB file-capacity profile
+and source audit for comparison with its original validation record.
+[M15.5 kernel reconstruction](M15_KERNEL.md) raises current persistent ext2
+files to 4 MiB; tmpfs and readonly shared-file caches remain at 1 MiB. The
+unpruned compiler source trees also exceed unchanged disk/inode/VFS bounds,
+and their missing build prerequisites remain independent. The earlier audit
+is historical capacity evidence, not a claim that the current persistent limit
+is still 1 MiB or a new assessment of a pruned build closure.

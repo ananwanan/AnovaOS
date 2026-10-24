@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Check ext2 through real user syscalls, including shared offsets, indirection, sparse zeros and unlink.
+//! Check ext2 syscalls, 4 MiB file bounds, shared offsets, indirection, sparse zeros and unlink.
 //! Reboot verification also checks editor-created source and a binary copied by the interactive shell.
 use super::*;
 pub fn io_error() {
@@ -50,8 +50,13 @@ pub fn suite() {
     assert_eq!(rt::read(fd, &mut bytes), Ok(13));
     assert_eq!(&bytes[..13], b"indirect-tail");
     rt::seek(fd, 1024 * 1024, 0).unwrap();
+    rt::write_all(fd, b"extended").unwrap();
+    rt::seek(fd, 1024 * 1024, 0).unwrap();
+    assert_eq!(rt::read(fd, &mut bytes), Ok(8));
+    assert_eq!(&bytes[..8], b"extended");
+    rt::seek(fd, 4 * 1024 * 1024, 0).unwrap();
     assert_eq!(rt::write_all(fd, b"overflow"), Err(NO_SPACE));
-    assert_eq!(rt::seek(fd, 0, 1), Ok(1024 * 1024));
+    assert_eq!(rt::seek(fd, 0, 1), Ok(4 * 1024 * 1024));
     // SAFETY: A bad user source must be rejected before disk mutation or offset advancement.
     assert_eq!(unsafe { rt::raw(SYS_WRITE, fd, 0, 1) }, BAD_ADDRESS);
     rt::fsync(fd).unwrap();

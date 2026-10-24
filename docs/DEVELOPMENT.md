@@ -533,3 +533,23 @@ with embedded `build/bootstrap-rust/prepared.json`, source audit, exact seed/ima
 identities and per-boot `bootstrap-rust-` logs. See [M15 Rust](M15_RUST.md) and
 [local validation](validation/M15.4.md) for the independent component conclusions
 and the difference between the inherited M12 seed and upstream's stage0.
+
+## Guest kernel reconstruction
+
+After preparing the locked M12 Rust runtime, run:
+
+```sh
+python3 ports/bootstrap/test_kernel_prepare.py
+cargo xtask bootstrap-kernel-test
+```
+
+The gate prepares exact kernel sources, locked offline registry packages and
+inherited bare-metal target libraries, then runs guest Cargo/rustc/rust-lld.
+It retains the resulting ELF, packages it without rebuilding a host kernel,
+extracts and compares the ISO's kernel bytes, then verifies actual boot,
+compiler-failure retention and another recovery boot. The final report is
+`build/logs/bootstrap-kernel.result.json`, with per-session `bootstrap-kernel-`
+logs and inventories in `build/bootstrap-kernel/inputs.json` and `prepared.json`.
+Run image-building gates sequentially. See [M15 kernel](M15_KERNEL.md) for
+source/seed provenance, 4 MiB persistent versus 1 MiB tmpfs/cache bounds,
+measurement limits and the separate guest-only image-generation scope.

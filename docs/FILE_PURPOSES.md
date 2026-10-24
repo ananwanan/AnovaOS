@@ -7,6 +7,13 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 
 | File | Purpose |
 | --- | --- |
+| `docs/validation/M15.5.md` | Record actual guest kernel compilation, exact retained-ELF boot and recovery evidence, capacity regressions and host-assistance limits. |
+| `xtask/src/bootstrap_kernel.rs` | Construct the kernel in guest processes, preserve and verify its exact ELF in a host-packaged ISO, then check boot identity and failure recovery. |
+| `ports/bootstrap/kernel_prepare.py` | Snapshot exact kernel sources, isolate metadata, authenticate offline registry sources and prepare inherited bare-metal target libraries. |
+| `ports/bootstrap/kernel-inputs.json` | Lock the official Rust 1.90.0 bare-metal target archive and its inherited binary library provenance. |
+| `ports/bootstrap/test_kernel_prepare.py` | Reject altered sources, lock drift, unsafe archives, redirected or corrupted publications and excessive guest paths. |
+| `ports/bootstrap/kernel-build.c` | Run real offline guest Cargo compilation, validate and atomically publish a kernel ELF, and exercise retained-kernel compiler failure. |
+| `docs/M15_KERNEL.md` | Define guest kernel construction, retained-ELF packaging, source/seed identities and separate image-bootstrap acceptance boundaries. |
 | `xtask/src/bootstrap_rust.rs` | Audit independent Rust/LLVM/Cargo source capacity and verify real guest seed, prerequisite failures and reboot evidence without claiming component reconstruction. |
 | `ports/bootstrap/rust_probe.py` | Verify the locked official Rust source distribution and publish independent component inventories plus bounded unchanged build inputs and notices. |
 | `ports/bootstrap/rust-inputs.json` | Lock the official complete Rust 1.90.0 source archive, published checksum URL and assessed musl target. |

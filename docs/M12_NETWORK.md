@@ -65,8 +65,11 @@ MPL-2.0 notice are locked in [inputs.json](../ports/rust/inputs.json).
 - Replaced/unlinked mapped inodes survive their last descriptor and are
   reclaimed after their last mapping. Writable shared-file mappings and
   mprotect-to-write are rejected. Shrinking/truncating a live mapped file is
-  rejected with EBUSY. Mapping beyond the current final file page, fixed shared
-  placement and files larger than this profile are rejected. This is not a
+  rejected with EBUSY. Growth beyond 1 MiB is also rejected with EBUSY while a
+  shared mapping is live; once the last mapping is released, an idle cache can
+  be discarded before larger persistent-file growth. Mapping beyond the current
+  final file page, fixed shared placement and files larger than the 1 MiB shared
+  cache profile are rejected. This is not a
   writable mmap/msync or page-cache writeback implementation.
 - `utimensat` and `futimesat` update actual access/modify timestamps, support
   descriptor or checked dirfd-relative paths and UTIME_NOW/UTIME_OMIT, and
@@ -78,9 +81,12 @@ MPL-2.0 notice are locked in [inputs.json](../ports/rust/inputs.json).
   former eight-level recursive import bound; syscall paths retain their checked
   512-byte limit.
 
-The 16 MiB kernel heap, 1 MiB writable-file limit, 16 MiB development disk,
+The 16 MiB kernel heap, 1 MiB tmpfs/shared-cache limits, 16 MiB development disk,
 512 inodes, 2,048 VFS nodes, 32 task slots, 32 descriptors, eight Internet sockets,
-single BSP and polled virtio networking remain in force. Large crates, Git packs,
+single BSP and polled virtio networking remain in force. M15.5 raises persistent
+ext2 regular files to 4 MiB without enlarging the shared-file cache or changing
+the disk format; its build profile and acceptance status are recorded in
+[M15 kernel](M15_KERNEL.md). Large crates, Git packs,
 dependency graphs or cache indexes may exceed these bounds and fail. POSIX
 fcntl record locks remain unsupported: Cargo can emit its existing nonfatal
 global-cache housekeeping warning. Unsupported operations do not report success.

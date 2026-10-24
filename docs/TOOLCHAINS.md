@@ -176,7 +176,11 @@ and C++17 seed probes, missing-tool exec errors and an isolated offline Cargo
 dependency rejection. See [validation/M15.4](validation/M15.4.md) for executed
 scope. No new LLVM, rustc or Cargo component is constructed by these probes;
 the inherited 1.90.0 seed is separate from upstream's prescribed 1.89.0 stage0.
-M15.5/M15.6 remain unimplemented.
+M15.5 has a separate [guest kernel reconstruction profile](M15_KERNEL.md):
+locked bare-metal target libraries and offline sources, real guest Cargo/rustc/
+rust-lld, exact retained-ELF host packaging and boot/recovery checks. Executed
+acceptance is recorded in [validation/M15.5](validation/M15.5.md); compiler reconstruction and guest-only image
+generation remain separate. M15.6 repeat-build comparisons remain unimplemented.
 GCC and Rust/LLVM start with separate pinned feasibility evaluations; full
 compiler bootstrap is conditional on the resulting dependencies and resources.
 Kernel reconstruction may use the already accepted guest rustc without first

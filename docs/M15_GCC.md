@@ -181,3 +181,14 @@ A multistage claim additionally needs recorded stage relationships and real
 comparison evidence. Current single-stage reconstruction, multistage GCC
 bootstrap, Rust/LLVM source construction and guest kernel/image construction
 remain unverified. M15.4 and M15.5 keep their independent prerequisites.
+
+## Capacity profile after M15.5
+
+This assessment intentionally retains its accepted 1 MiB file-capacity profile
+and source audit for comparison with its original validation record.
+[M15.5 kernel reconstruction](M15_KERNEL.md) raises current persistent ext2
+files to 4 MiB; tmpfs and readonly shared-file caches remain at 1 MiB. The
+unpruned compiler source trees also exceed unchanged disk/inode/VFS bounds,
+and their missing build prerequisites remain independent. The earlier audit
+is historical capacity evidence, not a claim that the current persistent limit
+is still 1 MiB or a new assessment of a pruned build closure.

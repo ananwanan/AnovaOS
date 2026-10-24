@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Test VFS paths, backed timestamp coherence, immutable ABI identity, ownership and rollback.
+//! Test VFS paths, backend file/cache limits, timestamp coherence, ownership and rollback.
 use super::*;
 use alloc::{boxed::Box, rc::Rc, vec};
 use anova_storage::{BlockDevice, SECTOR, check_range, ext2::BLOCK};
@@ -29,8 +29,11 @@ impl BlockDevice for TimestampDisk {
 }
 
 fn timestamp_disk() -> TimestampDisk {
+    timestamp_disk_blocks(128)
+}
+fn timestamp_disk_blocks(blocks: u32) -> TimestampDisk {
     // Real one-group ext2 bytes matching the storage test profile, not a mocked inode.
-    let mut bytes = vec![0; 128 * BLOCK];
+    let mut bytes = vec![0; blocks as usize * BLOCK];
     let p16 = |bytes: &mut [u8], offset, value: u16| {
         bytes[offset..offset + 2].copy_from_slice(&value.to_le_bytes());
     };
@@ -40,13 +43,13 @@ fn timestamp_disk() -> TimestampDisk {
     let superblock = &mut bytes[1024..2048];
     for (offset, value) in [
         (0, 128),
-        (4, 128),
-        (12, 119),
+        (4, blocks),
+        (12, blocks - 9),
         (16, 118),
         (24, 2),
         (28, 2),
-        (32, 128),
-        (36, 128),
+        (32, blocks),
+        (36, blocks),
         (40, 128),
         (76, 1),
         (84, 11),
@@ -61,7 +64,7 @@ fn timestamp_disk() -> TimestampDisk {
     for (offset, value) in [(0, 2), (4, 3), (8, 4)] {
         p32(group, offset, value);
     }
-    p16(group, 12, 119);
+    p16(group, 12, (blocks - 9) as u16);
     p16(group, 14, 118);
     p16(group, 16, 1);
     for bit in 0..9 {
@@ -105,6 +108,78 @@ fn assert_persistent_times(fs: &mut Vfs<'_>, inode: u64) {
             .map(|time| u64::from(time) * 1_000_000_000)
     );
     assert_eq!(fs.attributes(inode).1, cached[1]);
+}
+
+#[test]
+fn persistent_large_files_have_separate_tmpfs_and_shared_cache_limits() {
+    let archive = image();
+    let device = timestamp_disk_blocks(2048);
+    let mut fs = Vfs::new(&archive).unwrap();
+    fs.insert(ROOT, "persist", Data::Directory, Mount::Initramfs)
+        .unwrap();
+    fs.mount_disk(Ext2::mount(Box::new(device.clone())).unwrap())
+        .unwrap();
+    let mut fds = Descriptors::default();
+    let flags = OPEN_CREATE | OPEN_READ | OPEN_WRITE;
+    let persistent = fs.open(&mut fds, ROOT, "/persist/large", flags).unwrap();
+    let temporary = fs.open(&mut fds, ROOT, "/tmp/small", flags).unwrap();
+    let max = anova_storage::ext2::MAX_FILE;
+    assert_eq!(fs.writable_file_limit(&fds, persistent), Ok(max));
+    assert_eq!(fs.writable_file_limit(&fds, temporary), Ok(FILE_BYTES));
+    assert_eq!(fs.writable_file_limit(&fds, 99), Err(BAD_DESCRIPTOR));
+    fs.write(&fds, persistent, b"original").unwrap();
+    let mapping = fs.shared_file_mapping(&fds, persistent, 0, 4096).unwrap();
+    assert_eq!(fs.set_len(&fds, persistent, FILE_BYTES + 1), Err(BUSY));
+    assert_eq!(
+        fs.write_at(&fds, persistent, FILE_BYTES as u64, b"!"),
+        Err(BUSY)
+    );
+    assert_eq!(fs.metadata(ROOT, "/persist/large").unwrap().2, 8);
+    assert_eq!(mapping.length(), 8);
+    drop(mapping);
+    // Growth itself must discard an idle cache, even before the scheduler collection pass.
+    fs.write_at(&fds, persistent, FILE_BYTES as u64, b"beyond")
+        .unwrap();
+    assert_eq!(
+        fs.shared_file_mapping(&fds, persistent, 0, 4096).err(),
+        Some(UNSUPPORTED)
+    );
+    fs.seek(&fds, persistent, (max - 4) as i64, 0).unwrap();
+    fs.write(&fds, persistent, b"tail").unwrap();
+    assert_eq!(fs.seek(&fds, persistent, 0, 1), Ok(max));
+    assert_eq!(fs.seek(&fds, persistent, 1, 1), Err(INVALID_ARGUMENT));
+    assert_eq!(fs.write(&fds, persistent, b"!"), Err(NO_SPACE));
+    assert_eq!(fs.set_len(&fds, persistent, max + 1), Err(NO_SPACE));
+    assert_eq!(fs.write_at(&fds, persistent, u64::MAX, b"!"), Err(NO_SPACE));
+    let mut bytes = [0; 8];
+    fs.read_at(&fds, persistent, 0, &mut bytes).unwrap();
+    assert_eq!(&bytes, b"original");
+    assert_eq!(fs.seek(&fds, persistent, 0, 1), Ok(max));
+    assert_eq!(fs.set_len(&fds, temporary, FILE_BYTES + 1), Err(NO_SPACE));
+    assert_eq!(
+        fs.seek(&fds, temporary, FILE_BYTES as i64 + 1, 0),
+        Err(INVALID_ARGUMENT)
+    );
+    fs.seek(&fds, temporary, FILE_BYTES as i64, 0).unwrap();
+    assert_eq!(fs.write(&fds, temporary, b"!"), Err(NO_SPACE));
+    fs.close(&mut fds, temporary).unwrap();
+    fs.close(&mut fds, persistent).unwrap();
+    fs.shutdown().unwrap();
+    drop(fs);
+    let mut fs = Vfs::new(&archive).unwrap();
+    fs.insert(ROOT, "persist", Data::Directory, Mount::Initramfs)
+        .unwrap();
+    fs.mount_disk(Ext2::mount(Box::new(device)).unwrap())
+        .unwrap();
+    let fd = fs
+        .open(&mut fds, ROOT, "/persist/large", OPEN_READ)
+        .unwrap();
+    assert_eq!(fs.metadata(ROOT, "/persist/large").unwrap().2, max);
+    assert_eq!(fs.read_at(&fds, fd, (max - 4) as u64, &mut bytes), Ok(4));
+    assert_eq!(&bytes[..4], b"tail");
+    assert_eq!(fs.writable_file_limit(&fds, fd), Err(BAD_DESCRIPTOR));
+    fs.close(&mut fds, fd).unwrap();
+    fs.shutdown().unwrap();
 }
 
 #[test]

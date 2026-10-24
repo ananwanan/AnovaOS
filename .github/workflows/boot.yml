@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Gate graphical/serial runtimes, SDKs, guest tools and bounded bootstrap feasibility evidence.
+# Gate runtimes, SDKs, guest tools, source assessments and actual guest-built kernel boots.
 name: Bare-metal boot
 
 on:
@@ -58,6 +58,7 @@ jobs:
           python3 ports/bootstrap/test_prepare.py
           python3 ports/bootstrap/test_gcc_probe.py
           python3 ports/bootstrap/test_rust_probe.py
+          python3 ports/bootstrap/test_kernel_prepare.py
       - name: Build the kernel
         run: cargo xtask build
       - name: Fetch verified boot inputs
@@ -131,6 +132,10 @@ jobs:
           cargo xtask rust-build
       - name: Assess independent LLVM, rustc and Cargo source-build prerequisites
         run: cargo xtask bootstrap-rust-test
+      - name: Reconstruct the kernel in guest and boot the exact retained ELF
+        run: |
+          cargo fetch --locked
+          cargo xtask bootstrap-kernel-test
       - name: Verify Rust std, detached threads and real compiler startup
         run: |
           cargo xtask rust-cross-test
@@ -160,6 +165,9 @@ jobs:
             build/bootstrap-gcc/prepared.json
             build/bootstrap-rust/source-audit.json
             build/bootstrap-rust/prepared.json
+            build/bootstrap-kernel/inputs.json
+            build/bootstrap-kernel/prepared.json
+            build/bootstrap-kernel/guest-kernel.elf
             build/rust/stage.sha256
             build/rust/archive.sha256
             build/gui-sdk/

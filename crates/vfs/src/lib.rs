@@ -2,6 +2,7 @@
 #![no_std]
 //! Bounded mounts with immutable ABI policy, shared files/maps, packet pairs, pipes and PTYs.
 //! Cached timestamps retain the backing filesystem's supported precision.
+//! Persistent regular files have a separate storage limit; tmpfs and shared caches stay bounded.
 //! One non-preemptible owner serializes all mutations; no hardware, locks or user pointers.
 extern crate alloc;
 pub mod archive;
@@ -909,6 +910,21 @@ impl<'a> Vfs<'a> {
         self.opens[handle].as_mut().unwrap().offset = old.offset;
         result
     }
+    /// Return the backing limit of a writable regular file, independently of tmpfs/cache limits.
+    pub fn writable_file_limit(&self, fds: &Descriptors, fd: u64) -> Result<usize, i64> {
+        self.device(fds, fd, true)?;
+        let open = self.opens[fds.handle(fd)?].ok_or(BAD_DESCRIPTOR)?;
+        let Target::Node(node) = open.target else {
+            return Err(INVALID_ARGUMENT);
+        };
+        self.mutable_node(node)?;
+        match self.nodes[node].data {
+            Data::Mutable(_) => Ok(FILE_BYTES),
+            Data::Persistent { .. } => Ok(anova_storage::ext2::MAX_FILE),
+            Data::Directory => Err(IS_DIRECTORY),
+            _ => Err(READ_ONLY),
+        }
+    }
     /// Set regular-file length without modifying any shared open-description offset.
     pub fn set_len(&mut self, fds: &Descriptors, fd: u64, length: usize) -> Result<(), i64> {
         self.device(fds, fd, true)?;
@@ -924,6 +940,9 @@ impl<'a> Vfs<'a> {
             .is_some_and(|m| m.active() && length < m.length())
         {
             return Err(BUSY);
+        }
+        if length <= self.writable_file_limit(fds, fd)? {
+            self.prepare_mapping_growth(node, length)?;
         }
         match &mut self.nodes[node].data {
             Data::Mutable(bytes) => {
@@ -956,6 +975,20 @@ impl<'a> Vfs<'a> {
         self.nodes[node].changed = timestamp;
         if let Some(mapping) = &self.nodes[node].mapping {
             mapping.resize(length);
+        }
+        Ok(())
+    }
+    /// A live shared cache cannot cover larger files; idle caches can be discarded before growth.
+    fn prepare_mapping_growth(&mut self, node: usize, length: usize) -> Result<(), i64> {
+        if length > FILE_BYTES {
+            if self.nodes[node]
+                .mapping
+                .as_ref()
+                .is_some_and(MappedFile::active)
+            {
+                return Err(BUSY);
+            }
+            self.nodes[node].mapping = None;
         }
         Ok(())
     }
@@ -1721,6 +1754,17 @@ impl<'a> Vfs<'a> {
             Target::Node(n) => {
                 self.mutable_node(n)?;
                 let inode = self.nodes[n].inode;
+                if let Data::Persistent { size, .. } = self.nodes[n].data {
+                    let offset = if open.flags & OPEN_APPEND != 0 {
+                        size
+                    } else {
+                        open.offset
+                    };
+                    let end = offset.checked_add(input.len()).ok_or(NO_SPACE)?;
+                    if end <= anova_storage::ext2::MAX_FILE {
+                        self.prepare_mapping_growth(n, end)?;
+                    }
+                }
                 match &mut self.nodes[n].data {
                     Data::Persistent { size, .. } => {
                         let offset = if open.flags & OPEN_APPEND != 0 {

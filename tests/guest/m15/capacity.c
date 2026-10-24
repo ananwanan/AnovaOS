@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Exercise file, descriptor and task limits, then prove rejection leaves resources usable.
+// Exercise backend-specific file, descriptor and task limits and prove rejection preserves resources.
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -14,7 +14,7 @@ static int fail(const char *operation) {
     return -1;
 }
 
-static int file_limit(const char *path) {
+static int file_limit(const char *path, off_t limit) {
     static const char sentinel[] = "M15 file intact\n";
     char saved[sizeof sentinel];
     struct stat metadata;
@@ -26,7 +26,7 @@ static int file_limit(const char *path) {
         goto cleanup;
     }
     errno = 0;
-    if (ftruncate(fd, 1024 * 1024 + 1) != -1 || errno != EFBIG) {
+    if (ftruncate(fd, limit + 1) != -1 || errno != EFBIG) {
         fail("reject-file-limit");
         goto cleanup;
     }
@@ -117,7 +117,8 @@ int main(int argc, char **argv) {
         fputs("Usage: m15-capacity [SCRATCH_PATH]\n", stderr);
         return 2;
     }
-    if (file_limit(argc == 2 ? argv[1] : "/persist/m15-capacity") < 0) return 1;
+    if (file_limit(argc == 2 ? argv[1] : "/persist/m15-capacity", 4 * 1024 * 1024) < 0
+        || file_limit("/tmp/m15-capacity", 1024 * 1024) < 0) return 1;
     int descriptors = descriptor_limit();
     if (descriptors < 0) return 1;
     int children = task_limit();

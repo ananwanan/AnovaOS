@@ -535,8 +535,9 @@ imports locked unmodified bzip2 sources into a new Linux-personality work disk;
 and reboot/compiler-failure recovery. Only the guest links the reconstructed
 bzip2 ELF. Physical-frame deltas include kernel allocations and omit transient
 syscall peaks; end-of-boot storage usage is separate from transient demand.
-The existing disk format, writable-file/heap/task/descriptor limits, native ABI
-and default kernel stay unchanged. See [M15 bootstrap](docs/M15_BOOTSTRAP.md) and
+The original bzip2 acceptance changed no disk format, file/heap/task/descriptor
+limits or native ABI. M15.5 below separately raises persistent file capacity
+while retaining tmpfs and shared-cache bounds. See [M15 bootstrap](docs/M15_BOOTSTRAP.md) and
 [local evidence](docs/validation/M15.1-M15.2.md).
 
 The separate `bootstrap-gcc-test` assessment audits seven locked source archives
@@ -550,5 +551,34 @@ identities explicitly. A successful assessment may conclude that construction
 is blocked; no new compiler stage or capacity enlargement is implied. Full
 source inventories include optional tests/docs and are not minimum build
 requirements. See [M15 GCC feasibility](docs/M15_GCC.md) and
-[execution evidence](docs/validation/M15.3.md). Compiler source bootstrap and
-guest kernel reconstruction remain separate future stages.
+[execution evidence](docs/validation/M15.3.md). Compiler source bootstrap remains separate; the M15.5 kernel reconstruction
+boundary and its executed scope are described below.
+
+
+## M15.5 guest kernel reconstruction boundary
+
+`ports/bootstrap/kernel_prepare.py` snapshots exact first-party kernel and crate
+sources and authenticates complete locked registry archives. Its generated root
+workspace omits host xtask dependencies and records every metadata adaptation.
+Official matching bare-metal core/alloc/compiler_builtins remain inherited
+binary seeds, overlaid read-only at `/rs` beside the Linux-musl compiler tools.
+The readonly `/ks/source` tree avoids consuming persistent inodes for inputs.
+
+The host-built guest recipe `ports/bootstrap/kernel-build.c` drives actual
+Cargo/rustc/rust-lld processes, captures logs and atomically publishes only a
+validated high-half static kernel ELF. Explicit target selection isolates
+kernel flags from Linux-musl build scripts. Persistent outputs can reach
+4 MiB within the existing ext2 single-indirect layout; tmpfs and readonly shared
+caches retain their 1 MiB bounds. Active shared caches prevent oversized growth,
+while inactive caches are discarded before persistent growth. Each ext2 write
+snapshots its indirect table once, avoiding repeated device reads while
+preserving per-operation bounds and ordered pointer/length publication.
+
+`xtask/src/bootstrap_kernel.rs` retains the guest ELF, packages it through an
+image path that never rebuilds a kernel, independently compares ISO kernel
+bytes, then requires its embedded source/seed/recipe identity during actual
+boot and failure/recovery sessions. The host still supplies locked seeds,
+creates the initial work disk and boot images, extracts the guest output and
+packages the accepted kernel. This is separate from compiler reconstruction,
+guest-only image generation and repeated clean-build reproducibility. See
+[M15 kernel](docs/M15_KERNEL.md) and [status](docs/STATUS.md).

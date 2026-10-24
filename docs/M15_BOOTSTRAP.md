@@ -9,7 +9,10 @@ acceptance requires the actual command results recorded in
 [current status](STATUS.md). M15.3 has a separate [GCC feasibility
 assessment](M15_GCC.md), and M15.4 independently assesses
 [Rust/LLVM/Cargo](M15_RUST.md). Compiler construction and M15.5/M15.6 remain
-outside this bzip2 profile.
+outside this bzip2 profile. M15.5 has a separate
+[guest kernel reconstruction profile](M15_KERNEL.md). It raises current
+persistent ext2 file capacity to 4 MiB; the original bzip2 acceptance below
+retains its measured 1 MiB profile. tmpfs and shared caches remain at 1 MiB.
 
 ## Prepare and verify
 
@@ -82,7 +85,7 @@ The selected upstream input includes eight C compilation units, two headers,
 the original Makefile, LICENSE, README, CHANGES, HTML manual and all three
 official compressed/reference sample pairs. No upstream source patches are
 applied. The optional PostScript manual is 1,766,625 bytes and is excluded
-because it exceeds the 1 MiB writable-file bound; no compiled source unit is
+because it exceeds the original 1 MiB source-selection budget; no compiled source unit is
 excluded for that reason. The custom recipe and negative fixtures are clearly
 separate first-party additions. See [third-party boundaries](third-party/m15.md).
 
@@ -90,11 +93,12 @@ separate first-party additions. See [third-party boundaries](third-party/m15.md)
 
 The selected environment uses one QEMU q35/TCG CPU, 1 GiB RAM and no NIC. The
 work disk retains the existing Linux development profile: 16 MiB, 512 inodes,
-4 KiB blocks and 128-byte inodes. Writable files remain limited to 1 MiB,
-VFS node slots to 2,048, descriptors per process to 32, shared open descriptions
-to 128, task/thread slots to 32 and the kernel heap to 16 MiB. This target
-uses these existing bounds; the profile does not enlarge them or change the
-format or ABI marker of older disks.
+4 KiB blocks and 128-byte inodes. Original acceptance used a 1 MiB persistent
+file ceiling; M15.5 now allows 4 MiB persistent files while tmpfs/shared caches
+remain at 1 MiB. VFS node slots stay at 2,048, descriptors per process at 32,
+shared open descriptions at 128, task/thread slots at 32 and the kernel heap
+at 16 MiB. The bzip2 recipe retains its original bounded source selection;
+the existing disk format and ABI marker remain compatible.
 
 The first boot runs real capacity-rejection probes. An oversized persistent
 file resize must return `EFBIG` while retaining the prior length and bytes.
@@ -165,6 +169,7 @@ bootstrap, LLVM/rustc/Cargo source construction, a guest-built kernel, guest
 boot-image generation or two independent clean builds. The separate pinned
 [GCC assessment](M15_GCC.md) and [Rust/LLVM/Cargo assessment](M15_RUST.md)
 supply M15.3/M15.4 source auditing and guest prerequisite/blocker probes
-without constructing compiler components. M15.5 needs preserved
-guest kernel ELF and actual boot evidence; M15.6 needs repeated clean builds,
+without constructing compiler components. The separate [M15.5 kernel
+profile](M15_KERNEL.md) now has [local acceptance](validation/M15.5.md) for
+preserved guest ELF and actual boot evidence. M15.6 still needs repeated clean builds,
 artifact comparison and recovery within its declared completed scope.

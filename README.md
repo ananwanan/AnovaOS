@@ -36,8 +36,10 @@ ordinary desktop composition remains software-rendered. M15.1/M15.2 add
 measured capacity and guest-built bzip2 source reconstruction with reboot and
 failure recovery. M15.3/M15.4 assess GCC and independent Rust/LLVM/Cargo
 feasibility with actual guest probes; current dependency/capacity blockers
-prevent compiler reconstruction. Compiler/kernel
-bootstrap remains unverified.
+prevent compiler reconstruction. M15.5 reconstructs and boots the actual
+kernel using inherited guest tools, with exact retained-ELF host-assisted
+packaging. Compiler reconstruction and guest-only image generation remain
+unverified.
 General Linux/glibc remains future work; device IRQs stay masked.**
 
 Repository: [ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS).
@@ -215,7 +217,7 @@ and M14.4 GUI runtime/SDKs are locally accepted. M14.5 verifies the bounded
 [roadmap](ROADMAP.md). M15.3 has a locally verified GCC feasibility assessment.
 The GCC route next needs build utilities, arithmetic development inputs and sufficient capacity
 before a first compiler stage. M15.4 independently assesses Rust/LLVM/Cargo
-source routes; M15.5 kernel reconstruction may use the verified inherited guest rustc.
+source routes; M15.5 now reconstructs and boots the kernel with the inherited guest rustc.
 
 ## M15 controlled source reconstruction
 
@@ -245,7 +247,14 @@ offline-dependency failures, rejected Rust compilation with the prior ELF
 retained, and identical persisted hashes. Source reconstruction is blocked in
 the current profile; no LLVM/rustc/Cargo component is rebuilt. See
 [M15 Rust](docs/M15_RUST.md) and [local evidence](docs/validation/M15.4.md).
-M15.5/M15.6 remain unimplemented.
+`cargo xtask bootstrap-kernel-test` reconstructs the actual bare-metal kernel
+with inherited guest Cargo/rustc/rust-lld and locked sources/target libraries.
+Three boots verify construction, exact retained-ELF host-assisted packaging,
+actual kernel identity and failure/reboot recovery. Persistent files allow
+4 MiB while tmpfs and shared caches remain at 1 MiB. See
+[M15 kernel](docs/M15_KERNEL.md) and [local evidence](docs/validation/M15.5.md).
+Compiler reconstruction, guest-only image generation and M15.6 independent
+clean-build comparisons remain unverified.
 
 ## License
 

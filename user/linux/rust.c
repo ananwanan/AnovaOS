@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Launch isolated Rust tools and opt-in online Cargo with persistent caches and verified TLS.
+// Launch bounded Rust/Cargo application and kernel builds with isolated sysroots and verified TLS.
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,9 +25,13 @@ int main(int argc, char **argv) {
     const int dynamic_macro = types == 1 && macro_type;
     char *args[96];
     int n = 0;
-    if (argc > 70) { fputs("rust: too many arguments\n", stderr); return 2; }
+    // Reserve all injected options and the terminator; the locked kernel graph uses 71 arguments.
+    if (argc > (int)(sizeof args / sizeof args[0]) - 16) {
+        fputs("rust: too many arguments\n", stderr);
+        return 2;
+    }
     setenv("PATH", "/bin:/tc/bin:/linux", 1);
-    setenv("TMPDIR", "/tmp", 1);
+    setenv("TMPDIR", "/tmp", 0);
     setenv("LC_ALL", "C", 1);
     setenv("LD_LIBRARY_PATH", "/rs/lib:/lib", 1);
     setenv("RUSTC", "/bin/rustc", 1);

@@ -15,7 +15,7 @@ Rust 用户态窗口合成器、焦点输入与崩溃/重启恢复。M14.4 已�
 C/C++/Rust SDK 与图形应用，系统内独立构建、真实键鼠输入和重启保留通过验收；
 M14.5 已验证有界硬件 VirGL 离屏清屏/读回与 CPU fallback；普通桌面仍采用软件合成。
 M15.1/M15.2 已验证容量测量、系统内 bzip2 源码重建、重启与编译失败恢复。
-M15.3/M15.4 已通过 GCC 及独立 Rust/LLVM/Cargo 可行性实测评估，当前开发依赖和容量限制阻塞编译器重建；编译器/内核自举仍未验证。
+M15.3/M15.4 已通过 GCC 及独立 Rust/LLVM/Cargo 可行性实测评估，当前开发依赖和容量限制阻塞编译器重建。M15.5 已在系统内重建并启动真实内核，保留 guest ELF 后由宿主辅助打包；编译器重建与 guest 独立生成完整镜像仍未验证。
 
 日常开发与 Pull Request 的目标分支为 **`dev`**；`main` 保留阶段验收后的稳定快照。分支约定见 [GitHub 协作说明](docs/GITHUB_SETUP.md)。
 
@@ -171,7 +171,12 @@ cargo xtask bootstrap-test
 实际构建工具缺失、独立离线依赖拒绝、真实 Rust 编译失败后旧 ELF 保留及重启哈希一致。
 当前 profile 仍阻塞源码重建，没有重建 LLVM/rustc/Cargo 组件。见
 [M15 Rust](docs/M15_RUST.md) 与 [本地实测](docs/validation/M15.4.md)。
-M15.5 可沿用已验收的 guest rustc 独立推进；M15.5/M15.6 尚未实现。
+`cargo xtask bootstrap-kernel-test` 使用继承的 guest Cargo/rustc/rust-lld、
+锁定源码与 bare-metal 库重建真实内核。三次启动验证源码构建、保留 ELF 的宿主辅助
+打包、真实内核身份、编译失败后的产物保留与重启恢复。持久文件上限为 4 MiB，
+tmpfs 与共享缓存仍为 1 MiB。见 [M15 kernel](docs/M15_KERNEL.md) 与
+[本地验收](docs/validation/M15.5.md)。编译器重建、guest 独立生成完整镜像，以及
+M15.6 的独立干净构建比较仍未验证。
 
 ## 许可证
 
