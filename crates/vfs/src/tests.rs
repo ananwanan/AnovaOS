@@ -1,7 +1,236 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Test VFS paths, immutable mounted ABI identity, shared ownership and bounded rollback.
+//! Test VFS paths, backed timestamp coherence, immutable ABI identity, ownership and rollback.
 use super::*;
-use alloc::vec;
+use alloc::{boxed::Box, rc::Rc, vec};
+use anova_storage::{BlockDevice, SECTOR, check_range, ext2::BLOCK};
+use core::cell::RefCell;
+
+#[derive(Clone)]
+struct TimestampDisk(Rc<RefCell<Vec<u8>>>);
+impl BlockDevice for TimestampDisk {
+    fn sectors(&self) -> u64 {
+        (self.0.borrow().len() / SECTOR) as u64
+    }
+    fn read_sector(&mut self, sector: u64, output: &mut [u8; SECTOR]) -> Result<(), i64> {
+        check_range(self.sectors(), sector, SECTOR)?;
+        let start = sector as usize * SECTOR;
+        output.copy_from_slice(&self.0.borrow()[start..start + SECTOR]);
+        Ok(())
+    }
+    fn write_sector(&mut self, sector: u64, input: &[u8; SECTOR]) -> Result<(), i64> {
+        check_range(self.sectors(), sector, SECTOR)?;
+        let start = sector as usize * SECTOR;
+        self.0.borrow_mut()[start..start + SECTOR].copy_from_slice(input);
+        Ok(())
+    }
+    fn flush(&mut self) -> Result<(), i64> {
+        Ok(())
+    }
+}
+
+fn timestamp_disk() -> TimestampDisk {
+    // Real one-group ext2 bytes matching the storage test profile, not a mocked inode.
+    let mut bytes = vec![0; 128 * BLOCK];
+    let p16 = |bytes: &mut [u8], offset, value: u16| {
+        bytes[offset..offset + 2].copy_from_slice(&value.to_le_bytes());
+    };
+    let p32 = |bytes: &mut [u8], offset, value: u32| {
+        bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+    };
+    let superblock = &mut bytes[1024..2048];
+    for (offset, value) in [
+        (0, 128),
+        (4, 128),
+        (12, 119),
+        (16, 118),
+        (24, 2),
+        (28, 2),
+        (32, 128),
+        (36, 128),
+        (40, 128),
+        (76, 1),
+        (84, 11),
+        (96, 2),
+    ] {
+        p32(superblock, offset, value);
+    }
+    p16(superblock, 56, 0xef53);
+    p16(superblock, 58, 1);
+    p16(superblock, 88, 128);
+    let group = &mut bytes[BLOCK..BLOCK + 32];
+    for (offset, value) in [(0, 2), (4, 3), (8, 4)] {
+        p32(group, offset, value);
+    }
+    p16(group, 12, 119);
+    p16(group, 14, 118);
+    p16(group, 16, 1);
+    for bit in 0..9 {
+        bytes[2 * BLOCK + bit / 8] |= 1 << (bit % 8);
+    }
+    for bit in 0..10 {
+        bytes[3 * BLOCK + bit / 8] |= 1 << (bit % 8);
+    }
+    let root = &mut bytes[4 * BLOCK + 128..4 * BLOCK + 256];
+    p16(root, 0, 0x41ed);
+    p32(root, 4, BLOCK as u32);
+    p16(root, 26, 2);
+    p32(root, 28, 8);
+    p32(root, 40, 8);
+    let directory = &mut bytes[8 * BLOCK..9 * BLOCK];
+    p32(directory, 0, 2);
+    p16(directory, 4, 12);
+    directory[6] = 1;
+    directory[7] = 2;
+    directory[8] = b'.';
+    p32(directory, 12, 2);
+    p16(directory, 16, (BLOCK - 12) as u16);
+    directory[18] = 2;
+    directory[19] = 2;
+    directory[20..22].copy_from_slice(b"..");
+    let device = TimestampDisk(Rc::new(RefCell::new(bytes)));
+    let mut disk = Ext2::mount(Box::new(device.clone())).unwrap();
+    let marker = disk.create(2, ".anova-abi", false).unwrap();
+    disk.write(marker, 0, b"linux.x86_64.v1\n").unwrap();
+    disk.shutdown().unwrap();
+    device
+}
+
+fn assert_persistent_times(fs: &mut Vfs<'_>, inode: u64) {
+    let cached = fs.times(inode);
+    let number = fs.nodes[inode as usize].inode.unwrap();
+    let stored = fs.disk.as_mut().unwrap().inode(number).unwrap();
+    assert_eq!(
+        cached,
+        [stored.accessed, stored.modified, stored.changed]
+            .map(|time| u64::from(time) * 1_000_000_000)
+    );
+    assert_eq!(fs.attributes(inode).1, cached[1]);
+}
+
+#[test]
+fn persistent_file_times_match_backing_inodes_and_cargo_markers_across_mutations() {
+    let archive = image();
+    let device = timestamp_disk();
+    let mut fs = Vfs::new(&archive).unwrap();
+    fs.insert(ROOT, "persist", Data::Directory, Mount::Initramfs)
+        .unwrap();
+    fs.mount_disk(Ext2::mount(Box::new(device.clone())).unwrap())
+        .unwrap();
+    let mut files = Descriptors::default();
+    fs.set_clock(1_250_000_000);
+    let source = fs
+        .open(
+            &mut files,
+            ROOT,
+            "/persist/source.rs",
+            OPEN_CREATE | OPEN_READ | OPEN_WRITE,
+        )
+        .unwrap();
+    let inode = fs.metadata(ROOT, "/persist/source.rs").unwrap().0;
+    assert_persistent_times(&mut fs, inode);
+    fs.write(&files, source, b"source").unwrap();
+    assert_persistent_times(&mut fs, inode);
+    // Cargo explicitly dates its invocation marker after a source saved in the same second.
+    fs.set_clock(1_800_000_000);
+    let marker = fs
+        .open(
+            &mut files,
+            ROOT,
+            "/persist/invoked.timestamp",
+            OPEN_CREATE | OPEN_WRITE,
+        )
+        .unwrap();
+    let marker_inode = fs.metadata(ROOT, "/persist/invoked.timestamp").unwrap().0;
+    fs.set_times(marker_inode, None, Some(1_800_000_000))
+        .unwrap();
+    assert!(fs.times(inode)[1] <= fs.times(marker_inode)[1]);
+    assert_persistent_times(&mut fs, marker_inode);
+    fs.close(&mut files, marker).unwrap();
+    fs.set_clock(2_100_000_000);
+    fs.write(&files, source, b"more").unwrap();
+    assert_persistent_times(&mut fs, inode);
+    assert_eq!(fs.times(inode)[1], 2_000_000_000);
+    fs.set_clock(3_400_000_000);
+    fs.set_len(&files, source, 3).unwrap();
+    assert_persistent_times(&mut fs, inode);
+    assert_eq!(fs.times(inode)[1], 3_000_000_000);
+    let unchanged = fs.times(inode);
+    fs.set_clock(4_100_000_000);
+    fs.set_len(&files, source, 3).unwrap();
+    assert_eq!(fs.times(inode), unchanged);
+    assert_persistent_times(&mut fs, inode);
+    fs.close(&mut files, source).unwrap();
+    fs.set_clock(4_500_000_000);
+    let source = fs
+        .open(
+            &mut files,
+            ROOT,
+            "/persist/source.rs",
+            OPEN_WRITE | OPEN_TRUNCATE,
+        )
+        .unwrap();
+    assert_persistent_times(&mut fs, inode);
+    assert_eq!(fs.times(inode)[1], 4_000_000_000);
+    fs.set_clock(5_600_000_000);
+    fs.set_times(inode, Some(10_123_000_000), Some(11_456_000_000))
+        .unwrap();
+    assert_persistent_times(&mut fs, inode);
+    let before = fs.times(inode);
+    fs.close(&mut files, source).unwrap();
+    fs.shutdown().unwrap();
+    drop(fs);
+    let mut fs = Vfs::new(&archive).unwrap();
+    fs.insert(ROOT, "persist", Data::Directory, Mount::Initramfs)
+        .unwrap();
+    fs.mount_disk(Ext2::mount(Box::new(device)).unwrap())
+        .unwrap();
+    let inode = fs.metadata(ROOT, "/persist/source.rs").unwrap().0;
+    assert_eq!(fs.times(inode), before);
+    assert_persistent_times(&mut fs, inode);
+}
+
+#[test]
+fn tmpfs_mutations_and_explicit_times_retain_nanosecond_precision() {
+    let archive = image();
+    let mut fs = Vfs::new(&archive).unwrap();
+    let mut files = Descriptors::default();
+    fs.set_clock(1_250_000_123);
+    let fd = fs
+        .open(
+            &mut files,
+            ROOT,
+            "/tmp/precision",
+            OPEN_CREATE | OPEN_READ | OPEN_WRITE,
+        )
+        .unwrap();
+    let inode = fs.metadata(ROOT, "/tmp/precision").unwrap().0;
+    assert_eq!(fs.times(inode), [1_250_000_123; 3]);
+    fs.set_clock(2_100_000_456);
+    fs.write(&files, fd, b"data").unwrap();
+    assert_eq!(fs.times(inode)[1..], [2_100_000_456; 2]);
+    fs.set_clock(3_400_000_789);
+    fs.set_len(&files, fd, 2).unwrap();
+    assert_eq!(fs.times(inode)[1..], [3_400_000_789; 2]);
+    fs.close(&mut files, fd).unwrap();
+    fs.set_clock(4_500_000_321);
+    let fd = fs
+        .open(
+            &mut files,
+            ROOT,
+            "/tmp/precision",
+            OPEN_WRITE | OPEN_TRUNCATE,
+        )
+        .unwrap();
+    assert_eq!(fs.times(inode)[1..], [4_500_000_321; 2]);
+    fs.set_clock(5_600_000_654);
+    fs.set_times(inode, Some(10_123_000_987), Some(11_456_000_111))
+        .unwrap();
+    assert_eq!(
+        fs.times(inode),
+        [10_123_000_987, 11_456_000_111, 5_600_000_654]
+    );
+    fs.close(&mut files, fd).unwrap();
+}
 #[test]
 fn mounted_policy_identity_rejects_content_and_namespace_mutations() {
     let image = image();

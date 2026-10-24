@@ -1,4 +1,4 @@
-<!-- Describe the official source lock, controlled guest recipe and host preparation boundary. -->
+<!-- Describe locked source-reconstruction recipes, compiler feasibility preparation and host boundaries. -->
 # Bounded bzip2 reconstruction
 
 This recipe selects the unmodified C sources, headers, notices, upstream
@@ -38,3 +38,22 @@ files and compressor outputs. The acceptance harness must independently compare
 the reference bytes, compressed sample bytes and retained tool/source hashes
 after clean shutdown and reboot. This controlled recipe does not establish
 arbitrary upstream configure/Makefile compatibility or compiler bootstrap.
+
+## Compiler source assessments
+
+`gcc_probe.py` audits the seven M11 compiler dependency archives and publishes
+bounded unchanged inputs for the [GCC feasibility gate](../../docs/M15_GCC.md).
+`rust_probe.py` independently audits the locked official Rust 1.90.0 source
+distribution, including the LLVM fork, Cargo and vendor contents. Its bounded
+selection supports the [Rust/LLVM/Cargo feasibility gate](../../docs/M15_RUST.md).
+Each command supports `--verify` for read-only verification of its generated
+source cache, rejects changed or redirected outputs, and retains upstream
+notices. These source-only preparations do not execute upstream build scripts
+or reconstruct compiler components. The corresponding `test_gcc_probe.py` and
+`test_rust_probe.py` check integrity, archive safety and publication rejection.
+
+The first-party `rust-probe/` fixtures exercise inherited guest Rust/C++ seeds,
+real missing-tool exec errors and an isolated offline dependency failure.
+Successful seed applications are preserved and executed again after reboot;
+they are distinct from source-built LLVM, rustc or Cargo. Exact artifact
+identities and host participation remain in each gate's generated result.

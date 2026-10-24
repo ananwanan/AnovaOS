@@ -15,7 +15,7 @@ Rust 用户态窗口合成器、焦点输入与崩溃/重启恢复。M14.4 已�
 C/C++/Rust SDK 与图形应用，系统内独立构建、真实键鼠输入和重启保留通过验收；
 M14.5 已验证有界硬件 VirGL 离屏清屏/读回与 CPU fallback；普通桌面仍采用软件合成。
 M15.1/M15.2 已验证容量测量、系统内 bzip2 源码重建、重启与编译失败恢复。
-M15.3 已通过 GCC 可行性实测评估，当前开发依赖和容量限制阻塞编译器重建；编译器/内核自举仍未验证。
+M15.3/M15.4 已通过 GCC 及独立 Rust/LLVM/Cargo 可行性实测评估，当前开发依赖和容量限制阻塞编译器重建；编译器/内核自举仍未验证。
 
 日常开发与 Pull Request 的目标分支为 **`dev`**；`main` 保留阶段验收后的稳定快照。分支约定见 [GitHub 协作说明](docs/GITHUB_SETUP.md)。
 
@@ -164,7 +164,14 @@ cargo xtask bootstrap-test
 缺失头文件/工具、configure 启动失败、越限恢复与重启。评估报告明确当前 GCC
 重建障碍，没有产出新编译器阶段。见 [M15 GCC](docs/M15_GCC.md) 与
 [本地实测](docs/validation/M15.3.md)。GCC 路线下一步需补齐构建工具、数学库开发
-依赖和实际所需容量；M15.4/M15.5 保持独立前置条件，M15.4–M15.6 尚未实现。
+依赖和实际所需容量。
+
+`cargo xtask bootstrap-rust-test` 独立审计官方 Rust 1.90.0 完整发行源码、
+所含 LLVM/Cargo 组件和规定的 stage0。两次 guest 启动验证 Rust std/C++17 种子、
+实际构建工具缺失、独立离线依赖拒绝、真实 Rust 编译失败后旧 ELF 保留及重启哈希一致。
+当前 profile 仍阻塞源码重建，没有重建 LLVM/rustc/Cargo 组件。见
+[M15 Rust](docs/M15_RUST.md) 与 [本地实测](docs/validation/M15.4.md)。
+M15.5 可沿用已验收的 guest rustc 独立推进；M15.5/M15.6 尚未实现。
 
 ## 许可证
 

@@ -7,8 +7,9 @@ reuses the [M11 guest tools](M11_TOOLCHAIN.md), and creates an independent
 persistent work disk. Implementation and intended checks are described here;
 acceptance requires the actual command results recorded in
 [current status](STATUS.md). M15.3 has a separate [GCC feasibility
-assessment](M15_GCC.md); compiler construction and M15.4–M15.6 remain outside
-this bzip2 profile.
+assessment](M15_GCC.md), and M15.4 independently assesses
+[Rust/LLVM/Cargo](M15_RUST.md). Compiler construction and M15.5/M15.6 remain
+outside this bzip2 profile.
 
 ## Prepare and verify
 
@@ -161,9 +162,9 @@ a clean read-only `e2fsck -f -n` result.
 This is a controlled C tool source-reconstruction profile. It does not establish
 general configure-project compatibility, GCC single-stage or multistage
 bootstrap, LLVM/rustc/Cargo source construction, a guest-built kernel, guest
-boot-image generation or two independent clean builds. M15.3 and M15.4 need
-separate pinned dependency/resource feasibility evidence; the implemented
-[GCC assessment](M15_GCC.md) supplies M15.3 source auditing and guest blocker
-probes without constructing a compiler. M15.5 needs preserved
+boot-image generation or two independent clean builds. The separate pinned
+[GCC assessment](M15_GCC.md) and [Rust/LLVM/Cargo assessment](M15_RUST.md)
+supply M15.3/M15.4 source auditing and guest prerequisite/blocker probes
+without constructing compiler components. M15.5 needs preserved
 guest kernel ELF and actual boot evidence; M15.6 needs repeated clean builds,
 artifact comparison and recovery within its declared completed scope.

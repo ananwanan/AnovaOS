@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #![no_std]
 //! Bounded mounts with immutable ABI policy, shared files/maps, packet pairs, pipes and PTYs.
+//! Cached timestamps retain the backing filesystem's supported precision.
 //! One non-preemptible owner serializes all mutations; no hardware, locks or user pointers.
 extern crate alloc;
 pub mod archive;
@@ -32,6 +33,16 @@ pub enum Mount {
     Tmpfs,
     Devfs,
     Ext2,
+}
+impl Mount {
+    // Cached metadata must use the same precision as the persistent inode format.
+    fn timestamp(self, nanos: u64) -> u64 {
+        if self == Self::Ext2 {
+            nanos / 1_000_000_000 * 1_000_000_000
+        } else {
+            nanos
+        }
+    }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Device {
@@ -318,20 +329,13 @@ impl<'a> Vfs<'a> {
                 modified.map(seconds).transpose()?,
             )?;
         }
-        let precision = |time| {
-            if node.mount == Mount::Ext2 {
-                time / 1_000_000_000 * 1_000_000_000
-            } else {
-                time
-            }
-        };
         if let Some(time) = accessed {
-            node.accessed = precision(time);
+            node.accessed = node.mount.timestamp(time);
         }
         if let Some(time) = modified {
-            node.modified = precision(time);
+            node.modified = node.mount.timestamp(time);
         }
-        node.changed = precision(self.clock);
+        node.changed = node.mount.timestamp(self.clock);
         Ok(())
     }
     pub fn fsync(&mut self, files: &Descriptors, fd: u64) -> Result<(), i64> {
@@ -484,9 +488,9 @@ impl<'a> Vfs<'a> {
             data,
             inode: None,
             permissions,
-            modified: self.clock,
-            accessed: self.clock,
-            changed: self.clock,
+            modified: mount.timestamp(self.clock),
+            accessed: mount.timestamp(self.clock),
+            changed: mount.timestamp(self.clock),
             mapping: None,
         };
         // Unlinked nodes remain alive until their final open description is closed.
@@ -934,6 +938,10 @@ impl<'a> Vfs<'a> {
                 bytes.resize(length, 0);
             }
             Data::Persistent { size, .. } => {
+                if *size == length {
+                    // The backing resize is a no-op; keep its cached inode timestamps unchanged.
+                    return Ok(());
+                }
                 self.disk
                     .as_mut()
                     .ok_or(IO_ERROR)?
@@ -943,8 +951,9 @@ impl<'a> Vfs<'a> {
             Data::Directory => return Err(IS_DIRECTORY),
             _ => return Err(READ_ONLY),
         }
-        self.nodes[node].modified = self.clock;
-        self.nodes[node].changed = self.clock;
+        let timestamp = self.nodes[node].mount.timestamp(self.clock);
+        self.nodes[node].modified = timestamp;
+        self.nodes[node].changed = timestamp;
         if let Some(mapping) = &self.nodes[node].mapping {
             mapping.resize(length);
         }
@@ -1395,8 +1404,9 @@ impl<'a> Vfs<'a> {
             } else if !matches!(self.nodes[node].data, Data::Device(_)) {
                 return Err(INVALID_ARGUMENT);
             }
-            self.nodes[node].modified = self.clock;
-            self.nodes[node].changed = self.clock;
+            let timestamp = self.nodes[node].mount.timestamp(self.clock);
+            self.nodes[node].modified = timestamp;
+            self.nodes[node].changed = timestamp;
             if let Some(mapping) = &self.nodes[node].mapping {
                 mapping.resize(0);
             }
@@ -1725,8 +1735,9 @@ impl<'a> Vfs<'a> {
                         )?;
                         self.opens[id].as_mut().unwrap().offset = offset + count;
                         *size = (*size).max(offset + count);
-                        self.nodes[n].modified = self.clock;
-                        self.nodes[n].changed = self.clock;
+                        let timestamp = self.nodes[n].mount.timestamp(self.clock);
+                        self.nodes[n].modified = timestamp;
+                        self.nodes[n].changed = timestamp;
                         if let Some(mapping) = &self.nodes[n].mapping {
                             mapping.write(offset, &input[..count]);
                         }
@@ -1750,8 +1761,9 @@ impl<'a> Vfs<'a> {
                         }
                         bytes[offset..end].copy_from_slice(input);
                         self.opens[id].as_mut().unwrap().offset = end;
-                        self.nodes[n].modified = self.clock;
-                        self.nodes[n].changed = self.clock;
+                        let timestamp = self.nodes[n].mount.timestamp(self.clock);
+                        self.nodes[n].modified = timestamp;
+                        self.nodes[n].changed = timestamp;
                         if let Some(mapping) = &self.nodes[n].mapping {
                             mapping.write(offset, input);
                         }

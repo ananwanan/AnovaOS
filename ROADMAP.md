@@ -1,7 +1,7 @@
 <!-- Track milestone dependencies, implementation checklists and acceptance criteria. -->
 # 开发路线与阶段验收
 
-日期：2026-10-24。**M0–M13（受限离线与联网范围）及 M14.1 软件显示已通过本地 q35/TCG 验收；M14.2 输入与游标已通过本地 q35/TCG 验收；M14.3 用户态合成器已通过本地 q35/TCG 验收；M14.4 GUI runtime/三语言 SDK 已通过本地验收；M14.5 已通过有界硬件清屏/读回及 CPU fallback 的本地验收，M15.1/M15.2 已通过受控 bzip2 源码重建的本地验收，M15.3 已完成 GCC 可行性评估，编译器重建受当前依赖和容量限制阻塞；M15.4–M15.6 尚未实现，外设 IRQ 路由启用待对应驱动。** 证据见 [M13 验证记录](docs/validation/M13.md)、[M14.1 验证记录](docs/validation/M14.1.md)、[M14.2 验证记录](docs/validation/M14.2.md)、[M14.3 验证记录](docs/validation/M14.3.md)、[M14.4 验证记录](docs/validation/M14.4.md)、[M14.5 验证记录](docs/validation/M14.5.md) 与 [STATUS](docs/STATUS.md)。[FIRST_TASK](docs/FIRST_TASK.md) 记录 M0/M1 原始实现顺序；当前 M2 边界见 [CPU 基线](docs/M2_CPU.md)。
+日期：2026-10-24。**M0–M13（受限离线与联网范围）及 M14.1 软件显示已通过本地 q35/TCG 验收；M14.2 输入与游标已通过本地 q35/TCG 验收；M14.3 用户态合成器已通过本地 q35/TCG 验收；M14.4 GUI runtime/三语言 SDK 已通过本地验收；M14.5 已通过有界硬件清屏/读回及 CPU fallback 的本地验收，M15.1/M15.2 已通过受控 bzip2 源码重建的本地验收，M15.3 已完成 GCC 可行性评估，编译器重建受当前依赖和容量限制阻塞；M15.4 已完成 Rust/LLVM/Cargo 可行性评估，源码重建受当前前置条件和容量限制阻塞；M15.5/M15.6 尚未实现，外设 IRQ 路由启用待对应驱动。** 证据见 [M13 验证记录](docs/validation/M13.md)、[M14.1 验证记录](docs/validation/M14.1.md)、[M14.2 验证记录](docs/validation/M14.2.md)、[M14.3 验证记录](docs/validation/M14.3.md)、[M14.4 验证记录](docs/validation/M14.4.md)、[M14.5 验证记录](docs/validation/M14.5.md) 与 [STATUS](docs/STATUS.md)。[FIRST_TASK](docs/FIRST_TASK.md) 记录 M0/M1 原始实现顺序；当前 M2 边界见 [CPU 基线](docs/M2_CPU.md)。
 
 ## 阶段总览
 
@@ -22,7 +22,7 @@
 | M12 | 系统内 Rust/Cargo 应用开发 | M11、M9；联网依赖 M10 | 离线与受限 HTTPS registry/Git 本地验收通过；原生端口独立推进 |
 | M13 | 可发布的 SDK 与应用包 | M4 基础 SDK、M11/M12 | 本地 SDK/包/诊断验收通过 |
 | M14 | Rust 图形桌面与 C/C++/Rust GUI SDK（M14.1–M14.5） | M9、M13；具体依赖见 M14 文档 | M14.1–M14.4 本地通过；M14.5 有界硬件清屏/读回与 CPU fallback 本地通过 |
-| M15 | 可选的工具链/内核自举（M15.1–M15.6） | M11–M13，资源满足 | M15.1/M15.2 受控 bzip2 本地通过；M15.3 评估完成、编译器未重建；其余未开始 |
+| M15 | 可选的工具链/内核自举（M15.1–M15.6） | M11–M13，资源满足 | M15.1/M15.2 受控 bzip2 本地通过；M15.3/M15.4 评估完成、编译器未重建；M15.5/M15.6 未开始 |
 
 可以交叉推进互不依赖的工作，但不得跳过实际前置条件。网络包获取、图形桌面和完整自举不阻塞第一次离线应用开发。
 
@@ -322,7 +322,7 @@ NVMe/AHCI/USB、glibc 指定版本、Wayland/X11/SDL/Qt 等 Linux GUI 兼容，
 
 ## M15：可选自举与系统自编译
 
-**M15.1/M15.2 已通过受控 bzip2 1.0.8 源码重建的本地验收；M15.3 已完成 GCC 可行性评估，编译器重建受当前依赖和容量限制阻塞；M15.4–M15.6 尚未实现或验收。**
+**M15.1/M15.2 已通过受控 bzip2 1.0.8 源码重建的本地验收；M15.3 已完成 GCC 可行性评估，编译器重建受当前依赖和容量限制阻塞；M15.4 已完成 Rust/LLVM/Cargo 可行性评估，源码重建受当前前置条件和容量限制阻塞；M15.5/M15.6 尚未实现或验收。**
 设计与实测见 [M15 bootstrap](docs/M15_BOOTSTRAP.md) 和
 [验证记录](docs/validation/M15.1-M15.2.md)。M15 是独立的可选自举工作流，
 不影响 M11–M13 已验收的系统内应用开发能力。优先沿用受测的 Linux-musl 兼容工具链；
@@ -379,13 +379,20 @@ C++11 种子编译运行、缺失数学库头文件、九个构建工具 exec �
 
 ### M15.4：Rust/LLVM 自举路线
 
-- [ ] 分别评估固定 LLVM、rustc、Cargo 版本的源码依赖、stage0 工具、构建工具和资源需求。
+- [x] 分别评估固定 LLVM、rustc、Cargo 版本的源码依赖、stage0 工具、构建工具和资源需求。
 - [ ] 按可行性逐级推进受控源码构建，明确完成到 LLVM、rustc 或 Cargo 的哪一层，以及 host/target 范围。
 - [ ] 对实际重建的工具运行功能测试，记录继承的二进制种子、未重建组件、阻塞项与后续条件。
 
 **验收：** 首先交付各组件独立的可行性结论和实际探针证据；已构建的工具须实际运行并通过声明的测试。
 现有 M12 官方二进制工具能运行和编译应用，不构成 Rust/LLVM 源码构建或编译器自举证据；
 未执行的层次保持未验证，完整 bootstrap 按评估结果继续规划。
+
+当前评估见 [M15 Rust](docs/M15_RUST.md) 和 [实测记录](docs/validation/M15.4.md)：
+锁定完整 Rust 1.90.0 发行源码并分别审计 LLVM 20.1.8、rustc、Cargo；
+两次实际 QEMU 启动验证 Rust std/C++17 种子编译运行、六个缺失工具 exec 错误、
+Python bootstrap 入口无法启动、所选离线 curl 依赖缺失、真实 Rust 编译失败后旧 ELF 保留及重启哈希一致。
+完整发行源码容量不是最小构建需求；1.89.0 stage0 仅静态审计、未运行，
+没有重建 LLVM/rustc/Cargo。M15.5 可独立沿用已验收的 guest rustc 推进。
 
 ### M15.5：内核自编译与重启
 

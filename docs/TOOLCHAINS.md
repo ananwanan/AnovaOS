@@ -169,7 +169,14 @@ build/comparison/recovery evidence. M15.1/M15.2 now have a bounded
 build-tool sources, tests the inherited C++11 seed and diagnoses actual
 missing-header/tool/configure-startup and capacity blockers. Acceptance is
 recorded in [validation/M15.3](validation/M15.3.md); a successful assessment
-does not mean a GCC stage was rebuilt. M15.4–M15.6 remain unimplemented.
+does not mean a GCC stage was rebuilt. M15.4 adds a separate
+[Rust/LLVM/Cargo source assessment](M15_RUST.md): complete distribution and
+component inventories, release-specific stage0/dependencies, actual Rust std
+and C++17 seed probes, missing-tool exec errors and an isolated offline Cargo
+dependency rejection. See [validation/M15.4](validation/M15.4.md) for executed
+scope. No new LLVM, rustc or Cargo component is constructed by these probes;
+the inherited 1.90.0 seed is separate from upstream's prescribed 1.89.0 stage0.
+M15.5/M15.6 remain unimplemented.
 GCC and Rust/LLVM start with separate pinned feasibility evaluations; full
 compiler bootstrap is conditional on the resulting dependencies and resources.
 Kernel reconstruction may use the already accepted guest rustc without first

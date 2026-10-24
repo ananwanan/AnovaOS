@@ -7,6 +7,19 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 
 | File | Purpose |
 | --- | --- |
+| `xtask/src/bootstrap_rust.rs` | Audit independent Rust/LLVM/Cargo source capacity and verify real guest seed, prerequisite failures and reboot evidence without claiming component reconstruction. |
+| `ports/bootstrap/rust_probe.py` | Verify the locked official Rust source distribution and publish independent component inventories plus bounded unchanged build inputs and notices. |
+| `ports/bootstrap/rust-inputs.json` | Lock the official complete Rust 1.90.0 source archive, published checksum URL and assessed musl target. |
+| `ports/bootstrap/test_rust_probe.py` | Reject changed Rust sources, unsafe archive members and changed or redirected source publications. |
+| `ports/bootstrap/rust-probe/probe.c` | Verify actual missing guest tools and bounded Cargo offline dependency failure with checked child errno/status reporting. |
+| `ports/bootstrap/rust-probe/seed.rs` | Exercise the inherited guest Rust std seed with vectors, a worker thread, persistent file bytes and result 42. |
+| `ports/bootstrap/rust-probe/llvm_seed.cpp` | Exercise the inherited guest C++17 seed with a fold expression, std::optional and result 42. |
+| `ports/bootstrap/rust-probe/bad.rs` | Trigger a real rejected guest Rust compilation while retaining the prior successful seed executable. |
+| `ports/bootstrap/rust-probe/.cargo/config.toml` | Restrict the isolated Cargo prerequisite fixture to the inherited offline vendor directory. |
+| `ports/bootstrap/rust-probe/cargo-dependency/Cargo.toml` | Pin the curl dependency selected from upstream Cargo as an isolated offline closure-availability probe. |
+| `ports/bootstrap/rust-probe/cargo-dependency/src/main.rs` | Supply a minimal application body for the isolated offline Cargo prerequisite probe. |
+| `docs/M15_RUST.md` | Define independent Rust, LLVM and Cargo feasibility, prescribed stage0, measured blockers and reconstruction prerequisites. |
+| `docs/validation/M15.4.md` | Record local Rust/LLVM/Cargo feasibility probes, exact retained artifacts, reboot evidence and unverified source-build layers. |
 | `kernel/src/task/bootstrap.rs` | Sample scheduler-instance frame, heap, task, descriptor and namespace use without allocation or a public ABI. |
 | `xtask/src/bootstrap_gcc.rs` | Audit GCC source capacity and verify actual guest seed, header/tool/configure rejection and reboot evidence without claiming compiler reconstruction. |
 | `ports/bootstrap/gcc_probe.py` | Verify seven locked compiler dependency archives and publish source inventory plus bounded unchanged configure-startup inputs. |
@@ -67,8 +80,8 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `crates/vfs/Cargo.toml` | Share bounded in-memory VFS, archive, open-file and pipe semantics with host tests. |
 | `crates/vfs/src/archive.rs` | Decode the project-owned ANOVAFS1 archive using checked byte ranges, never casts. Entries are parent-first absolute UTF-8 paths; payloads remain borrowed from boot RAM. |
 | `crates/vfs/src/fd.rs` | Own fallible shared descriptor tables, close-on-exec state and allocation-free empty placeholders. |
-| `crates/vfs/src/lib.rs` | Own bounded memory/ext2 namespaces, explicit ABI inheritance, modes/timestamps, private mapping snapshots, shared opens, pipes and PTYs. |
-| `crates/vfs/src/tests.rs` | Test VFS path/mount boundaries, descriptor ownership, private snapshots, modes/timestamps, pipe shutdown and capacity rollback. |
+| `crates/vfs/src/lib.rs` | Own bounded memory/ext2 namespaces, explicit ABI inheritance, coherent backing-store timestamp precision, private mapping snapshots, shared opens, pipes and PTYs. |
+| `crates/vfs/src/tests.rs` | Test VFS path/mount boundaries, descriptor ownership, private snapshots, persistent timestamp coherence, pipe shutdown and capacity rollback. |
 | `docs/CODING_STYLE.md` | English development conventions, mandatory file purposes and stable Rust formatting. |
 | `docs/DEVELOPMENT.md` | Host setup, target separation, app/image commands, validation and evidence handling. |
 | `docs/FILE_PURPOSES.md` | Per-file purpose inventory and generated/legal file explanation exceptions. |
@@ -279,7 +292,7 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `tests/guest/m12/cargo.rs` | Define the M12 offline Rust/Cargo acceptance fixture and its declared behavior. |
 | `tests/guest/m12/config.toml` | Define the M12 offline Rust/Cargo acceptance fixture and its declared behavior. |
 | `tests/guest/m12/main.rs` | Define the M12 offline Rust/Cargo acceptance fixture and its declared behavior. |
-| `tests/guest/m12/runtime.c` | Exercise invalid return/detached exit, alternate signals, positioned/resized files and OFD locks in a real guest. |
+| `tests/guest/m12/runtime.c` | Exercise invalid return/detached exit, alternate signals, positioned/resized files, persistent/tmpfs timestamp precision and OFD locks in a real guest. |
 | `user/linux/rust.c` | Configure offline Rust/Cargo execution and the isolated guest sysroot and linker. |
 | `xtask/src/rust.rs` | Build Rust images, exercise real guest compilation and independently inspect rebooted source and ELF files. |
 | `docs/M12_RUST.md` | Specify the optional Rust/Cargo profile, construction commands, ownership and separate acceptance gates. |

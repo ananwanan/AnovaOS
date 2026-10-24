@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# Test dependency availability against only the accepted M12 offline vendor and one build job.
+[source.crates-io]
+replace-with = "vendored-sources"
+[source.vendored-sources]
+directory = "/rs/vendor"
+[net]
+offline = true
+[build]
+jobs = 1

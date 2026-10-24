@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Verify bounded filesystem/IPC ownership, alternate signals, select readiness and interrupted waits.
+// Verify filesystem/IPC ownership, persistent/tmpfs timestamp precision, signals and readiness.
 #define _GNU_SOURCE
 #include <assert.h>
 #include <errno.h>
@@ -30,11 +30,27 @@ static volatile sig_atomic_t selected_signal;
 static void select_handler(int signal) { (void)signal; selected_signal = 1; }
 static void timestamp_checks(void) {
     int fd = open("timestamp-file", O_CREAT | O_RDWR | O_TRUNC, 0600);
-    assert(fd >= 0 && write(fd, "T", 1) == 1);
+    struct stat value;
+    assert(fd >= 0 && fstat(fd, &value) == 0 && value.st_size == 0);
+    assert(value.st_mtim.tv_nsec == 0 && value.st_ctim.tv_nsec == 0);
+    assert(write(fd, "T", 1) == 1 && fstat(fd, &value) == 0);
+    assert(value.st_mtim.tv_nsec == 0 && value.st_ctim.tv_nsec == 0);
+    const struct timespec written = value.st_mtim;
+    struct timespec unchanged[2] = {{.tv_nsec = UTIME_OMIT}, written};
+    assert(futimens(fd, unchanged) == 0 && fstat(fd, &value) == 0);
+    assert(value.st_mtim.tv_sec == written.tv_sec && value.st_mtim.tv_nsec == written.tv_nsec);
+    assert(ftruncate(fd, 16) == 0 && fstat(fd, &value) == 0 && value.st_size == 16);
+    assert(value.st_mtim.tv_nsec == 0 && value.st_ctim.tv_nsec == 0);
+    assert(ftruncate(fd, 2) == 0 && fstat(fd, &value) == 0 && value.st_size == 2);
+    assert(value.st_mtim.tv_nsec == 0 && value.st_ctim.tv_nsec == 0);
+    int truncated = open("timestamp-file", O_WRONLY | O_TRUNC);
+    assert(truncated >= 0 && close(truncated) == 0);
+    assert(fstat(fd, &value) == 0 && value.st_size == 0);
+    assert(value.st_mtim.tv_nsec == 0 && value.st_ctim.tv_nsec == 0);
     struct timespec times[2] = {{.tv_sec = 1234, .tv_nsec = 123}, {.tv_sec = 5678, .tv_nsec = 456}};
     assert(futimens(fd, times) == 0);
-    struct stat value;
     assert(fstat(fd, &value) == 0 && value.st_atim.tv_sec == 1234 && value.st_mtim.tv_sec == 5678);
+    assert(value.st_atim.tv_nsec == 0 && value.st_mtim.tv_nsec == 0);
     times[0].tv_nsec = UTIME_OMIT; times[1].tv_sec = 6789;
     assert(utimensat(AT_FDCWD, "timestamp-file", times, 0) == 0);
     assert(fstat(fd, &value) == 0 && value.st_atim.tv_sec == 1234 && value.st_mtim.tv_sec == 6789);
@@ -48,6 +64,14 @@ static void timestamp_checks(void) {
     assert(syscall(SYS_futimesat, fd, NULL, old) == 0);
     assert(fstat(fd, &value) == 0 && value.st_atim.tv_sec == 111 && value.st_mtim.tv_sec == 222);
     assert(close(fd) == 0 && unlink("timestamp-file") == 0);
+    fd = open("/tmp/m12-timestamp-nanos", O_CREAT | O_EXCL | O_RDWR, 0600);
+    assert(fd >= 0 && write(fd, "T", 1) == 1);
+    times[0] = (struct timespec){.tv_sec = 1234, .tv_nsec = 123};
+    times[1] = (struct timespec){.tv_sec = 5678, .tv_nsec = 456};
+    assert(futimens(fd, times) == 0 && fstat(fd, &value) == 0);
+    assert(value.st_atim.tv_sec == 1234 && value.st_atim.tv_nsec == 123);
+    assert(value.st_mtim.tv_sec == 5678 && value.st_mtim.tv_nsec == 456);
+    assert(close(fd) == 0 && unlink("/tmp/m12-timestamp-nanos") == 0);
     puts("[M12:TIMES] real-atime-mtime NOW OMIT bad-pointer invalid-nsec");
 }
 static void shared_file_checks(void) {

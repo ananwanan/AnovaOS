@@ -1,12 +1,15 @@
 <!-- Record locally verified subsystem capabilities, runtime limits and the next development task. -->
 # Implementation status
 
-Recorded 2026-10-24 (Asia/Shanghai). M15 development baseline `4f2ab13`.
+Recorded 2026-10-24 (Asia/Shanghai). M15.4 implementation base `f760d05`.
 Task branch: `feat/m15-bootstrap`. M15.1/M15.2 are locally accepted for the
 bounded bzip2 reconstruction profile; see [M15 bootstrap](M15_BOOTSTRAP.md) and
 [validation/M15.1-M15.2](validation/M15.1-M15.2.md). M15.3 feasibility is locally assessed;
 GCC reconstruction is blocked by current dependencies/capacity. See
-[M15 GCC](M15_GCC.md) and [validation/M15.3](validation/M15.3.md). See [M14 GUI](M14_GUI.md),
+[M15 GCC](M15_GCC.md) and [validation/M15.3](validation/M15.3.md). M15.4 has
+independent locally verified Rust/LLVM/Cargo source audits and guest prerequisite
+probes; reconstruction remains blocked. See [M15 Rust](M15_RUST.md) and
+[validation/M15.4](validation/M15.4.md). See [M14 GUI](M14_GUI.md),
 [validation/M14.1](validation/M14.1.md), [validation/M14.2](validation/M14.2.md)
 [validation/M14.3](validation/M14.3.md), [validation/M14.4](validation/M14.4.md)
 and [validation/M14.5](validation/M14.5.md).
@@ -228,10 +231,22 @@ exec errors, upstream configure startup rejection, capacity recovery and exact
 persisted hashes. See [M15 GCC](M15_GCC.md) and [local evidence](validation/M15.3.md).
 The GCC route next needs actual POSIX build utilities, arithmetic development
 inputs and a declared source closure with sufficient large-file/disk/inode/VFS
-capacity before the first compiler stage. M15.4 compiler sources and M15.5
-kernel reconstruction remain independently scoped. Full compiler bootstrap is unverified.
-Preserve `cargo xtask bootstrap-test`, `bootstrap-gcc-test`, both source rejection
-suites and the `bootstrap-metrics` kernel check,
+capacity before the first compiler stage. M15.4 now separately audits the
+complete official Rust source distribution and LLVM/Cargo/vendor components,
+records the prescribed 1.89.0 stage0, and verifies real guest Rust std/C++17
+seed applications, six missing tools, Python entry exec rejection, an isolated
+offline curl dependency failure and retained ELF/workspace bytes after compiler
+failure and reboot. See [M15 Rust](M15_RUST.md) and
+[local evidence](validation/M15.4.md). Source reconstruction remains blocked;
+no LLVM/rustc/Cargo component or prescribed stage0 execution is verified.
+The broader Rust regression also corrected ext2 cached timestamp precision to
+match persisted whole seconds, preserving tmpfs nanoseconds and the original
+exact Cargo dependency-rebuild assertions. Focused host/guest timestamp checks
+and the full offline Rust/Cargo reboot gate passed; see the same validation
+record for the initial failure and correction.
+M15.5 kernel reconstruction remains independently scoped. Full compiler bootstrap is unverified.
+Preserve `cargo xtask bootstrap-test`, `bootstrap-gcc-test`, `bootstrap-rust-test`,
+all three source rejection suites and the `bootstrap-metrics` kernel check,
 as well as every previous runtime/storage/network, C/C++/Rust/Cargo, native SDK
 and graphical gate, plus `gpu-test` and headless `gpu-fallback-test`.
 Native libc/std, general Unicode/IME, PTY/ANSI graphical terminal behavior,
@@ -245,7 +260,7 @@ hardware and broad Linux GUI compatibility remain independently scoped.
 | M15.1 | Measured capacity, sufficient build environment and persistent work disk | Locally accepted for bzip2 1.0.8 within unchanged limits |
 | M15.2 | Controlled C/C++ tool built in guest and executed again after reboot | Locally accepted: guest-built bzip2, golden sample, reboot and failure recovery |
 | M15.3 | GCC feasibility evidence, then a compiler stage or multistage bootstrap if viable | Assessment locally verified; current profile blocked; no compiler stage rebuilt |
-| M15.4 | Separate LLVM/rustc/Cargo feasibility and source builds where viable | Not started |
+| M15.4 | Separate LLVM/rustc/Cargo feasibility and source builds where viable | Assessment locally verified; current profile blocked; no component rebuilt |
 | M15.5 | Guest-built kernel actually booted; image-generation scope reported separately | Not started |
 | M15.6 | Repeated clean builds, artifact comparison and failure recovery | Not started |
 

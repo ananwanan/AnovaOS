@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Package an independently locked musl Rust sysroot and validate compilation inside real guests.
+//! Package an independently locked musl Rust sysroot for application and bootstrap guest tests.
 use super::*;
 use sha2::{Digest, Sha256};
 
@@ -83,7 +83,7 @@ pub fn cross(root: &Path) -> Result<()> {
 pub fn image(root: &Path) -> Result<PathBuf> {
     image_profile(root, true)
 }
-pub(super) fn image_profile(root: &Path, c_toolchain: bool) -> Result<PathBuf> {
+pub(super) fn pack(root: &Path, c_toolchain: bool) -> Result<PathBuf> {
     apps::build(root, false)?;
     command(
         Command::new("python3")
@@ -160,6 +160,11 @@ pub(super) fn image_profile(root: &Path, c_toolchain: bool) -> Result<PathBuf> {
         work.join("archive.sha256"),
         format!("{:x}\n", Sha256::digest(&bytes)),
     )?;
+    Ok(archive)
+}
+
+pub(super) fn image_profile(root: &Path, c_toolchain: bool) -> Result<PathBuf> {
+    let archive = pack(root, c_toolchain)?;
     let iso = image_archive(root, Mode::Normal, Some(&archive))?;
     let target = root.join("build/images/anova-rust.iso");
     output_path(&target)?;

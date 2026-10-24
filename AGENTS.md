@@ -89,7 +89,13 @@ Preserve `cargo xtask bootstrap-gcc-test` and
 `python3 ports/bootstrap/test_gcc_probe.py`; read [M15 GCC](docs/M15_GCC.md)
 and [validation/M15.3](docs/validation/M15.3.md). The current profile is blocked
 for compiler reconstruction; a successful assessment is not a new GCC stage.
-Full-tree inventories are not minimum build requirements. M15.4–M15.6 remain separate.
+Full-tree inventories are not minimum build requirements. M15.4 independently
+assesses locked Rust/LLVM/Cargo sources, stage0 requirements, real guest seed
+applications and prerequisite blockers. Preserve `cargo xtask bootstrap-rust-test`
+and `python3 ports/bootstrap/test_rust_probe.py`; read
+[M15 Rust](docs/M15_RUST.md) and [validation/M15.4](docs/validation/M15.4.md).
+M12's inherited 1.90.0 binaries are not the release's prescribed 1.89.0 stage0
+or reconstructed compiler/Cargo evidence. M15.5/M15.6 remain separate.
 
 本文件是后续 Codex 开发规范。用户明确指令优先；已有修改应保留。日常、可逆的实现选择可自主完成，不因普通阶段切换反复请求确认。
 

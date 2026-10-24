@@ -517,3 +517,19 @@ blockers; it does not produce a rebuilt GCC. See [M15 GCC](M15_GCC.md) and
 [local validation](validation/M15.3.md). The final report is
 `build/logs/bootstrap-gcc.result.json`, with per-boot `bootstrap-gcc-` logs and
 embedded source/seed/image identities.
+
+## Rust, LLVM and Cargo reconstruction feasibility
+
+After `cargo xtask toolchain-build` and `cargo xtask rust-build`, run
+`cargo xtask bootstrap-rust-test`. The command audits the locked official Rust
+source distribution and its separate LLVM/rustc/Cargo components, then uses two
+q35/TCG boots to verify Rust std/C++17 seed applications, actual missing-tool
+exec failures, an isolated offline dependency rejection and retained application
+hashes after reboot. It does not reconstruct a compiler or Cargo.
+`python3 ports/bootstrap/test_rust_probe.py` checks archive/cache rejection;
+`python3 ports/bootstrap/rust_probe.py --verify` checks existing publication
+without rewriting it. The final report is `build/logs/bootstrap-rust.result.json`,
+with embedded `build/bootstrap-rust/prepared.json`, source audit, exact seed/image
+identities and per-boot `bootstrap-rust-` logs. See [M15 Rust](M15_RUST.md) and
+[local validation](validation/M15.4.md) for the independent component conclusions
+and the difference between the inherited M12 seed and upstream's stage0.
