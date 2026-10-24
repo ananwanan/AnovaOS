@@ -53,7 +53,28 @@ and [validation/M13](docs/validation/M13.md). Preserve `sdk-test`, `app-test`,
 `package-v2-test` and `diagnostics-test` alongside all previous gates. Native
 syscall v1 remains frozen; permissions are admission metadata, and static
 ET_EXEC Linux package admission is separate from the wider M9 runtime profile.
-The mounted persistent ABI marker is immutable. M14.1 is next; GUI libraries,
+The mounted persistent ABI marker is immutable. M14.1 adds optional checked CPU
+graphics and actual QMP scanout/serial-fallback verification. Preserve
+`cargo xtask graphics-test` and the `graphics` kernel feature check alongside
+previous gates. M14.2 implements optional scheduler-polled PS/2 physical input,
+a bounded diagnostic queue and clipped cursor; its local three-boot QEMU gate passed.
+Preserve `cargo xtask input-test` and the `graphics,input-test` kernel feature
+check as well. See [M14 GUI](docs/M14_GUI.md),
+[validation/M14.1](docs/validation/M14.1.md) and
+[validation/M14.2](docs/validation/M14.2.md). M14.3 adds an isolated user-space compositor, authenticated bounded copied IPC,
+private surfaces, focused input and actual client/server-fault restart verification.
+Preserve `cargo xtask gui-test` and both `graphics,gui` and
+`graphics,gui,gui-test` kernel checks. Read [M14 compositor](docs/M14_COMPOSITOR.md)
+and [validation/M14.3](docs/validation/M14.3.md). M14.4 adds the bounded Rust
+GUI runtime, versioned C ABI, C++/Rust ownership wrappers, note/interactive
+graphical terminal and independently guest-built native clients. Preserve
+`cargo xtask gui-sdk-test`, `anova-gui-runtime` host tests and generated GUI
+header checks. Read [M14 runtime](docs/M14_RUNTIME.md) and
+[validation/M14.4](docs/validation/M14.4.md). M14.5 locally verifies bounded hardware VirGL offscreen clear/readback and CPU
+fallback. Preserve `cargo xtask gpu-test`, headless `cargo xtask gpu-fallback-test`
+and both `gpu`/`gpu-test` kernel checks; see [M14 GPU](docs/M14_GPU.md) and
+[validation/M14.5](docs/validation/M14.5.md). Ordinary desktop composition remains
+software-rendered; shader draws and a guest GL/Vulkan API remain outside this profile;
 GDB stubs, native std and compiler bootstrap remain independently scoped.
 
 本文件是后续 Codex 开发规范。用户明确指令优先；已有修改应保留。日常、可逆的实现选择可自主完成，不因普通阶段切换反复请求确认。

@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Prepare isolated block/network PCI handoffs before page-table import and attach polled ext2 storage.
+//! Prepare isolated PCI handoffs for polled storage/network, optional GPU rendering and PS/2.
+#[cfg(feature = "gpu")]
+pub mod gpu;
+#[cfg(feature = "graphics")]
+pub mod input;
 pub mod network;
 pub mod pci;
 pub mod virtio;
@@ -21,6 +25,8 @@ static PREPARED: Prepared = Prepared(UnsafeCell::new(None));
 pub fn prepare(mapper: &mut EarlyMapper<'_>, timer: PmTimer) {
     assert_eq!(cpu::flags() & (1 << 9), 0, "PCI preparation requires IF=0");
     network::prepare(mapper, timer);
+    #[cfg(feature = "gpu")]
+    gpu::prepare(mapper, timer);
     match pci::discover(mapper, false) {
         Ok(config) => {
             // SAFETY: Sole BSP boot writer; the handoff is consumed once in attach().

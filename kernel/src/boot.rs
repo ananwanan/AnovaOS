@@ -2,6 +2,7 @@
 //! Borrow retained Limine data. M3 allocates only USABLE RAM; bootloader data,
 //! original stacks/tables, modules, firmware and the early pool remain reserved.
 //! Retained native ELF modules support isolation tests; a tagged archive supplies the M6 root.
+//! Optional graphics admission checks the complete reserved framebuffer before any device access.
 use limine::{
     BaseRevision,
     firmware_type::FirmwareType,
@@ -278,22 +279,8 @@ impl BootInfo {
         let mut count = 0;
         if let Some(response) = FRAMEBUFFER.get_response() {
             for fb in response.framebuffers() {
-                assert!(
-                    fb.width() > 0 && fb.height() > 0 && fb.bpp() > 0,
-                    "Invalid framebuffer dimensions"
-                );
-                let row_bytes = fb
-                    .width()
-                    .checked_mul(u64::from(fb.bpp()))
-                    .and_then(|v| v.checked_add(7))
-                    .expect("Framebuffer width overflow")
-                    / 8;
-                assert!(fb.pitch() >= row_bytes, "Invalid framebuffer pitch");
-                fb.pitch()
-                    .checked_mul(fb.height())
-                    .expect("Framebuffer size overflow");
                 serial::write(format_args!(
-                    "[BOOT:FRAMEBUFFER] {}x{} pitch={} bpp={} (not written)\n",
+                    "[BOOT:FRAMEBUFFER] {}x{} pitch={} bpp={} (admission deferred; not written)\n",
                     fb.width(),
                     fb.height(),
                     fb.pitch(),
@@ -342,6 +329,78 @@ fn kind(value: EntryType) -> &'static str {
         EntryType::FRAMEBUFFER => "framebuffer",
         _ => "unknown-reserved",
     }
+}
+
+/// A copied mode descriptor, never an application capability or an owned RAM allocation.
+#[cfg(feature = "graphics")]
+pub struct Display {
+    pub address: VirtAddr,
+    pub physical: PhysAddr,
+    pub layout: anova_graphics::Layout,
+    pub bpp: u16,
+}
+
+/// Admit the primary RGB mode without dereferencing video memory. Unsupported
+/// modes retain serial recovery. Boot response storage is permanently reserved.
+#[cfg(feature = "graphics")]
+pub fn display() -> Result<Display, &'static str> {
+    use anova_memory::{PAGE_SIZE, PHYSICAL_LIMIT, align_up, canonical};
+    let response = FRAMEBUFFER.get_response().ok_or("no-framebuffer")?;
+    let fb = response.framebuffers().next().ok_or("no-framebuffer")?;
+    if fb.memory_model() != limine::framebuffer::MemoryModel::RGB {
+        return Err("unsupported-memory-model");
+    }
+    let layout = anova_graphics::Layout::new(
+        fb.width(),
+        fb.height(),
+        fb.pitch(),
+        fb.bpp(),
+        fb.red_mask_size(),
+        fb.red_mask_shift(),
+        fb.green_mask_size(),
+        fb.green_mask_shift(),
+        fb.blue_mask_size(),
+        fb.blue_mask_shift(),
+    )
+    .map_err(|_| "unsupported-mode")?;
+    let address = fb.addr() as u64;
+    let direct = HHDM.get_response().ok_or("no-hhdm")?.offset();
+    let physical = address.checked_sub(direct).ok_or("outside-hhdm")?;
+    let end = physical
+        .checked_add(layout.byte_len() as u64)
+        .ok_or("range-overflow")?;
+    let virtual_end = address
+        .checked_add(layout.byte_len() as u64 - 1)
+        .ok_or("range-overflow")?;
+    if physical == 0 || end > PHYSICAL_LIMIT || !canonical(address) || !canonical(virtual_end) {
+        return Err("invalid-address");
+    }
+    let first_page = physical & !(PAGE_SIZE - 1);
+    let page_end = align_up(end, PAGE_SIZE).map_err(|_| "range-overflow")?;
+    let entries = MEMORY.get_response().ok_or("no-memory-map")?.entries();
+    if !entries.iter().any(|entry| {
+        entry.entry_type == EntryType::FRAMEBUFFER
+            && physical >= entry.base
+            && end <= entry.base + entry.length
+    }) || entries.iter().any(|entry| {
+        matches!(
+            entry.entry_type,
+            EntryType::USABLE
+                | EntryType::BOOTLOADER_RECLAIMABLE
+                | EntryType::EXECUTABLE_AND_MODULES
+                | EntryType::ACPI_RECLAIMABLE
+                | EntryType::ACPI_NVS
+        ) && first_page < entry.base + entry.length
+            && page_end > entry.base
+    }) {
+        return Err("unreserved-framebuffer");
+    }
+    Ok(Display {
+        address: VirtAddr(address),
+        physical: PhysAddr(physical),
+        layout,
+        bpp: fb.bpp(),
+    })
 }
 
 /// Select an explicit image personality from the locked ISO manifest, never OSABI.

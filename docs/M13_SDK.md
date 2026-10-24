@@ -234,14 +234,17 @@ allocation or reduce workload size; do not treat an output marker as proof
 that a compiler completed. GDB remote stubs, an interactive user debugger,
 general DWARF unwinding and compiler self-bootstrap remain future work.
 
-## Future GUI SDK delivery contract
+## Independent GUI SDK delivery contract
 
-M14.4 will implement a Rust GUI runtime behind a separately versioned C ABI,
-with a C header, C++ RAII/move-safe wrapper and safe Rust bindings. Its version
-namespace and capability requirements are independent of native syscall v1 and
-the package format. Opaque handles, explicit widths, ownership, allocation,
-thread/callback/event rules, error and version negotiation, and no unwinding
-across FFI must be specified and tested before GUI v1 is frozen. Packages will
-require the implemented GUI capability/runtime version; M13 rejects such
-requirements today. See [M14_GUI](M14_GUI.md) and DEV-002. This reservation
-ships no GUI implementation, placeholder runtime or claimed GUI acceptance.
+M14.4 implements a Rust GUI runtime with the separate `anova.gui.v1` C ABI,
+C declarations, C++ move-only RAII and safe Rust bindings. Version negotiation,
+opaque handles, fixed layouts, ownership, errors, event/thread rules and no
+unwinding are specified in [M14 runtime](M14_RUNTIME.md) and the
+[GUI SDK contract](../sdk/gui/README.md). The source-distributed companion SDK
+has its own checksum inventory and linkage/execution metadata.
+
+Native SDK 1.0.0 and ANOVAPK2 admission remain independent. GUI applications in
+the bounded M14.4 profile statically link the runtime and are built/run on an
+explicit native volume. ANOVAPK2 has no dynamic GUI service dependency admission;
+M13 still rejects undeclared GUI requirements. No native libc/std, public Linux
+GUI compatibility or process sandbox is implied by the companion library.

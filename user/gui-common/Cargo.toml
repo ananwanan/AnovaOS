@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+# Share checked experimental GUI transport calls among native single-threaded demos.
+[package]
+name = "anova-gui-user"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+
+[dependencies]
+anova-rt = { path = "../rt" }
+anova-gui = { path = "../../crates/gui" }

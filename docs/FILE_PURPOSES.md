@@ -7,9 +7,15 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 
 | File | Purpose |
 | --- | --- |
+| `crates/graphics/src/virgl.rs` | Encode bounded VirGL clear commands with integer UNORM conversion and independent host reference tests. |
+| `kernel/src/drivers/gpu.rs` | Own an optional polled modern virtio-gpu queue, fenced hardware readback, reset and DMA quarantine. |
+| `user/compositor/src/gpu.rs` | Exercise the server-only GPU API, guarded readback comparisons and user-selected CPU fallback. |
+| `xtask/src/gpu.rs` | Gate exact-device hardware rendering, full scanout comparisons, fault/reset recovery and headless CPU fallback. |
+| `docs/M14_GPU.md` | Define the bounded offscreen GPU profile, ownership, user interface, synchronization and fallback. |
+| `docs/validation/M14.5.md` | Record actual local hardware rendering, fallback, regression evidence and explicit limits. |
 | `.cargo/config.toml` | Routes host commands through xtask and confines kernel code-generation flags to its target. |
 | `.gitattributes` | Normalize first-party text to LF while preserving binary images and archives. |
-| `.github/workflows/boot.yml` | Gate host/user/kernel checks, complete QEMU regressions and a separate source-built guest compiler job. |
+| `.github/workflows/boot.yml` | Gate host/user/kernel checks, graphics/input/native composition and QEMU regressions, retain GUI evidence, and run a separate source-built guest compiler job. |
 | `.gitignore` | Ignore generated host/user builds, images, toolchains and local machine secrets. |
 | `AGENTS.md` | Define mandatory repository development, safety, validation and delivery conventions. |
 | `ARCHITECTURE.md` | Describe implemented subsystem boundaries and the planned operating-system architecture. |
@@ -58,7 +64,7 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `docs/M14_GUI.md` | Plan the Rust-native GUI, C ABI and C/C++/Rust SDK architecture, security boundaries, five stage gates and limits. |
 | `docs/REFERENCES.md` | Primary architecture, protocol, ABI and toolchain reference links. |
 | `docs/REQUIREMENTS.md` | Owner-mandated DEV-001 file-purpose rules and DEV-002 native GUI/SDK milestones. |
-| `docs/STATUS.md` | Record verified M0–M12 offline capabilities, the next M13 SDK task and unimplemented M14 GUI design. |
+| `docs/STATUS.md` | Record verified operating-system/SDK profiles, independent graphics stages and the next development task. |
 | `docs/TOOLCHAINS.md` | Distinguish guest C/C++/Rust application builds from online Cargo and optional compiler self-hosting. |
 | `docs/validation/M0-M1.md` | Historical local engineering/boot acceptance evidence and input hashes. |
 | `docs/validation/M2.md` | Historical local CPU/timer/trap validation evidence and limitations. |
@@ -81,7 +87,7 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `kernel/src/arch/x86_64/user.rs` | BSP saved GPR/segment/x87/SSE2 contexts, native SYSCALL and IRETQ transitions. Each user trap returns to the trusted scheduler root/stack; kernel code remains SIMD-free. |
 | `kernel/src/boot.rs` | Borrow retained Limine data. M3 allocates only USABLE RAM; bootloader data, original stacks/tables, modules, firmware and the early pool remain reserved. Retained native ELF modules support isolation tests; a tagged archive supplies the M6 root. |
 | `kernel/src/fs/mod.rs` | Bridge checked native user buffers to the shared VFS and polled canonical terminal. Calls run on the BSP at IF=0; blocking retains only a copied syscall frame, never a lock. |
-| `kernel/src/main.rs` | Boot owned memory/CPU/PCI state and run isolated native/Linux workloads with persistent storage and a shell. |
+| `kernel/src/main.rs` | Boot owned CPU/memory/devices, optional checked software graphics, and isolated user workloads. |
 | `kernel/src/mm/lock.rs` | Non-sleeping BSP locks. Order: memory manager before heap; the fixed heap never calls the frame allocator. IRQ/NMI/fatal paths must not take either. |
 | `kernel/src/mm/mod.rs` | BSP memory ownership: checked USABLE frames, fully owned table hierarchy, guarded stacks, reclaiming buddy heap and private process memory integration. |
 | `kernel/src/mm/uaccess.rs` | Copy bounded user bytes with page checks and REP MOVSB fault recovery; IF=0 pins shared mappings and no copy spans a scheduling/blocking boundary. |
@@ -126,6 +132,28 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `xtask/src/smoke.rs` | Require real CPU/memory/user/process evidence together with the QEMU exit result. |
 | `xtask/src/terminal.rs` | Drive ordinary UART editing/EOF, dynamic musl launch, real Ctrl+C interruption and volatile reboot checks. |
 
+## M14.1 software graphics files
+
+| File | Purpose |
+| --- | --- |
+| `crates/graphics/Cargo.toml` | Build the dependency-free no_std layout and software drawing library for kernel and host checks. |
+| `crates/graphics/src/lib.rs` | Validate bounded RGB modes, provide a fixed cursor raster and render clipped pixels, rectangles and blits into caller-owned buffers. |
+| `crates/graphics/src/tests.rs` | Check RGB packing, bounds, canaries, overflow, clipping, literal cursor shape and deterministic pattern independently of hardware. |
+| `kernel/src/graphics.rs` | Validate display mappings, present/reclaim the boot buffer, manage the diagnostic cursor and copy checked user compositor damage. |
+| `xtask/src/graphics.rs` | Verify actual QMP pixels, bounded capture parsing, serial recovery and clean shutdown with and without VGA. |
+| `docs/validation/M14.1.md` | Record actual graphics/negative tests, artifacts and the scope of preserved local regression checks. |
+
+## M14.2 input and cursor files
+
+| File | Purpose |
+| --- | --- |
+| `crates/input/Cargo.toml` | Build dependency-free no_std PS/2 decoding and bounded diagnostic event delivery for kernel and host checks. |
+| `crates/input/src/lib.rs` | Normalize physical set-1 keys, three-byte mouse packets, bounded queue/reset/reconnect semantics and clipped pointer state without allocation or GUI policy. |
+| `crates/input/src/tests.rs` | Check key/modifier/special-sequence state, full nine-bit motion, malformed/overflow recovery, consumer lifecycle and pointer bounds. |
+| `kernel/src/drivers/input.rs` | Own i8042 setup/polling/expiry, hand off exclusive physical events to the admitted user compositor, and retain diagnostic/lifecycle checks. |
+| `xtask/src/input.rs` | Inject QMP keyboard/mouse sequences, compare all cursor/background pixels and require missing-device serial recovery and clean shutdown. |
+| `docs/validation/M14.2.md` | Record actual polled PS/2/cursor gate results, bounded recovery cases, artifacts and regression limits. |
+
 ## M7 storage and editor files
 
 | File | Purpose |
@@ -137,7 +165,7 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `crates/storage/tests/ext2.rs` | Verify on-disk ext2 bytes, indirection, sparse data, exhaustion, reboot and injected I/O failures. |
 | `docs/M7_STORAGE.md` | Define PCI/DMA/queue ownership, ext2 bounds, native durability ABI, disk images and source editor. |
 | `docs/validation/M7.md` | Record actual M7 host/guest/editor/reboot/error checks, integrity evidence and remaining limits. |
-| `kernel/src/drivers/mod.rs` | Hand off validated boot PCI mappings to the one BSP-owned persistent VFS device. |
+| `kernel/src/drivers/mod.rs` | Own BSP device initialization, persistent VFS handoff and optional scheduler-polled PS/2 input. |
 | `kernel/src/drivers/pci.rs` | Enumerate PCI bridges/functions and admit bounded modern virtio MMIO capabilities/BARs. |
 | `kernel/src/drivers/virtio.rs` | Own a coherent split block queue, checked transfers/FLUSH, timeout, reset and DMA quarantine. |
 | `user/editor/Cargo.toml` | Build the standalone native serial source editor with the no_std SDK. |
@@ -289,3 +317,56 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `sdk/native-v1.ld` | Link SDK user images with distinct W^X pages and valid nonempty load segments under GNU ld and rust-lld. |
 | `xtask/src/app.rs` | Validate external package hashes, build application images, launch isolated disks and verify the public SDK installation workflow. |
 | `sdk/templates/rust/Cargo.toml` | Define the exported standalone no_std Rust project with local runtime and offline dependency paths. |
+
+## M14.3 isolated native composition
+
+| File | Purpose |
+| --- | --- |
+| `crates/gui/Cargo.toml` | Define the no_std internal GUI wire and software composition library. |
+| `crates/gui/src/lib.rs` | Expose bounded user-space window policy and the experimental transport contract. |
+| `crates/gui/src/wire.rs` | Serialize fixed-width versioned GUI requests/replies without pointers or padding. |
+| `crates/gui/src/transport.rs` | Define copied kernel message, hardware-event and checked scanout layouts. |
+| `crates/gui/src/policy.rs` | Validate private surfaces and implement damage, stacking, movement, resizing and focus. |
+| `crates/gui/src/tests.rs` | Exercise adversarial wire packets, ownership, quotas, damage and routed input as pure logic. |
+| `kernel/src/gui.rs` | Authenticate executable/server and process/client identities, copy bounded IPC/scanout and clean up lifetimes. |
+| `user/compositor/Cargo.toml` | Build the isolated Rust native software window compositor. |
+| `user/compositor/src/main.rs` | Receive authenticated packets, compose private surfaces and route hardware input in user space. |
+| `user/gui-common/Cargo.toml` | Share internal native GUI transport helpers across the compositor and test programs. |
+| `user/gui-common/src/lib.rs` | Wrap synchronous copied GUI packets and preserve explicit pointer safety contracts. |
+| `user/gui-client/Cargo.toml` | Build independent native window clients and adversarial transport fixtures. |
+| `user/gui-client/src/main.rs` | Upload private red/blue surfaces, handle focused input and test crash/queue/ownership boundaries. |
+| `user/gui-test/Cargo.toml` | Build the native process supervisor for actual GUI lifecycle acceptance. |
+| `user/gui-test/src/main.rs` | Spawn/reap isolated windows and compositor sessions, test quotas and retain COM1 recovery. |
+| `xtask/src/gui.rs` | Inject actual QMP input and compare native windows, failure recovery and every scanout pixel. |
+| `docs/M14_COMPOSITOR.md` | Specify experimental GUI authority, copied surfaces, damage, input and restart semantics. |
+| `docs/validation/M14.3.md` | Record actual M14.3 execution, scanouts, fault/OOM recovery and regression evidence. |
+
+## M14.4 Rust GUI runtime and independent SDKs
+
+| File | Purpose |
+| --- | --- |
+| `crates/gui-runtime/Cargo.toml` | Package the dependency-free user-space GUI C ABI and safe Rust library. |
+| `crates/gui-runtime/src/lib.rs` | Implement frozen GUI v1 FFI, bounded widgets, UTF-8 storage and Rust handle ownership. |
+| `crates/gui-runtime/src/runtime.rs` | Own copied native RPC, private raster lifetime and ordered loss-reset input delivery. |
+| `crates/gui-runtime/src/render.rs` | Clip RGB primitives and rasterize original ASCII glyphs with Unicode replacement boxes. |
+| `crates/gui-runtime/src/tests.rs` | Check ABI rejection, lifecycle, rendering, UTF-8, resize and queue-pressure recovery. |
+| `sdk/gui/generate.py` | Generate and verify fixed GUI v1 C layouts, capabilities and function declarations. |
+| `sdk/gui/include/anova_gui.h` | Declare generated fixed-width GUI v1 C calls and compile-time layout assertions. |
+| `sdk/gui/include/anova_gui.hpp` | Transfer GUI window ownership with exception-free C++ move-only RAII. |
+| `sdk/gui/README.md` | Specify GUI ABI versions, ownership, errors, linkage and bounded guest SDK usage. |
+| `tests/guest/gui/main.c` | Compile an independent native C GUI client with physical key and button handling. |
+| `tests/guest/gui/main.cpp` | Compile an independent C++ GUI client and exercise move/RAII ownership. |
+| `tests/guest/gui/main.rs` | Compile an independent safe Rust GUI client with equivalent visible behavior. |
+| `tests/guest/gui/contract.h` | Exercise real C/C++ version, UTF-8, lifecycle, layout and capacity failure contracts. |
+| `tests/guest/gui/contract.c` | Run an independent guest-compiled ABI boundary probe with a real compositor. |
+| `tests/guest/gui/fault.c` | Deliberately fault a GUI caller pointer to verify process isolation and cleanup. |
+| `tests/guest/gui/note.rs` | Provide a bounded editable Rust GUI note and explicit private clipboard copying. |
+| `tests/guest/gui/terminal.rs` | Run keyboard-entered native commands through a pre-GUI helper and render pipe output. |
+| `user/gui-link.rs` | Link independent guest client objects with the Rust GUI library, native CRT and panic boundary. |
+| `user/gui-run/Cargo.toml` | Package the native compositor/client lifecycle supervisor for guest SDK applications. |
+| `user/gui-run/src/main.rs` | Launch isolated GUI processes and require actual expected wait statuses and reaping. |
+| `user/linux/gui-build.c` | Run real guest GCC/G++/rustc and publish native GUI executables only after successful linking. |
+| `xtask/src/gui_sdk.rs` | Verify guest edits/builds, physical GUI input, literal scanout, faults and retained reboot hashes. |
+| `xtask/src/gui_sdk_build.rs` | Export an independent checksummed source SDK and package its guest compiler/display image. |
+| `docs/M14_RUNTIME.md` | Specify implemented GUI ABI, rendering, event ownership and native guest build boundaries. |
+| `docs/validation/M14.4.md` | Record actual independent language, graphical terminal, fault and reboot validation evidence. |

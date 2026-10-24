@@ -1,7 +1,7 @@
 <!-- Track milestone dependencies, implementation checklists and acceptance criteria. -->
 # 开发路线与阶段验收
 
-日期：2026-10-23。**M0–M12（受限离线与联网范围）已通过本地 q35/TCG 验收；M13–M15 尚未实现，外设 IRQ 路由启用待对应驱动。** 证据见 [M12 验证记录](docs/validation/M12.md) 与 [STATUS](docs/STATUS.md)。[FIRST_TASK](docs/FIRST_TASK.md) 记录 M0/M1 原始实现顺序；当前 M2 边界见 [CPU 基线](docs/M2_CPU.md)。
+日期：2026-10-24。**M0–M13（受限离线与联网范围）及 M14.1 软件显示已通过本地 q35/TCG 验收；M14.2 输入与游标已通过本地 q35/TCG 验收；M14.3 用户态合成器已通过本地 q35/TCG 验收；M14.4 GUI runtime/三语言 SDK 已通过本地验收；M14.5 已通过有界硬件清屏/读回及 CPU fallback 的本地验收，M15 尚未实现，外设 IRQ 路由启用待对应驱动。** 证据见 [M13 验证记录](docs/validation/M13.md)、[M14.1 验证记录](docs/validation/M14.1.md)、[M14.2 验证记录](docs/validation/M14.2.md)、[M14.3 验证记录](docs/validation/M14.3.md)、[M14.4 验证记录](docs/validation/M14.4.md)、[M14.5 验证记录](docs/validation/M14.5.md) 与 [STATUS](docs/STATUS.md)。[FIRST_TASK](docs/FIRST_TASK.md) 记录 M0/M1 原始实现顺序；当前 M2 边界见 [CPU 基线](docs/M2_CPU.md)。
 
 ## 阶段总览
 
@@ -20,8 +20,8 @@
 | M10 | 网络和受控包安装 | M7、M9 | 本地受控 IPv4/TLS/包验收通过 |
 | M11 | 系统内 GCC/G++ 应用开发 | M7–M9；可先离线 | 本地离线 C/C++/make 验收通过 |
 | M12 | 系统内 Rust/Cargo 应用开发 | M11、M9；联网依赖 M10 | 离线与受限 HTTPS registry/Git 本地验收通过；原生端口独立推进 |
-| M13 | 可发布的 SDK 与应用包 | M4 基础 SDK、M11/M12 | 未开始 |
-| M14 | Rust 图形桌面与 C/C++/Rust GUI SDK（M14.1–M14.5） | M9、M13；具体依赖见 M14 文档 | 五阶段均未开始 |
+| M13 | 可发布的 SDK 与应用包 | M4 基础 SDK、M11/M12 | 本地 SDK/包/诊断验收通过 |
+| M14 | Rust 图形桌面与 C/C++/Rust GUI SDK（M14.1–M14.5） | M9、M13；具体依赖见 M14 文档 | M14.1–M14.4 本地通过；M14.5 有界硬件清屏/读回与 CPU fallback 本地通过 |
 | M15 | 可选的工具链/内核自举 | M11–M13，资源满足 | 未开始 |
 
 可以交叉推进互不依赖的工作，但不得跳过实际前置条件。网络包获取、图形桌面和完整自举不阻塞第一次离线应用开发。
@@ -230,7 +230,7 @@ are outside this accepted profile.
 
 ## M14：Rust 图形桌面与三语言 GUI SDK
 
-**设计已确定，尚未实现。** 完整子阶段任务、体系边界、错误/所有权模型、
+**M14.1–M14.4 已通过本地验证；M14.5 有界硬件清屏/读回与 CPU fallback 已通过本地验证。** 完整子阶段任务、体系边界、错误/所有权模型、
 验收负例与候选目录见 [M14 GUI 专项设计](docs/M14_GUI.md)。
 采用 Rust 实现用户态 compositor、GUI runtime 和稳定 C ABI；
 提供 C 头文件、C++ RAII SDK、Rust 安全 SDK，三者共享一个 API/协议语义。
@@ -239,51 +239,81 @@ are outside this accepted profile.
 
 ### M14.1：显示与软件 framebuffer
 
-- [ ] 校验 Limine framebuffer 的格式、尺寸、pitch、映射所有权和边界，支持受限格式。
-- [ ] 软件像素、矩形、位图、裁剪、离屏缓冲和画面提交；保留串口故障诊断。
-- [ ] QEMU 可见确定性测试图形；像素校验、越界/不支持格式、超时和故障负例通过。
+- [x] 校验 Limine framebuffer 的格式、尺寸、pitch、映射所有权和边界，支持受限格式。
+- [x] 软件像素、矩形、位图、裁剪、离屏缓冲和画面提交；保留串口故障诊断。
+- [x] QEMU 可见确定性测试图形；像素校验、越界/不支持格式、超时和故障负例通过。
 
 **验收：** 正确显示且边界安全，可稳定复现；不声称已有桌面或 GPU 加速。
 
+本地 QEMU 8.2.2 standard VGA/800×600×32：48 万像素与固定 checksum 全部一致，
+显存读回、临时堆回收、无显示设备 fallback、串口恢复和正常关机通过。
+24/32 位 RGB/BGR 与裁剪边界另由宿主测试覆盖；无 vblank/page-flip 保证。
+命令与证据见 [M14.1 验证](docs/validation/M14.1.md)。
+
 ### M14.2：输入事件与鼠标
 
-- [ ] 先验证 QEMU 输入设备（可先 PS/2），将键盘、鼠标、按键状态标准化为事件。
-- [ ] 游标绘制、裁剪、焦点和有界事件队列；设备缺失、溢出、断开可恢复。
-- [ ] 外设 IRQ 仅在真实验证路由/EOI 后启用；如先轮询需明确记录限制。
+- [x] QEMU i8042 原生 set-1 键盘与 ID-0 三字节鼠标，标准化物理按键、重复、按钮与九位相对移动。
+- [x] 64 项事件队列、7×9 裁剪游标及单一诊断消费者；溢出、坏输入和消费者断开/重连清除状态。
+- [x] 调度器每轮最多读取 64 字节，外设 IRQ 继续屏蔽；初始化使用 PM 时钟及次数上限，半包超时分设备检查。
 
 **验收：** QEMU 输入注入能得到顺序一致的按键/移动/按钮事件和光标反馈；
 不能因此宣称实机 USB 可用。
 
+已实现 `cargo xtask input-test`：标准 VGA、无显示设备和关闭 i8042 三次启动；
+QMP 注入按键/重复/扩展键/按钮，中心与四角画面逐像素比较，测试镜像检查队列溢出、
+坏输入、消费者断开/重连与真实控制器端口停用/重新初始化，均要求串口恢复和正常关机。
+本地三次启动验收通过，具体结果与回归范围由 [M14.2 验证](docs/validation/M14.2.md) 单独记录。
+物理按键不转换为文本；焦点仅指固定内核诊断目标，用户态窗口和输入路由属于 M14.3。
+不声称 USB、物理热插拔、外设 IRQ、真实硬件或 GUI SDK 支持。
+
 ### M14.3：用户态窗口合成器
 
-- [ ] 构建独立 Rust compositor 进程和有版本/所有权约束的 IPC、surface/缓冲接口。
-- [ ] 软件窗口合成、重绘区域、叠放顺序、移动、缩放、焦点与输入分发。
-- [ ] 两个隔离用户应用并存；错误 buffer、资源耗尽、客户端崩溃和 compositor 失败可诊断/回收。
+- [x] 构建独立 Rust compositor 进程和有版本/所有权约束的 IPC、surface/缓冲接口。
+- [x] 软件窗口合成、重绘区域、叠放顺序、移动、缩放、焦点与输入分发。
+- [x] 两个隔离用户应用并存；错误 buffer、资源耗尽、客户端崩溃和 compositor 失败可诊断/回收。
 
 **验收：** 至少两个独立进程的窗口可正确遮挡、移动和分发事件，故障不破坏
 内核或其他进程。
 
+本地 `cargo xtask gui-test` 已验证三个启动配置、两个隔离用户窗口、真实 QMP 焦点/移动/缩放、
+八张逐像素截图、客户端与合成器各自真实 #UD、重连及串口恢复。内核仅提供受检复制传输，
+每客户端一个 32×24 至 320×240 RGB surface，最多四个连接；实际堆耗尽回滚另有内核检查。
+窗口内容使用有界分块复制，无共享映射或原子多块提交。见 [M14.3 设计](docs/M14_COMPOSITOR.md)
+与 [验证](docs/validation/M14.3.md)。
+
 ### M14.4：Rust GUI runtime 与 C/C++/Rust SDK
 
-- [ ] Rust 用户态控件、布局、字体/文本、绘图、事件循环、图形终端和首个原生 GUI app。
-- [ ] 冻结版本化 C ABI：`extern "C"`、`#[repr(C)]`、固定宽度数据、
+- [x] Rust 用户态控件、布局、字体/文本、绘图、事件循环、图形终端和首个原生 GUI app。
+- [x] 冻结版本化 C ABI：`extern "C"`、`#[repr(C)]`、固定宽度数据、
       不透明句柄、错误码、生命周期、线程/回调语义；不跨 ABI unwind。
-- [ ] 提供 C 头文件/链接库、C++ RAII 封装和 Rust 安全 API，以及各语言构建模板。
-- [ ] 受测 guest 中分别编辑、编译、链接、运行 C、C++、Rust GUI 示例；
+- [x] 提供 C 头文件/链接库、C++ RAII 封装和 Rust 安全 API，以及各语言构建模板。
+- [x] 受测 guest 中分别编辑、编译、链接、运行 C、C++、Rust GUI 示例；
       SDK 版本不匹配、句柄失效、非法参数与故障资源回收均验证。
 
 **验收：** 三种语言都能独立打开窗口、处理事件、绘制并退出；
 宿主交叉编译成功不等于系统内开发验收。依赖 M11/M12/M13 的实际能力。
 
+已通过 `cargo xtask gui-sdk-test`：独立 C/C++/Rust guest 编辑、构建和真实键鼠事件；
+Rust note 与交互式 echo/pwd 图形终端；ABI/UTF-8/句柄/限额负例，真实用户页故障，
+失败构建保留与两次启动文件哈希一致。28 张实际截图校验独立像素样本，
+不将抽样说成全屏逐像素比较。边界见 [M14 runtime](docs/M14_RUNTIME.md) 与
+[验收](docs/validation/M14.4.md)；字体采用原创 ASCII 位图及 Unicode 替代框，
+剪贴板为进程私有，终端无 PTY/ANSI，未实现动态 GUI 服务包准入。
+
 ### M14.5：可选 GPU 硬件加速
 
-- [ ] 评估 virtio-gpu 等设备，严格区分 2D scanout 与真正的 GPU 绘制加速。
-- [ ] 实现/验证选定 GPU 驱动、用户态渲染接口、显存/共享缓冲、同步、fence 和异常恢复。
-- [ ] 用真实 GPU 渲染路径对照软件渲染结果，并验证设备失效后的 CPU fallback。
-- [ ] 按实测记录性能和软硬件要求，不将 framebuffer 或 virtio-gpu 2D 显示宣称为 Vulkan/OpenGL。
+- [x] 选定现代 virtio-gpu/VirGL，有界 GPU render-target clear/读回与 2D scanout 分别验收。
+- [x] 实现现代 PCI/controlq 驱动、合成器专用 clear/readback 接口、私有 DMA backing、fence 与真实 timeout/reset；不暴露共享用户映射或原始命令。
+- [x] 实际设备报告 RTX 4060 Ti/D3D12；四种 64×64 和一组 7×5 颜色读回、超时 CPU fallback、重置后 GPU 重建与无设备/仅 2D 设备路径通过。
+- [x] 记录 QEMU/Mesa/VirGL 版本、实际 renderer、提交与读回延迟和逐像素结果；不声称桌面加速、shader 或 guest OpenGL/Vulkan。
 
 **验收：** 至少一条经验证的真实 GPU 渲染路径与正常软件回退；
 如仅实现显示扫描输出，M14.5 仍未完成。
+
+本地有界 profile 已通过：GPU 仅做离屏清屏/读回，画面仍由 CPU 复制到保留的 VGA framebuffer，
+普通桌面仍使用软件合成；未建立性能加速、shader draw、物理 GPU 驱动或 reset 拒绝后的恢复。
+接口、DMA 生命周期与适用边界见 [M14 GPU](docs/M14_GPU.md)，实测证据见
+[M14.5 验证](docs/validation/M14.5.md)。
 
 其他计划：SMP（per-CPU、TLB shootdown、中断亲和性）、实机 ACPI/电源/
 NVMe/AHCI/USB、glibc 指定版本、Wayland/X11/SDL/Qt 等 Linux GUI 兼容，

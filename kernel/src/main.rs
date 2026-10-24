@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #![no_std]
 #![no_main]
-//! Boot CPU/memory/PCI and UTC time, then run native/Linux workloads with persistent storage and a shell.
+//! Boot owned CPU/memory/devices, optional checked graphics/PS/2, and isolated user workloads.
 
 extern crate alloc;
 
@@ -10,6 +10,10 @@ mod arch;
 mod boot;
 mod drivers;
 mod fs;
+#[cfg(feature = "graphics")]
+mod graphics;
+#[cfg(feature = "gui")]
+mod gui;
 mod mm;
 mod net;
 mod serial;
@@ -107,6 +111,16 @@ extern "C" fn kernel_main(timer_port: u64, timer_mask: u64) -> ! {
     assert!(cpu::flags() & (1 << 9) != 0, "IRET failed to restore IF");
     PHASE.store(6, Ordering::Relaxed);
     mm::inject_fault();
+    #[cfg(feature = "graphics")]
+    {
+        graphics::show();
+        drivers::input::init(anova_platform::acpi::PmTimer {
+            port: timer_port as u16,
+            mask: timer_mask as u32,
+        });
+    }
+    #[cfg(feature = "gui-test")]
+    cpu::without_interrupts(gui::verify_transport);
     task::start();
     serial::write(format_args!(
         "[BOOT:OK] M9 native/Linux runtime processes reclaimed; BSP idle, interrupts enabled\n"

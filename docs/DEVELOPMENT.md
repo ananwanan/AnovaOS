@@ -308,3 +308,184 @@ SDK templates retain debug symbols; compact package payloads have separate
 hashes. Kernel resource logs describe global counters, not process accounting.
 Preserve all M0–M12 gates alongside the four new SDK/workflow/package/diagnostic
 gates. Remote CI results remain separate from local evidence.
+
+## M14.1–M14.2 software display and input
+
+```sh
+cargo xtask graphics-image
+cargo xtask graphics-test
+cargo xtask input-test
+cargo xtask run --graphics
+```
+
+The optional `graphics` kernel feature draws a CPU test pattern; ordinary serial
+and compiler images retain their existing profile. `graphics-image` produces
+`build/images/anova-graphics.iso`. Interactive `run --graphics` needs a working
+GTK display and retains the COM1 shell on standard input/output. Graphics are
+currently limited to the normal recovery image, independently of compiler images.
+
+`graphics-test` runs headlessly with QEMU standard VGA, captures an actual QMP
+screendump and compares every visible pixel with the CPU reference. A separate
+boot without VGA must retain serial recovery. The shell remains the text
+diagnostic fallback; this stage does not provide a graphical terminal or fonts.
+See [M14 GUI](M14_GUI.md) for format, memory, cache and stage boundaries and
+[M14.1 validation](validation/M14.1.md) for actual local results.
+
+The same opt-in graphics profile also initializes the QEMU i8042 keyboard in
+native scan-code set 1 and its standard ID-0 three-button mouse. Input delivery
+is temporary scheduler polling, bounded to 64 bytes and a 64-event queue per
+pass. External device IRQs remain masked. Physical input goes to one diagnostic
+consumer and never becomes shell text; keep COM1 available for all commands.
+The cursor saves/restores a fixed 7×9 footprint and clips at all four edges;
+input/cursor storage allocates no heap. It first appears on a pointer event,
+leaving the original boot screenshot intact for `graphics-test`.
+
+`input-test` builds `build/images/anova-input.iso` with `graphics,input-test`.
+Its three 60-second-watchdog scenarios use standard VGA, `-vga none` and
+`-machine i8042=off`. QMP injects ordered key/repeat/extended/modifier, pointer
+and three-button sequences. The display scenario saves center/four-corner PPMs
+and compares all 480,000 pixels, including restored background. The test image
+also checks bounded queue overflow, malformed input, diagnostic consumer detach/
+reconnect, independent PM-timer partial-sequence expiry and real controller-port
+disable/reinitialization before readiness.
+Every boot must retain COM1 command recovery and clean ACPI shutdown.
+
+Artifacts are under `build/input/`, including per-scenario serial,
+QMP/QEMU logs, result files, PPM images and SHA-256 evidence. The local
+three-boot gate passed; see [M14.2 validation](validation/M14.2.md).
+CI retains `build/input/`; remote execution remains separate from local evidence.
+These cases establish neither physical hotplug nor USB, external IRQ, real
+hardware or user-space GUI routing. Preserve `graphics-test`, `input-test`,
+their kernel feature checks and all earlier gates.
+
+## M14.3 native window composition
+
+```sh
+cargo xtask gui-image
+cargo xtask gui-test
+cargo xtask run --gui
+```
+
+`gui-image` builds `build/images/anova-gui.iso` with `graphics,gui`.
+The COM1 shell remains the entry point: type `gui-test` to spawn the independent
+user compositor and two native clients. Click for focus, title-drag for movement,
+and bottom-right drag for resize. The supervised demonstration uses X in the
+red window to fault that client, F12 to fault/restart the compositor and F11
+in the restarted session to close it and return to the shell. Interactive GTK
+availability is separate from the accepted headless gate.
+
+`gui-test` builds `build/images/anova-gui-test.iso` with
+`graphics,gui,gui-test`. Three boots cover standard VGA/i8042, no VGA, and
+no i8042. The kernel test profile exhausts the actual heap and checks connection
+rollback/reuse; ordinary interactive images omit that pressure injection.
+Actual QMP input drives window focus, movement, resize and both isolated user
+faults. Eight screenshots compare all pixels against a separate host reference;
+every boot requires COM1 recovery and clean ACPI shutdown. Results, hashes and
+serial/QMP/scanout artifacts stay in `build/gui/`. The CI gate retains that
+folder; local results do not claim a remote CI run.
+
+Preserve all previous gates alongside `gui-test`. The internal syscall transport
+is separate from native v1 and the future GUI C ABI. Each client owns copied
+private pixels, one bounded window and a bounded mailbox; no device mappings
+are exported. See [M14_COMPOSITOR](M14_COMPOSITOR.md) for exact ownership,
+backpressure and restart semantics and [M14.3 validation](validation/M14.3.md)
+for actual verification and exclusions. M14.4 GUI runtime/SDKs and M14.5 GPU
+rendering remain separate stages.
+
+## M14.4 GUI runtime and independent language SDKs
+
+The GUI source SDK has its own `anova.gui.v1` C library ABI. The Rust runtime
+implements text, layout, buttons, text fields, event polling and private
+clipboard storage. Generated C declarations, move-only C++ RAII and safe Rust
+wrappers share those semantics. The compositor and kernel isolation from
+M14.3 remain in use; no Linux GUI framework or native `std` port is added.
+See [runtime contract](M14_RUNTIME.md) and [GUI SDK](../sdk/gui/README.md).
+
+```sh
+cargo xtask gui-sdk
+cargo xtask gui-sdk-image
+cargo xtask gui-sdk-test
+cargo xtask gui-sdk-replay # Recheck retained outputs after a successful build gate
+cargo xtask root-image build/disks/gui-dev.ext2
+cargo xtask run --gui-sdk --disk build/disks/gui-dev.ext2
+```
+
+`gui-sdk` exports a checksummed source distribution to
+`build/sdk/anova-gui-sdk-1.0.0`. Copy it before independently building its
+`crates/gui-runtime/Cargo.toml`, so generated Cargo outputs do not enter the
+immutable release. The GUI image requires the prepared M11/M12 compiler
+profiles and uses 3 GiB guest memory, one BSP, standard VGA and polled PS/2.
+The interactive command opens QEMU GTK; headless acceptance uses QMP.
+Use a native data disk, whose immutable marker is `anova.native.v1`.
+Compiler executables remain explicitly Linux-personality initramfs entries.
+
+Inside that GUI development image:
+
+```sh
+cd /persist
+cp /gui/templates/main.c main.c
+gui-build c
+gui-run /persist/gui-c
+```
+
+Type physical `a`, click the button, then type `q` to close the demo. Press F11
+to stop its compositor and return to the serial shell. For C++ or Rust, copy
+`main.cpp` or `main.rs` and select `gui-build cpp` or `gui-build rust`; run the
+corresponding `/persist/gui-cpp` or `/persist/gui-rust`. `gui-build note` and
+`gui-build terminal` accept `note.rs` and `terminal.rs`. The Rust graphical
+terminal executes `echo TEXT` and `pwd` through a pre-GUI helper and real pipes;
+Enter submits the field and `q` in an empty field closes/reaps it. This bounded
+terminal does not implement a PTY or ANSI escape sequences.
+
+GCC/G++ compile independent freestanding objects; guest rustc compiles the
+runtime rlib and links the objects with native startup/intrinsics/panic code.
+The generated application ABI follows the native disk policy. No runtime libc,
+C++ exceptions, dynamic Rust standard library or host-prebuilt GUI client is
+used. A failed compilation retains the preceding runnable executable.
+
+`gui-sdk-replay` rechecks the successful build gate's exact retained ISO, source
+and native executable hashes, then runs another physical-input/scanout boot
+without recompilation. It requires successful build evidence and records a
+separate replay result. It cannot replace the original compilation gate.
+
+The gate saves each source through the actual serial editor, compiles it in
+guest, verifies physical input and literal scanout samples, checks a real client
+page fault and both child wait statuses, then compares exact source/ELF hashes
+across clean shutdown/reboot. Run image-building tests sequentially: their
+verified `build/apps` snapshots are intentionally invalidated by concurrent
+writers. [M14.4 validation](validation/M14.4.md) records actual results and the
+boundary between host checks, QEMU verification and untested physical hardware.
+
+## M14.5 bounded hardware clear/readback
+
+```sh
+cargo xtask gpu-test
+cargo xtask gpu-fallback-test
+cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features gpu -- -D warnings
+cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features gpu-test -- -D warnings
+```
+
+Both commands build `build/images/anova-gpu.iso` with `graphics,gui,gpu-test`.
+The full gate requires a working GTK/OpenGL environment and a recognized actual
+hardware renderer. It keeps standard VGA for recovery and attaches a secondary
+`virtio-gpu-gl-pci`. The compositor is launched from the real COM1 shell to
+render and compare offscreen pixels, inject a lost doorbell and demonstrate
+CPU fallback and subsequent GPU reuse. `gpu-fallback-test` requires no GUI/GL
+environment: it covers a 2D-only GPU and no GPU with the same user interface.
+
+On this WSLg host the full gate selects Gallium `d3d12` and a Wayland GTK backend
+for the QEMU child when the corresponding environment is available. Explicit
+`GALLIUM_DRIVER`/`GDK_BACKEND` settings are preserved. `ANOVA_GPU_DISPLAY` may
+select another QEMU GL display, for example `egl-headless` on a Linux host with
+a suitable DRM render node. The full gate reads the exact device's capset
+renderer and rejects software/unknown renderers; a successful external GL probe
+or mere presence of `/dev/dxg` does not establish hardware acceptance.
+
+The result directory `build/gpu/` contains per-boot results, exact commands,
+source ELF/ISO hashes, host graphics package versions, serial/QMP logs and full
+800×600 PPM comparisons. The full gate's successful output remains separate
+from the headless fallback result. Run image-building gates sequentially.
+Only headless fallback and kernel feature checks are added to ordinary CI;
+the hardware gate must be run explicitly on a supported host. See
+[M14 GPU](M14_GPU.md) and [M14.5 validation](validation/M14.5.md) for ownership,
+latency measurements and the boundary between GPU drawing and CPU presentation.

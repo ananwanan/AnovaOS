@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Gate SDK/packages/diagnostics, native/Linux runtime and source-built C/locked upstream Rust tools.
+# Gate software GUI, bounded GPU CPU fallback, physical input, SDKs and guest development tools.
 name: Bare-metal boot
 
 on:
@@ -32,7 +32,7 @@ jobs:
       - name: Check file-purpose explanations
         run: cargo xtask check-files
       - name: Check host tools
-        run: cargo clippy --locked -p xtask -p anova-platform -p anova-memory -p anova-abi -p anova-elf -p anova-sched -p anova-vfs -p anova-storage --all-targets -- -D warnings
+        run: cargo clippy --locked -p xtask -p anova-platform -p anova-memory -p anova-abi -p anova-elf -p anova-sched -p anova-vfs -p anova-storage -p anova-graphics -p anova-input -p anova-gui -p anova-gui-runtime --all-targets -- -D warnings
       - name: Check and build native Rust/C applications
         run: |
           cargo xtask check-apps
@@ -44,6 +44,12 @@ jobs:
           cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features qemu-test -- -D warnings
           cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features test-double-fault -- -D warnings
           cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features test-no-execute -- -D warnings
+          cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features graphics -- -D warnings
+          cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features input-test -- -D warnings
+          cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features graphics,gui -- -D warnings
+          cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features graphics,gui,gui-test -- -D warnings
+          cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features gpu -- -D warnings
+          cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features gpu-test -- -D warnings
       - name: Test host logic
         run: cargo xtask test-host
       - name: Build the kernel
@@ -56,6 +62,14 @@ jobs:
         run: cargo xtask verify
       - name: Verify real serial input and volatile tmpfs across boots
         run: cargo xtask terminal-test
+      - name: Verify software graphics, QMP screenshot and serial fallback
+        run: cargo xtask graphics-test
+      - name: Verify bounded GPU admission and headless CPU fallback
+        run: cargo xtask gpu-fallback-test
+      - name: Verify polled PS2 keyboard, pointer, cursor pixels and device fallback
+        run: cargo xtask input-test
+      - name: Verify isolated native windows, physical input, redraw and compositor recovery
+        run: cargo xtask gui-test
       - name: Verify persistent sources, binaries, clean shutdown and device failures
         run: cargo xtask persistence-test
       - name: Verify controlled virtio networking, DNS and socket boundaries
@@ -73,7 +87,11 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: qemu-boot-evidence
-          path: build/logs/
+          path: |
+            build/logs/
+            build/input/
+            build/gui/
+            build/gpu/
           if-no-files-found: ignore
 
 
@@ -107,6 +125,10 @@ jobs:
           cargo xtask rust-runtime-test
       - name: Verify guest Rust, offline Cargo, build scripts, C FFI, macros and reboot
         run: cargo xtask rust-test
+      - name: Verify guest-built native GUI SDK clients, scanout, input and reboot
+        run: |
+          cargo xtask gui-sdk-test
+          cargo xtask gui-sdk-replay
       - name: Verify online Cargo, strict TLS, transport failures and offline rebuild
         run: cargo xtask rust-online-test
       - name: Upload compiler build and guest evidence
@@ -122,4 +144,5 @@ jobs:
             build/toolchain/archive.sha256
             build/rust/stage.sha256
             build/rust/archive.sha256
+            build/gui-sdk/
           if-no-files-found: ignore

@@ -239,10 +239,14 @@ native SDK 从 M4 的 `no_std` 应用与最小 runtime 开始。开发者可先�
 
 系统软件包安装在约定根目录；编译器有独立 sysroot；`/tmp`、`/dev`、必要的 `/proc` 接口和动态解释器路径按实测需要提供。包内容和内核不是同一种发布单元。
 
-## 9. Planned M14 graphical userland and SDK architecture
+## 9. M14 display/input and planned graphical userland/SDK architecture
 
-The GUI is **planned, not implemented**. The authoritative design and the
-independently accepted M14.1–M14.5 stages are in
+The optional **M14.1 software display and M14.2 polled PS/2 input/cursor are
+implemented and locally verified**. The M14.3 isolated user-space compositor
+and the M14.4 GUI runtime/SDK are locally accepted. M14.5 now verifies a bounded
+hardware offscreen clear/readback path with CPU fallback; ordinary desktop
+composition remains software-rendered. The authoritative design and the
+independently gated M14.1–M14.5 stages are in
 [M14_GUI](docs/M14_GUI.md), with stage status in [ROADMAP](ROADMAP.md)
 and [STATUS](docs/STATUS.md).
 
@@ -274,8 +278,9 @@ kernel IPC, mappings, display and input drivers
 
 The kernel retains buffer/memory permissions, IPC isolation, display and input
 device access; windows, focus, text rendering, widgets and the desktop shell
-belong to user-space components. The compositor authenticates clients and
-owns presentation, stacking, input routing, buffer lifetime and quotas.
+belong to user-space components. The kernel authenticates process identities;
+the compositor validates window ownership and owns presentation, stacking,
+input routing, buffer lifetime and quotas.
 Clients do not receive unrestricted framebuffer mappings. All display
 formats/strides, damage regions, memory lengths, object handles, concurrency,
 events and crash/restart paths must be bounded, versioned and verified.
@@ -289,7 +294,7 @@ distinct. Build and execute independently validated Rust, C and C++ GUI apps,
 with incompatible-version and malformed-input tests.
 
 M14.1 establishes validated framebuffer + software drawing. M14.2 delivers
-keyboard/pointer event routing. M14.3 introduces an isolated user-space
+bounded physical keyboard/pointer events to a diagnostic consumer and clips a cursor. M14.3 introduces an isolated user-space
 compositor and two-window behavior. M14.4 adds GUI runtime, graphical terminal,
 C/C++/Rust SDKs and separately tested demo applications. M14.5 optionally
 adds actual GPU-accelerated rendering with software fallback. A bootloader
@@ -298,8 +303,44 @@ Vulkan/OpenGL, Wayland/X11, SDL/Qt and Linux GUI application compatibility
 remain separate, version-specific ports. SMP and real-hardware expansion are
 independent future workstreams, not implicit M14 GUI completion criteria.
 
-Planned source boundaries (do not create empty skeletons): `crates/gui-protocol/`
-for wire types, `user/compositor/` for the window server,
+The implemented `crates/graphics` library owns no hardware or allocator; callers
+supply RGB storage. The optional kernel boot diagnostic validates the complete
+framebuffer byte reservation and page-rounded overlap safety, checks inherited
+supervisor RW/NX PAT5 WC mappings without creating an alias, then writes/readbacks
+the test pattern through volatile byte accesses and MFENCE. Temporary heap
+storage is reclaimed before user startup. COM1 remains the recovery console.
+This adds no window/widget/font policy or application display capability.
+See [M14.1 evidence](docs/validation/M14.1.md).
+
+`crates/input` is dependency-free `no_std` logic for native set-1 keyboard and
+standard ID-0 three-byte mouse decoding, a 64-entry dispatcher and clipped
+pointer state. The optional `kernel/src/drivers/input.rs` owns i8042 ports,
+source/ACK validation and bounded PM-timer initialization. The sole BSP scheduler
+polls at IF=0 on its permanent kernel root, consuming at most 64 bytes and
+64 events per pass; IRQ1/12 remain masked. Per-device partial-sequence timeouts
+and malformed/overflow/disconnect resets invalidate held keys/buttons.
+The temporary diagnostic consumer receives physical events only; it does not
+convert them to COM1 text or implement user-space focus/routing policy.
+
+The cursor keeps one fixed 7×9 packed device-pixel save area, restores the prior footprint,
+preserves unused pixel channels, clips every device access and orders WC stores. Input/cursor state allocates no
+heap. The original boot pattern stays intact until a pointer event displays
+the cursor. `input-test` supplies QMP input and checks every pixel at five
+positions, plus no-display/no-controller serial recovery and test-only reset,
+consumer reconnect and actual controller-port stop/reinitialization cases.
+See [M14.2 evidence](docs/validation/M14.2.md) for acceptance status. This path
+adds no USB, physical hotplug, external IRQ or real-hardware support claim.
+
+Implemented M14.3 boundaries are `crates/gui/` for wire types and bounded
+composition policy, `kernel/src/gui.rs` for authenticated copied transport and
+exclusive display/input access, and `user/compositor/` for the window server.
+The compositor owns private surface copies, damage, stacking, focus and input
+routing. Client/server exit, fault and exec release transport resources; session
+changes invalidate old handles. Actual heap OOM, mailbox pressure, two separate
+client processes and both client/server #UD recovery are tested. No shared
+user mapping or device address reaches clients. See
+[M14_COMPOSITOR](docs/M14_COMPOSITOR.md) and
+[M14.3 evidence](docs/validation/M14.3.md). Remaining planned boundaries are
 `user/gui-runtime/` for drawing/widgets, `user/desktop/` for shell UI, and
 `user/gui-sdk/{ffi,rust,c,cpp}/` for the library ABI and language SDKs.
 Evaluate `embedded-graphics`, `tiny-skia`, `fontdue` and `cbindgen`
@@ -438,9 +479,48 @@ ANOVAPK2 declares architecture, ABI, entry, dependencies and admission
 requirements. The VFS pins `/persist/.anova-abi` as immutable mount authority,
 and the installer rejects a target mismatch before writing. Native and static
 Linux package profiles remain distinct. Permission declarations do not add a
-process sandbox. GUI libraries require a separate future ABI/capability.
+process sandbox. The GUI library uses the independent versioned ABI described below; dynamic GUI
+service admission remains separate.
 
 `kernel/src/task/diagnostics.rs` copies bounded user frame-pointer records after
 a captured hardware fault; `xtask/src/debug.rs` resolves addresses on the host
 against retained exact ELF symbols. The kernel does not parse DWARF or run a
 GDB stub. See [M13 validation](docs/validation/M13.md).
+
+## M14.4 user GUI library boundary
+
+`crates/gui-runtime` adds the allocation-free Rust user-library boundary
+`anova.gui.v1`, separate from native syscall v1 and the experimental compositor
+wire version. Fixed C records and process-local generation handles back generated
+C declarations, C++ move-only RAII and safe Rust wrappers. The library owns one
+private RGB raster, original bitmap glyphs, clipped primitives, layout, immediate
+widgets, a 32-event reset queue and bounded private UTF-8 clipboard. The accepted
+M14.3 compositor retains authenticated owner/session checks and window policy.
+No client receives display addresses or another process's raster storage.
+
+`user/linux/gui-build.c` executes the existing guest C/C++ and Rust compilers.
+Their runtime/compiler personality remains Linux-musl; their freestanding
+client output is explicitly admitted as native by the persistent volume marker.
+`user/gui-link.rs` links native startup, memory intrinsics and panic termination
+with the guest-built Rust rlib. `user/gui-run` supervises the isolated compositor
+and client using actual wait statuses. The Rust graphical terminal starts its
+pipe/command helper before GUI initialization so it never forks a live GUI owner.
+This developer profile provides no native libc/`std`, GPU driver or Linux GUI ABI.
+See [runtime contract](docs/M14_RUNTIME.md).
+
+## Bounded M14.5 GPU drawing
+
+The optional `gpu` feature owns a secondary modern virtio-gpu control queue
+and private coherent DMA32 pages. Only the authenticated user compositor can
+request a bounded offscreen clear/readback; dimensions, color, reserved fields
+and writable output pointers are checked before any device submission. No raw
+VirGL command stream or device mapping is exposed to applications.
+
+Every device response is fenced and length/context/used-ring checked. A
+completed readback is copied through owned staging memory to the caller; the
+compositor chooses CPU fallback and presents through the existing VGA path.
+Reset acknowledgement precedes DMA release. Failed reset quarantines exposed
+pages and permanently disables reuse. The test profile checks actual hardware
+renderer identity, pixel output, lost-doorbell timeout/reset, CPU fallback and
+hardware reinitialization. See [M14 GPU](docs/M14_GPU.md) and
+[validation/M14.5](docs/validation/M14.5.md) for exact scope and evidence.

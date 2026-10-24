@@ -58,9 +58,10 @@ profile. Native SDK cross builds do not establish a native `std` port, native
 guest compiler support or arbitrary C++ library support. Application permissions
 and capability declarations are installer policy metadata, not a security sandbox.
 
-GUI delivery is reserved for M14.4 as an independent versioned C ABI
+GUI delivery is available separately in the M14.4 companion source SDK as a versioned C ABI
 (`anova.gui.v1`), with matching C headers, a C++ ownership wrapper and a Rust safe
 wrapper generated or checked against the same semantic contract. GUI protocol
 version negotiation, handle lifetime/error mapping, cross-language behavior and
-resource failure tests must pass independently. SDK 1.0.0 contains no GUI runtime
-or GUI capability claim.
+resource failure tests are checked independently. This native SDK 1.0.0 contains no GUI runtime;
+use `cargo xtask gui-sdk` for the independent companion release. See the
+[GUI SDK contract](gui/README.md) and [runtime profile](../docs/M14_RUNTIME.md).

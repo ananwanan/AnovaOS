@@ -14,11 +14,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "anova-graphics"
+version = "0.1.0"
+
+[[package]]
+name = "anova-gui"
+version = "0.1.0"
+dependencies = [
+ "anova-graphics",
+]
+
+[[package]]
+name = "anova-gui-runtime"
+version = "0.1.0"
+
+[[package]]
+name = "anova-input"
+version = "0.1.0"
+
+[[package]]
 name = "anova-kernel"
 version = "0.1.0"
 dependencies = [
  "anova-abi",
  "anova-elf",
+ "anova-graphics",
+ "anova-gui",
+ "anova-input",
  "anova-memory",
  "anova-platform",
  "anova-sched",
@@ -216,6 +238,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "itoa"
+version = "1.0.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
+
+[[package]]
 name = "libc"
 version = "0.2.191"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -261,6 +289,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "ryu"
+version = "1.0.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
+
+[[package]]
 name = "serde"
 version = "1.0.228"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -288,6 +322,19 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "serde_json"
+version = "1.0.145"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "402a6f66d8c709116cf22f558eab210f5a50187f702eb4d7e5ef38d9a7f1c79c"
+dependencies = [
+ "itoa",
+ "memchr",
+ "ryu",
+ "serde",
+ "serde_core",
 ]
 
 [[package]]
@@ -446,9 +493,11 @@ version = "0.1.0"
 dependencies = [
  "anova-abi",
  "anova-elf",
+ "anova-graphics",
  "anova-storage",
  "anova-vfs",
  "serde",
+ "serde_json",
  "sha2",
  "toml",
 ]

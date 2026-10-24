@@ -9,6 +9,12 @@
 
 项目仓库：[ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS)。
 
+M14.1 已增加可选软件显示、受检 framebuffer 映射和真实 QEMU 逐像素/截图验证。
+M14.2 已实现轮询式 PS/2 物理输入与裁剪游标。M14.3 已通过本地 QEMU 验收，交付独立
+Rust 用户态窗口合成器、焦点输入与崩溃/重启恢复。M14.4 已交付 Rust GUI runtime、
+C/C++/Rust SDK 与图形应用，系统内独立构建、真实键鼠输入和重启保留通过验收；
+M14.5 已验证有界硬件 VirGL 离屏清屏/读回与 CPU fallback；普通桌面仍采用软件合成。
+
 日常开发与 Pull Request 的目标分支为 **`dev`**；`main` 保留阶段验收后的稳定快照。分支约定见 [GitHub 协作说明](docs/GITHUB_SETUP.md)。
 
 ## 项目目标
@@ -137,7 +143,7 @@ cargo xtask run --disk build/disks/work.ext2 # 复用此盘，在系统内 shutd
 
 ## 下一步
 
-M13 已交付版本化 SDK 与应用格式，见 [M13 SDK](docs/M13_SDK.md)。下一阶段为 [GUI 计划](docs/M14_GUI.md) 的 M14.1 framebuffer/软件绘制。当前 Rust/Cargo 范围见 [M12 Rust](docs/M12_RUST.md)，另见 [当前状态](docs/STATUS.md) 和 [路线图](ROADMAP.md)。
+M13 已交付版本化 SDK 与应用格式，见 [M13 SDK](docs/M13_SDK.md)。M14.1 已交付受检软件绘制，M14.2 已实现有界 PS/2 输入/游标诊断；M14.3 用户态合成器和 M14.4 GUI runtime/SDK 已通过本地验收；M14.5 已验收[有界硬件清屏/读回](docs/M14_GPU.md)及 CPU fallback；普通桌面仍采用软件合成。当前 Rust/Cargo 范围见 [M12 Rust](docs/M12_RUST.md)，另见 [当前状态](docs/STATUS.md) 和 [路线图](ROADMAP.md)。
 
 ## 许可证
 
@@ -233,3 +239,82 @@ cargo xtask diagnostics-test
 ```
 
 用 `cpp` 或 `rust` 创建另外两种原生模板。`app-run PACKAGE SHA256` 会把已校验的自建包放入镜像，创建匹配 ABI 的临时磁盘并打印可直接使用的 guest 安装和运行命令；`--disk` 可复用显式持久镜像。完整创建、构建、安装和升级步骤见 [M13 SDK](docs/M13_SDK.md)。原生 SDK 与 M11/M12 的 Linux-musl 系统内编译器分别验收。权限声明用于安装准入；GUI runtime、GDB stub、进程沙箱和原生 Rust std 不属于当前成果。
+
+## M14.1–M14.2 软件显示与输入
+
+```sh
+cargo xtask graphics-image
+cargo xtask graphics-test
+cargo xtask input-test
+cargo xtask run --graphics
+```
+
+可选 profile 绘制有界 CPU 测试图案并保留 COM1 shell；同时轮询 QEMU PS/2 键盘与
+三按钮相对鼠标，向一个诊断消费者投递物理事件并绘制裁剪游标。文本和窗口焦点策略
+另行实现。输入与游标存储不分配堆内存；交互运行需要 GTK 显示环境。
+
+`graphics-test` 验证启动截图与有/无 VGA 的串口恢复；`input-test` 验证有序 QMP 输入、
+五个游标位置的全部像素、有界 reset/重连，以及缺少显示设备或控制器时的恢复。
+M14.2 本地 QEMU 验收已通过。USB、物理热插拔、外设 IRQ、用户态窗口及 GUI SDK
+不属于当前 profile。
+见 [M14 设计](docs/M14_GUI.md)、[M14.1 证据](docs/validation/M14.1.md)
+与 [M14.2 证据](docs/validation/M14.2.md)。
+
+## M14.3 隔离的原生窗口
+
+```sh
+cargo xtask gui-image
+cargo xtask gui-test
+cargo xtask run --gui
+```
+
+交互模式中，在 COM1 shell 输入 `gui-test` 启动受监督的合成器和两个独立原生窗口。
+点击切换焦点，拖动标题栏移动，拖动右下角缩放。在红色窗口按 X 可触发客户端异常，
+F12 触发合成器异常及重启，重启后按 F11 结束并返回串口 shell。
+交互显示需要 GTK；自动化验收以无界面方式运行。
+
+本地三个启动配置已通过验收，包括八张完整逐像素截图、焦点输入、窗口重绘、
+客户端/合成器各自真实异常、新会话重连、堆耗尽回滚与串口/设备缺失恢复。
+每客户端拥有一个独立的 32×24 至 320×240 RGB surface，最多四个连接；
+画面通过有界 CPU 复制提交。下文 M14.4 已交付文字/控件、图形终端及公共
+C/C++/Rust GUI SDK；GPU 加速仍按独立阶段推进。
+见 [M14.3 设计](docs/M14_COMPOSITOR.md) 与 [验收记录](docs/validation/M14.3.md)。
+
+## M14.4 GUI runtime 与 C/C++/Rust SDK
+
+```sh
+cargo xtask gui-sdk
+cargo xtask gui-sdk-image
+cargo xtask gui-sdk-test
+cargo xtask run --gui-sdk
+```
+
+无动态分配的 Rust runtime 实现独立版本化 C ABI、原创位图文字、裁剪绘图、布局、
+按钮、文本框及有界进程内剪贴板。C 头文件、C++ move-only RAII 和 Rust 安全封装
+使用同一套语义。开发镜像包含已验收的 GCC/G++ 和 Rust 工具，guest 中通过
+`gui-build c`、`gui-build cpp`、`gui-build rust` 分别编译独立的原生应用源码；
+原生数据盘在正常关机、重启后保留源码和可执行产物。
+
+Rust note 应用演示编辑和复制。受限图形终端支持输入 `echo TEXT` 与 `pwd`，
+通过真实原生命令进程和管道取得、显示输出；不提供 PTY/作业控制或 ANSI 模拟。
+构建后运行 `gui-run /persist/gui-c`，使用物理按键 `a`、点击按钮，再按 `q`
+关闭应用，最后 F11 结束合成器并返回串口输入。完整步骤与边界见
+[开发说明](docs/DEVELOPMENT.md)、[runtime 契约](docs/M14_RUNTIME.md) 和
+[M14.4 验收](docs/validation/M14.4.md)。有界 GPU 路径见下文。
+
+## M14.5 有界 GPU 绘制与 CPU fallback
+
+```sh
+cargo xtask gpu-test
+cargo xtask gpu-fallback-test
+```
+
+完整 gate 使用第二块 virtio-gpu/VirGL 设备完成真实离屏 render-target 清屏和 fence 读回。
+本地该设备实际报告 `D3D12 (NVIDIA GeForce RTX 4060 Ti)`。测试逐像素对照 CPU 颜色，
+验证非整齐尺寸的输出保护、非法参数拒绝、真实 timeout/reset、CPU fallback 与 GPU 重建。
+无界面的 fallback gate 覆盖仅 2D 和缺少 GPU 的情况，并已纳入 CI。
+
+认证的 Rust 合成器通过保留的 VGA framebuffer 显示结果。普通桌面合成与画面复制仍在 CPU
+完成；这不证明 shader draw、guest GL/Vulkan API 或性能提升。范围、运行环境及证据见
+[M14 GPU](docs/M14_GPU.md)、[开发说明](docs/DEVELOPMENT.md)和
+[M14.5 验收](docs/validation/M14.5.md)。
