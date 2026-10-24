@@ -7,6 +7,48 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 
 | File | Purpose |
 | --- | --- |
+| `xtask/src/bootstrap_repeat.rs` | Repeat clean guest bzip2/kernel builds, retain independent artifacts and compare exact inputs, bytes and recovery evidence. |
+| `docs/M15_REPEAT.md` | Define repeated clean reconstruction, archival, artifact comparison and recovery boundaries. |
+| `docs/validation/M15.6.md` | Record actual two-round guest reconstruction, artifact comparison and recovery execution evidence. |
+| `docs/validation/M15.5.md` | Record actual guest kernel compilation, exact retained-ELF boot and recovery evidence, capacity regressions and host-assistance limits. |
+| `xtask/src/bootstrap_kernel.rs` | Construct the kernel in guest processes, preserve and verify its exact ELF in a host-packaged ISO, then check boot identity and failure recovery. |
+| `ports/bootstrap/kernel_prepare.py` | Snapshot exact kernel sources, isolate metadata, authenticate offline registry sources and prepare inherited bare-metal target libraries. |
+| `ports/bootstrap/kernel-inputs.json` | Lock the official Rust 1.90.0 bare-metal target archive and its inherited binary library provenance. |
+| `ports/bootstrap/test_kernel_prepare.py` | Reject altered sources, lock drift, unsafe archives, redirected or corrupted publications and excessive guest paths. |
+| `ports/bootstrap/kernel-build.c` | Run real offline guest Cargo compilation, validate and atomically publish a kernel ELF, and exercise retained-kernel compiler failure. |
+| `docs/M15_KERNEL.md` | Define guest kernel construction, retained-ELF packaging, source/seed identities and separate image-bootstrap acceptance boundaries. |
+| `xtask/src/bootstrap_rust.rs` | Audit independent Rust/LLVM/Cargo source capacity and verify real guest seed, prerequisite failures and reboot evidence without claiming component reconstruction. |
+| `ports/bootstrap/rust_probe.py` | Verify the locked official Rust source distribution and publish independent component inventories plus bounded unchanged build inputs and notices. |
+| `ports/bootstrap/rust-inputs.json` | Lock the official complete Rust 1.90.0 source archive, published checksum URL and assessed musl target. |
+| `ports/bootstrap/test_rust_probe.py` | Reject changed Rust sources, unsafe archive members and changed or redirected source publications. |
+| `ports/bootstrap/rust-probe/probe.c` | Verify actual missing guest tools and bounded Cargo offline dependency failure with checked child errno/status reporting. |
+| `ports/bootstrap/rust-probe/seed.rs` | Exercise the inherited guest Rust std seed with vectors, a worker thread, persistent file bytes and result 42. |
+| `ports/bootstrap/rust-probe/llvm_seed.cpp` | Exercise the inherited guest C++17 seed with a fold expression, std::optional and result 42. |
+| `ports/bootstrap/rust-probe/bad.rs` | Trigger a real rejected guest Rust compilation while retaining the prior successful seed executable. |
+| `ports/bootstrap/rust-probe/.cargo/config.toml` | Restrict the isolated Cargo prerequisite fixture to the inherited offline vendor directory. |
+| `ports/bootstrap/rust-probe/cargo-dependency/Cargo.toml` | Pin the curl dependency selected from upstream Cargo as an isolated offline closure-availability probe. |
+| `ports/bootstrap/rust-probe/cargo-dependency/src/main.rs` | Supply a minimal application body for the isolated offline Cargo prerequisite probe. |
+| `docs/M15_RUST.md` | Define independent Rust, LLVM and Cargo feasibility, prescribed stage0, measured blockers and reconstruction prerequisites. |
+| `docs/validation/M15.4.md` | Record local Rust/LLVM/Cargo feasibility probes, exact retained artifacts, reboot evidence and unverified source-build layers. |
+| `kernel/src/task/bootstrap.rs` | Sample scheduler-instance frame, heap, task, descriptor and namespace use without allocation or a public ABI. |
+| `xtask/src/bootstrap_gcc.rs` | Audit GCC source capacity and verify actual guest seed, header/tool/configure rejection and reboot evidence without claiming compiler reconstruction. |
+| `ports/bootstrap/gcc_probe.py` | Verify seven locked compiler dependency archives and publish source inventory plus bounded unchanged configure-startup inputs. |
+| `ports/bootstrap/test_gcc_probe.py` | Reject unsafe or tampered compiler archives, oversized or missing probe inputs and changed or symlinked output caches. |
+| `tests/guest/m15/gcc_probe.c` | Diagnose actual missing build-tool exec errors and bounded upstream configure startup failure in the guest. |
+| `tests/guest/m15/gcc_seed.cpp` | Exercise C++11 compilation with the inherited guest seed without reconstructing a compiler. |
+| `docs/M15_GCC.md` | Define reproducible GCC feasibility assessment, pinned dependencies, measured blockers and conditions for a future compiler stage. |
+| `docs/validation/M15.3.md` | Record local GCC feasibility probes, exact artifacts, reboot checks and unverified compiler stages. |
+| `xtask/src/bootstrap.rs` | Prepare a locked bzip2 work disk and verify guest compilation, independent compression checks, limits and reboot recovery. |
+| `ports/bootstrap/inputs.json` | Lock official bzip2 1.0.8 checksums, source selection, version and licensing metadata. |
+| `ports/bootstrap/prepare.py` | Verify official source archives and safely publish a source-only offline guest workspace. |
+| `ports/bootstrap/Makefile.anova` | Compile eight unchanged bzip2 C units sequentially with the guest GCC and test retained-output compiler rejection. |
+| `ports/bootstrap/README.md` | Explain the locked source selection, guest recipe and host preparation boundary. |
+| `ports/bootstrap/test_prepare.py` | Reject tampered archives, unsafe members, missing inputs and selected files beyond the guest limit. |
+| `tests/guest/m15/capacity.c` | Probe persistent file, descriptor and task limits, resource recovery and preserved file bytes. |
+| `tests/guest/m15/rejected.c` | Trigger a deliberate real guest compiler error while retaining the prior reconstructed tool. |
+| `docs/M15_BOOTSTRAP.md` | Define the bounded source-reconstruction workflow, preparation provenance and measurement limitations. |
+| `docs/third-party/m15.md` | Record official bzip2 source checksums, selected notices, licensing and inherited seed-tool boundaries. |
+| `docs/validation/M15.1-M15.2.md` | Record actual local capacity, guest bzip2 build, reboot, rejection, hash and regression evidence. |
 | `crates/graphics/src/virgl.rs` | Encode bounded VirGL clear commands with integer UNORM conversion and independent host reference tests. |
 | `kernel/src/drivers/gpu.rs` | Own an optional polled modern virtio-gpu queue, fenced hardware readback, reset and DMA quarantine. |
 | `user/compositor/src/gpu.rs` | Exercise the server-only GPU API, guarded readback comparisons and user-selected CPU fallback. |
@@ -48,8 +90,8 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `crates/vfs/Cargo.toml` | Share bounded in-memory VFS, archive, open-file and pipe semantics with host tests. |
 | `crates/vfs/src/archive.rs` | Decode the project-owned ANOVAFS1 archive using checked byte ranges, never casts. Entries are parent-first absolute UTF-8 paths; payloads remain borrowed from boot RAM. |
 | `crates/vfs/src/fd.rs` | Own fallible shared descriptor tables, close-on-exec state and allocation-free empty placeholders. |
-| `crates/vfs/src/lib.rs` | Own bounded memory/ext2 namespaces, explicit ABI inheritance, modes/timestamps, private mapping snapshots, shared opens, pipes and PTYs. |
-| `crates/vfs/src/tests.rs` | Test VFS path/mount boundaries, descriptor ownership, private snapshots, modes/timestamps, pipe shutdown and capacity rollback. |
+| `crates/vfs/src/lib.rs` | Own bounded memory/ext2 namespaces, explicit ABI inheritance, coherent backing-store timestamp precision, private mapping snapshots, shared opens, pipes and PTYs. |
+| `crates/vfs/src/tests.rs` | Test VFS path/mount boundaries, descriptor ownership, private snapshots, persistent timestamp coherence, pipe shutdown and capacity rollback. |
 | `docs/CODING_STYLE.md` | English development conventions, mandatory file purposes and stable Rust formatting. |
 | `docs/DEVELOPMENT.md` | Host setup, target separation, app/image commands, validation and evidence handling. |
 | `docs/FILE_PURPOSES.md` | Per-file purpose inventory and generated/legal file explanation exceptions. |
@@ -260,7 +302,7 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 | `tests/guest/m12/cargo.rs` | Define the M12 offline Rust/Cargo acceptance fixture and its declared behavior. |
 | `tests/guest/m12/config.toml` | Define the M12 offline Rust/Cargo acceptance fixture and its declared behavior. |
 | `tests/guest/m12/main.rs` | Define the M12 offline Rust/Cargo acceptance fixture and its declared behavior. |
-| `tests/guest/m12/runtime.c` | Exercise invalid return/detached exit, alternate signals, positioned/resized files and OFD locks in a real guest. |
+| `tests/guest/m12/runtime.c` | Exercise invalid return/detached exit, alternate signals, positioned/resized files, persistent/tmpfs timestamp precision and OFD locks in a real guest. |
 | `user/linux/rust.c` | Configure offline Rust/Cargo execution and the isolated guest sysroot and linker. |
 | `xtask/src/rust.rs` | Build Rust images, exercise real guest compilation and independently inspect rebooted source and ELF files. |
 | `docs/M12_RUST.md` | Specify the optional Rust/Cargo profile, construction commands, ownership and separate acceptance gates. |

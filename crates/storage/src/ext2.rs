@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Read and update one-group, 4 KiB/128-byte-inode ext2 with direct/single-indirect regular files.
+//! Read and update one-group, 4 KiB/128-byte-inode ext2 with bounded 4 MiB regular files.
+//! Writes snapshot one indirect table locally to bound device reads during small compiler writes.
 //! Reject unsupported features and dirty images. Ordered writes fail closed; this is not a journal.
 use crate::{BlockDevice, SECTOR, check_range};
 use alloc::{boxed::Box, vec::Vec};
 use anova_abi::*;
 
 pub const BLOCK: usize = 4096;
-pub const MAX_FILE: usize = 1024 * 1024;
+// Stay inside direct/single-indirect addressing; existing smaller images remain valid.
+pub const MAX_FILE: usize = 4 * 1024 * 1024;
+const _: () = assert!(MAX_FILE <= (12 + BLOCK / 4) * BLOCK);
 const REGULAR: u16 = 0x8000;
 const DIRECTORY: u16 = 0x4000;
 fn u16_at(b: &[u8], n: usize) -> u16 {
@@ -418,6 +421,31 @@ impl Ext2 {
         }
         Ok(pointer)
     }
+    /// Resolve a write's private indirect-table snapshot, retaining the normal address checks.
+    fn cached_data_pointer(
+        &self,
+        inode: &Inode,
+        index: usize,
+        table: Option<&[u8; BLOCK]>,
+    ) -> Result<u32, i64> {
+        let pointer = if index < 12 {
+            u32_at(&inode.raw, 40 + index * 4)
+        } else {
+            if index >= 12 + BLOCK / 4 {
+                return Err(NO_SPACE);
+            }
+            let indirect = u32_at(&inode.raw, 88);
+            if indirect == 0 {
+                return Ok(0);
+            }
+            self.check_data(indirect)?;
+            u32_at(table.ok_or(INVALID_FILESYSTEM)?, (index - 12) * 4)
+        };
+        if pointer != 0 {
+            self.check_data(pointer)?;
+        }
+        Ok(pointer)
+    }
     fn check_data(&self, block: u32) -> Result<(), i64> {
         if block < self.data_start || block >= self.blocks {
             Err(INVALID_FILESYSTEM)
@@ -533,9 +561,22 @@ impl Ext2 {
         if input.is_empty() {
             return Ok(0);
         }
+        // Each scheduler-owned write sees one stable table. Re-reading it for every prefix block
+        // amplifies small compiler writes into millions of device reads on large regular files.
+        let mut indirect = if end > 12 * BLOCK {
+            let mut table = buffer()?;
+            let address = u32_at(&inode.raw, 88);
+            if address != 0 {
+                self.check_data(address)?;
+                self.read_block(address, &mut table)?;
+            }
+            Some(table)
+        } else {
+            None
+        };
         let mut missing = 0;
         for index in 0..end.div_ceil(BLOCK) {
-            if self.data_pointer(&inode, index)? == 0 {
+            if self.cached_data_pointer(&inode, index, indirect.as_deref())? == 0 {
                 missing += 1;
             }
         }
@@ -548,7 +589,7 @@ impl Ext2 {
         self.begin()?;
         // Allocate/zero all holes before publishing length. A failed transfer poisons further I/O.
         for index in 0..end.div_ceil(BLOCK) {
-            if self.data_pointer(&inode, index)? != 0 {
+            if self.cached_data_pointer(&inode, index, indirect.as_deref())? != 0 {
                 continue;
             }
             if index >= 12 && u32_at(&inode.raw, 88) == 0 {
@@ -561,11 +602,10 @@ impl Ext2 {
             if index < 12 {
                 put32(&mut inode.raw, 40 + index * 4, pointer);
             } else {
-                let mut table = buffer()?;
+                let table = indirect.as_mut().ok_or(INVALID_FILESYSTEM)?;
                 let address = u32_at(&inode.raw, 88);
-                self.read_block(address, &mut table)?;
-                put32(&mut *table, (index - 12) * 4, pointer);
-                self.write_block(address, &table)?;
+                put32(&mut **table, (index - 12) * 4, pointer);
+                self.write_block(address, table)?;
             }
             let sectors = u32_at(&inode.raw, 28) + 8;
             put32(&mut inode.raw, 28, sectors);
@@ -574,7 +614,7 @@ impl Ext2 {
         while done < input.len() {
             let pos = offset + done;
             let n = (BLOCK - pos % BLOCK).min(input.len() - done);
-            let address = self.data_pointer(&inode, pos / BLOCK)?;
+            let address = self.cached_data_pointer(&inode, pos / BLOCK, indirect.as_deref())?;
             let mut block = buffer()?;
             self.read_block(address, &mut block)?;
             block[pos % BLOCK..pos % BLOCK + n].copy_from_slice(&input[done..done + n]);

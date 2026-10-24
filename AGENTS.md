@@ -5,7 +5,7 @@
 
 这是 Rust 编写的 x86_64 自研操作系统。最终用户应能在系统自己的终端中编辑源码、使用 GCC/G++/Rust/Cargo 编译、链接并运行应用，同时逐步运行经过验证的现有 Linux 软件。
 
-当前 M0–M13（受限离线与联网范围）已通过本地 QEMU TCG 验证。原生进程、VFS、init/shell、virtio-blk、受限 ext2 `/persist`、文本编辑、sync/fsync 和正常关机/重启已实现。M9 还验证 musl 1.2.4 静态、静态 PIE、动态 ELF、pthread/TLS/futex、信号栈帧/返回、中断/重启、poll、非阻塞 I/O 和四组 PTY。**单核，共 32 个进程/线程槽；内核不可抢占；tmpfs 易失；ext2 无日志和断电恢复、单文件最多 1 MiB；无 SMP 或通用 Linux/glibc；引导保留区未回收，堆固定 16 MiB。** 外设 IRQ 仍屏蔽，CI 远端结果单独记录。先读 [M9_RUNTIME](docs/M9_RUNTIME.md)、[STATUS](docs/STATUS.md)、[M8_LINUX](docs/M8_LINUX.md)、[M7_STORAGE](docs/M7_STORAGE.md) 和 [开发需求](docs/REQUIREMENTS.md)，再检查真实代码与 git 状态。
+当前 M0–M13（受限离线与联网范围）已通过本地 QEMU TCG 验证。原生进程、VFS、init/shell、virtio-blk、受限 ext2 `/persist`、文本编辑、sync/fsync 和正常关机/重启已实现。M9 还验证 musl 1.2.4 静态、静态 PIE、动态 ELF、pthread/TLS/futex、信号栈帧/返回、中断/重启、poll、非阻塞 I/O 和四组 PTY。**单核，共 32 个进程/线程槽；内核不可抢占；tmpfs 易失；ext2 无日志和断电恢复、持久文件最多 4 MiB、tmpfs 1 MiB；无 SMP 或通用 Linux/glibc；引导保留区未回收，堆固定 16 MiB。** 外设 IRQ 仍屏蔽，CI 远端结果单独记录。先读 [M9_RUNTIME](docs/M9_RUNTIME.md)、[STATUS](docs/STATUS.md)、[M8_LINUX](docs/M8_LINUX.md)、[M7_STORAGE](docs/M7_STORAGE.md) 和 [开发需求](docs/REQUIREMENTS.md)，再检查真实代码与 git 状态。
 
 M10 adds opt-in, polled virtio-net IPv4 TCP/UDP sockets, bounded user-space DNS,
 strict user-space TLS and checksum-locked native package install/upgrade/rollback/
@@ -76,6 +76,39 @@ and both `gpu`/`gpu-test` kernel checks; see [M14 GPU](docs/M14_GPU.md) and
 [validation/M14.5](docs/validation/M14.5.md). Ordinary desktop composition remains
 software-rendered; shader draws and a guest GL/Vulkan API remain outside this profile;
 GDB stubs, native std and compiler bootstrap remain independently scoped.
+
+M15.1/M15.2 add a locked bzip2 source workspace and actual guest tool
+reconstruction with separately measured resource limits and reboot/failure
+recovery. Preserve `cargo xtask bootstrap-test`, source preparation rejection
+tests and the `bootstrap-metrics` kernel check. Read [M15 bootstrap](docs/M15_BOOTSTRAP.md)
+and [validation/M15.1-M15.2](docs/validation/M15.1-M15.2.md). Sampling at
+scheduler boundaries does not establish exact peak RSS; inherited compilers
+are seeds, not compiler-bootstrap evidence. M15.3 adds locked full-source audits
+and actual guest C++11/dependency/configure-startup probes with reboot evidence.
+Preserve `cargo xtask bootstrap-gcc-test` and
+`python3 ports/bootstrap/test_gcc_probe.py`; read [M15 GCC](docs/M15_GCC.md)
+and [validation/M15.3](docs/validation/M15.3.md). The current profile is blocked
+for compiler reconstruction; a successful assessment is not a new GCC stage.
+Full-tree inventories are not minimum build requirements. M15.4 independently
+assesses locked Rust/LLVM/Cargo sources, stage0 requirements, real guest seed
+applications and prerequisite blockers. Preserve `cargo xtask bootstrap-rust-test`
+and `python3 ports/bootstrap/test_rust_probe.py`; read
+[M15 Rust](docs/M15_RUST.md) and [validation/M15.4](docs/validation/M15.4.md).
+M12's inherited 1.90.0 binaries are not the release's prescribed 1.89.0 stage0
+or reconstructed compiler/Cargo evidence. M15.5 adds actual guest kernel
+construction with inherited matching bare-metal libraries and exact preserved-ELF
+host-assisted packaging; see [M15 kernel](docs/M15_KERNEL.md) and
+[validation/M15.5](docs/validation/M15.5.md) for local acceptance. Preserve `cargo xtask bootstrap-kernel-test` and
+`python3 ports/bootstrap/test_kernel_prepare.py`. Persistent ext2 files are
+bounded at 4 MiB within the existing disk format; tmpfs and readonly shared-file
+caches stay at 1 MiB. Active shared caches reject growth beyond their bounds;
+private snapshots remain separate. Keep kernel flags away from host build
+scripts, retain source/seed and implementation hashes, and verify ISO kernel
+bytes plus actual boot identity. Packaging a guest-built ELF must never invoke
+a host kernel build. M15.6 repeats both reconstruction gates on independent clean disks;
+preserve `cargo xtask bootstrap-repeat-test` and its retained per-round evidence,
+exact artifact comparisons and rejection/reboot checks. See [M15 repeat](docs/M15_REPEAT.md).
+Guest-only image generation and compiler reconstruction remain separate.
 
 本文件是后续 Codex 开发规范。用户明确指令优先；已有修改应保留。日常、可逆的实现选择可自主完成，不因普通阶段切换反复请求确认。
 

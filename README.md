@@ -32,7 +32,16 @@ bounded private windows, focused input and checked crash/restart recovery.
 M14.4 adds the Rust GUI runtime, C/C++/Rust SDKs and graphical applications,
 with independent guest builds, physical input and reboot retention verified.
 M14.5 verifies bounded hardware VirGL clear/readback with CPU fallback;
-ordinary desktop composition remains software-rendered.
+ordinary desktop composition remains software-rendered. M15.1/M15.2 add
+measured capacity and guest-built bzip2 source reconstruction with reboot and
+failure recovery. M15.3/M15.4 assess GCC and independent Rust/LLVM/Cargo
+feasibility with actual guest probes; current dependency/capacity blockers
+prevent compiler reconstruction. M15.5 reconstructs and boots the actual
+kernel using inherited guest tools, with exact retained-ELF host-assisted
+packaging. M15.6 adds `cargo xtask bootstrap-repeat-test` for independent clean
+bzip2/kernel builds, retained evidence and exact artifact/recovery comparison;
+two clean builds of each target and all 12 boot/recovery sessions passed locally. Compiler reconstruction and guest-only image generation remain
+unverified.
 General Linux/glibc remains future work; device IRQs stay masked.**
 
 Repository: [ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS).
@@ -207,7 +216,51 @@ implements bounded PS/2 input/cursor diagnostics. M14.3 user-space composition
 and M14.4 GUI runtime/SDKs are locally accepted. M14.5 verifies the bounded
 [hardware clear/readback profile](docs/M14_GPU.md) with CPU fallback. Current Rust/Cargo limits remain in
 [M12 Rust](docs/M12_RUST.md). See [current status](docs/STATUS.md) and
-[roadmap](ROADMAP.md).
+[roadmap](ROADMAP.md). M15.3 has a locally verified GCC feasibility assessment.
+The GCC route next needs build utilities, arithmetic development inputs and sufficient capacity
+before a first compiler stage. M15.4 independently assesses Rust/LLVM/Cargo
+source routes; M15.5 now reconstructs and boots the kernel with the inherited guest rustc.
+
+## M15 controlled source reconstruction
+
+```sh
+cargo xtask bootstrap-prepare
+cargo xtask bootstrap-test
+```
+
+A fresh 16 MiB Linux-personality work disk carries checksum-locked official
+bzip2 1.0.8 sources. The guest GCC compiles and links the compressor, whose
+compressed bytes match the official fixture. Three QEMU boots verify resource
+rejection/recovery, reconstruction, clean reboot and retained outputs after a
+real compiler error. Measurements report scheduler-boundary observations and
+end-of-boot disk use. See [M15 bootstrap](docs/M15_BOOTSTRAP.md) and
+[local evidence](docs/validation/M15.1-M15.2.md).
+
+`cargo xtask bootstrap-gcc-test` audits seven locked source archives and runs
+real C++11 seed, missing-header/tool, configure-startup and capacity/reboot
+probes. The successful assessment reports current GCC reconstruction blockers;
+it produces no new compiler stage. See [M15 GCC](docs/M15_GCC.md) and
+[local evidence](docs/validation/M15.3.md).
+
+`cargo xtask bootstrap-rust-test` separately audits the official Rust 1.90.0
+source distribution, included LLVM/Cargo components and prescribed stage0.
+Two guest boots verify Rust std/C++17 seeds, actual build-tool and isolated
+offline-dependency failures, rejected Rust compilation with the prior ELF
+retained, and identical persisted hashes. Source reconstruction is blocked in
+the current profile; no LLVM/rustc/Cargo component is rebuilt. See
+[M15 Rust](docs/M15_RUST.md) and [local evidence](docs/validation/M15.4.md).
+`cargo xtask bootstrap-kernel-test` reconstructs the actual bare-metal kernel
+with inherited guest Cargo/rustc/rust-lld and locked sources/target libraries.
+Three boots verify construction, exact retained-ELF host-assisted packaging,
+actual kernel identity and failure/reboot recovery. Persistent files allow
+4 MiB while tmpfs and shared caches remain at 1 MiB. See
+[M15 kernel](docs/M15_KERNEL.md) and [local evidence](docs/validation/M15.5.md).
+`cargo xtask bootstrap-repeat-test` independently repeats both reconstructions
+on fresh work disks. Two bzip2 builds and two complete kernel ELFs matched
+byte-for-byte; all 12 boot/rejection/recovery sessions passed. Kernel intermediate
+metadata differences are retained without claiming identical build directories.
+See [M15 repeat](docs/M15_REPEAT.md) and [local evidence](docs/validation/M15.6.md).
+Compiler reconstruction and guest-only image generation remain unverified.
 
 ## License
 

@@ -41,9 +41,13 @@ contact a host compilation service or apply the bare-metal kernel linker script
 to ordinary applications. Default Rust outputs use static musl linkage.
 
 Linux development disks remain 16 MiB, one-group ext2 with 128-byte inodes and
-the existing 1 MiB file limit, but now allocate 512 inodes. Cargo's macro and
-build-script artifacts exhaust the earlier 128-inode profile. Ordinary native
-disks keep 128 inodes; existing disks are never reformatted automatically.
+512 inodes. Cargo's macro and build-script artifacts exhaust the earlier
+128-inode profile. Ordinary native disks keep 128 inodes; existing disks are
+never reformatted automatically. M15.5 raises the persistent regular-file limit
+from 1 MiB to 4 MiB without changing this disk format. tmpfs files and readonly
+shared-file caches remain limited to 1 MiB; a live shared mapping prevents growth
+past its cache bound with `EBUSY`. See [M15 kernel](M15_KERNEL.md) for the
+reconstruction profile and its separately recorded acceptance status.
 
 ## Provenance and offline dependency
 
@@ -79,7 +83,9 @@ unnecessary. See [third-party/m12](third-party/m12.md) for upstream notices.
   entries are at most 256 MiB and retained modules at most 1 GiB; every byte
   still needs validated retained boot RAM. The Linux mmap window is
   `[0x50000000, 0xc0000000)`, with 256 MiB per call. brk, native ELF, 16 MiB
-  kernel heap, guarded kernel stacks and 1 MiB writable-file bounds remain.
+  kernel heap and guarded kernel stacks remain. Persistent regular files now
+  permit 4 MiB under M15.5; tmpfs and readonly shared-file caches retain 1 MiB
+  bounds independently of the larger ELF/mmap limits.
 - mmap keeps a per-root search hint and wraps over the complete window if the
   tail has no gap. Occupied and PROT_NONE pages cannot be reused. Hints commit
   only after successful allocation/protection; the existing OOM rollback stays.
@@ -103,7 +109,10 @@ unnecessary. See [third-party/m12](third-party/m12.md) for upstream notices.
   zero-fills growth. ext2 preflights space and uses its failed-device mutation
   rules. rust-lld uses `--no-mmap-output-file`; writable shared-file mmap/writeback
   remains outside this profile. The online continuation adds bounded readonly
-  shared-file mappings with coherent writes and retained inode lifetime.
+  shared-file mappings with coherent writes and retained inode lifetime. Those
+  shared caches admit files up to 1 MiB; larger persistent files use ordinary
+  I/O or private mappings, and active shared-cache growth beyond 1 MiB returns
+  `EBUSY`.
 - AF_UNIX SOCK_SEQPACKET pairs use two queues from the 16-entry pipe pool.
   Packets are at most 1,022 bytes with preserved boundaries, atomic sends,
   truncating receives, real duplex traffic, backpressure, EOF, nonblocking/

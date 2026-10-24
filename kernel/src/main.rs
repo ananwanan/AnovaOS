@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #![no_std]
 #![no_main]
-//! Boot owned CPU/memory/devices, optional checked graphics/PS/2, and isolated user workloads.
+//! Boot owned hardware and isolated workloads, reporting an optional source-build identity.
 
 extern crate alloc;
 
@@ -58,6 +58,9 @@ pub extern "C" fn _start() -> ! {
         "[BOOT:ENTRY] AnovaOS {} arch=x86_64\n",
         env!("CARGO_PKG_VERSION")
     ));
+    if let Some(identity) = option_env!("ANOVA_KERNEL_BUILD_ID") {
+        serial::write(format_args!("[BOOT:BUILD] id={identity}\n"));
+    }
     let info = boot::validate();
     PHASE.store(2, Ordering::Relaxed);
     info.report();

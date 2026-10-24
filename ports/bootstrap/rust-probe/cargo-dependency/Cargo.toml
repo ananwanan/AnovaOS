@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# Probe the exact curl version locked by Cargo 0.91.0; this is not the upstream Cargo workspace.
+[package]
+name = "m15-cargo-dependency-probe"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+
+[dependencies]
+curl = "=0.4.48"

@@ -14,6 +14,8 @@ M14.2 已实现轮询式 PS/2 物理输入与裁剪游标。M14.3 已通过本�
 Rust 用户态窗口合成器、焦点输入与崩溃/重启恢复。M14.4 已交付 Rust GUI runtime、
 C/C++/Rust SDK 与图形应用，系统内独立构建、真实键鼠输入和重启保留通过验收；
 M14.5 已验证有界硬件 VirGL 离屏清屏/读回与 CPU fallback；普通桌面仍采用软件合成。
+M15.1/M15.2 已验证容量测量、系统内 bzip2 源码重建、重启与编译失败恢复。
+M15.3/M15.4 已通过 GCC 及独立 Rust/LLVM/Cargo 可行性实测评估，当前开发依赖和容量限制阻塞编译器重建。M15.5 已在系统内重建并启动真实内核，保留 guest ELF 后由宿主辅助打包；M15.6 已增加 `cargo xtask bootstrap-repeat-test`，对 bzip2/内核执行两次独立干净构建、保留证据并比较产物与恢复结果，两轮独立构建和全部 12 次启动/恢复已通过本地验收；编译器重建与 guest 独立生成完整镜像仍未验证。
 
 日常开发与 Pull Request 的目标分支为 **`dev`**；`main` 保留阶段验收后的稳定快照。分支约定见 [GitHub 协作说明](docs/GITHUB_SETUP.md)。
 
@@ -144,6 +146,39 @@ cargo xtask run --disk build/disks/work.ext2 # 复用此盘，在系统内 shutd
 ## 下一步
 
 M13 已交付版本化 SDK 与应用格式，见 [M13 SDK](docs/M13_SDK.md)。M14.1 已交付受检软件绘制，M14.2 已实现有界 PS/2 输入/游标诊断；M14.3 用户态合成器和 M14.4 GUI runtime/SDK 已通过本地验收；M14.5 已验收[有界硬件清屏/读回](docs/M14_GPU.md)及 CPU fallback；普通桌面仍采用软件合成。当前 Rust/Cargo 范围见 [M12 Rust](docs/M12_RUST.md)，另见 [当前状态](docs/STATUS.md) 和 [路线图](ROADMAP.md)。
+
+## M15 受控源码重建
+
+```sh
+cargo xtask bootstrap-prepare
+cargo xtask bootstrap-test
+```
+
+在独立的 16 MiB Linux personality 工作盘上准备校验锁定的官方 bzip2 1.0.8 源码，
+由 guest GCC 编译、链接工具，压缩字节须与官方样本一致。三次 QEMU 启动分别验证
+资源越限与回收、源码重建、正常重启及真实编译失败后的旧产物保留。容量报告明确区分
+调度边界采样与关机后磁盘用量。见 [M15 设计](docs/M15_BOOTSTRAP.md) 与
+[本地验收](docs/validation/M15.1-M15.2.md)。
+
+`cargo xtask bootstrap-gcc-test` 审计七个锁定源码归档，实际验证 C++11 种子编译、
+缺失头文件/工具、configure 启动失败、越限恢复与重启。评估报告明确当前 GCC
+重建障碍，没有产出新编译器阶段。见 [M15 GCC](docs/M15_GCC.md) 与
+[本地实测](docs/validation/M15.3.md)。GCC 路线下一步需补齐构建工具、数学库开发
+依赖和实际所需容量。
+
+`cargo xtask bootstrap-rust-test` 独立审计官方 Rust 1.90.0 完整发行源码、
+所含 LLVM/Cargo 组件和规定的 stage0。两次 guest 启动验证 Rust std/C++17 种子、
+实际构建工具缺失、独立离线依赖拒绝、真实 Rust 编译失败后旧 ELF 保留及重启哈希一致。
+当前 profile 仍阻塞源码重建，没有重建 LLVM/rustc/Cargo 组件。见
+[M15 Rust](docs/M15_RUST.md) 与 [本地实测](docs/validation/M15.4.md)。
+`cargo xtask bootstrap-kernel-test` 使用继承的 guest Cargo/rustc/rust-lld、
+锁定源码与 bare-metal 库重建真实内核。三次启动验证源码构建、保留 ELF 的宿主辅助
+打包、真实内核身份、编译失败后的产物保留与重启恢复。持久文件上限为 4 MiB，
+tmpfs 与共享缓存仍为 1 MiB。见 [M15 kernel](docs/M15_KERNEL.md) 与
+[本地验收](docs/validation/M15.5.md)。`cargo xtask bootstrap-repeat-test` 在新工作盘上
+独立重复两套构建，两轮 bzip2 产物与完整内核 ELF 逐字节一致，12 次启动/拒绝/恢复全部通过。
+内核中间文件的差异已保留，不宣称整个构建目录一致。见 [M15 repeat](docs/M15_REPEAT.md) 与
+[本地实测](docs/validation/M15.6.md)。编译器重建与 guest 独立生成完整镜像仍未验证。
 
 ## 许可证
 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Implement the bounded Linux AMD64 personality on the BSP scheduler boundary.
-//! Translate wire formats at this boundary; generic VFS, native ABI and scheduling remain independent.
+//! Translate wire formats and backend-specific file bounds; native ABI and scheduling stay independent.
 mod io;
 mod memory;
 mod select;
@@ -548,7 +548,11 @@ impl Kernel {
                         if f.rsi > i64::MAX as u64 {
                             return Err(-22);
                         }
-                        if f.rsi > anova_vfs::FILE_BYTES as u64 {
+                        let limit = self
+                            .fs
+                            .writable_file_limit(&p.files, f.rdi)
+                            .map_err(errno)?;
+                        if f.rsi > limit as u64 {
                             return Err(-27);
                         }
                         self.fs

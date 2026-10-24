@@ -489,3 +489,79 @@ Only headless fallback and kernel feature checks are added to ordinary CI;
 the hardware gate must be run explicitly on a supported host. See
 [M14 GPU](M14_GPU.md) and [M14.5 validation](validation/M14.5.md) for ownership,
 latency measurements and the boundary between GPU drawing and CPU presentation.
+
+## Controlled source reconstruction
+
+After preparing the M11 compiler/sysroot, run `cargo xtask bootstrap-prepare`
+to create a new source-only bzip2 1.0.8 workspace disk and instrumented ISO.
+`cargo xtask bootstrap-test` creates its own fresh disk and verifies resource
+limits, actual guest compilation and reboot/compiler-rejection recovery.
+Keep the printed work disk and shut down cleanly. Inputs, seed identities,
+source/output hashes and sampled resource observations are retained in
+`build/bootstrap/prepared.json` and `build/logs/bootstrap.result.json`; complete
+per-boot serial/QEMU evidence uses the `bootstrap-` log prefix. See
+[M15 bootstrap](M15_BOOTSTRAP.md) for prerequisites and measured-profile limits,
+and [local acceptance](validation/M15.1-M15.2.md) for exact executed scope.
+
+
+## GCC reconstruction feasibility
+
+After `cargo xtask toolchain-build`, run `cargo xtask bootstrap-gcc-test`.
+The command authenticates seven cached source archives, prepares a separate
+work disk and verifies the inherited C++11 seed, actual missing dependencies,
+selected upstream configure startup rejection, limit recovery and reboot.
+`python3 ports/bootstrap/test_gcc_probe.py` covers source/cache rejection;
+`python3 ports/bootstrap/gcc_probe.py --verify` independently checks the prepared
+source inventory without writes. The successful assessment reports current
+blockers; it does not produce a rebuilt GCC. See [M15 GCC](M15_GCC.md) and
+[local validation](validation/M15.3.md). The final report is
+`build/logs/bootstrap-gcc.result.json`, with per-boot `bootstrap-gcc-` logs and
+embedded source/seed/image identities.
+
+## Rust, LLVM and Cargo reconstruction feasibility
+
+After `cargo xtask toolchain-build` and `cargo xtask rust-build`, run
+`cargo xtask bootstrap-rust-test`. The command audits the locked official Rust
+source distribution and its separate LLVM/rustc/Cargo components, then uses two
+q35/TCG boots to verify Rust std/C++17 seed applications, actual missing-tool
+exec failures, an isolated offline dependency rejection and retained application
+hashes after reboot. It does not reconstruct a compiler or Cargo.
+`python3 ports/bootstrap/test_rust_probe.py` checks archive/cache rejection;
+`python3 ports/bootstrap/rust_probe.py --verify` checks existing publication
+without rewriting it. The final report is `build/logs/bootstrap-rust.result.json`,
+with embedded `build/bootstrap-rust/prepared.json`, source audit, exact seed/image
+identities and per-boot `bootstrap-rust-` logs. See [M15 Rust](M15_RUST.md) and
+[local validation](validation/M15.4.md) for the independent component conclusions
+and the difference between the inherited M12 seed and upstream's stage0.
+
+## Guest kernel reconstruction
+
+After preparing the locked M12 Rust runtime, run:
+
+```sh
+python3 ports/bootstrap/test_kernel_prepare.py
+cargo xtask bootstrap-kernel-test
+```
+
+The gate prepares exact kernel sources, locked offline registry packages and
+inherited bare-metal target libraries, then runs guest Cargo/rustc/rust-lld.
+It retains the resulting ELF, packages it without rebuilding a host kernel,
+extracts and compares the ISO's kernel bytes, then verifies actual boot,
+compiler-failure retention and another recovery boot. The final report is
+`build/logs/bootstrap-kernel.result.json`, with per-session `bootstrap-kernel-`
+logs and inventories in `build/bootstrap-kernel/inputs.json` and `prepared.json`.
+Run image-building gates sequentially. See [M15 kernel](M15_KERNEL.md) for
+source/seed provenance, 4 MiB persistent versus 1 MiB tmpfs/cache bounds,
+measurement limits and the separate guest-only image-generation scope.
+
+## Repeated clean reconstruction
+
+`cargo xtask bootstrap-repeat-test` runs both bzip2 and kernel gates twice
+sequentially on fresh work disks. It checks empty/source-only initial workspaces,
+retains each round under a unique `build/bootstrap-repeat/` run directory, and
+compares exact input/seed/recipe identities and full output bytes. Existing
+functional, compiler-rejection, reboot and filesystem checks run in each round.
+The successful aggregate is `build/logs/bootstrap-repeat.result.json`; mismatches
+retain `comparison.json` and fail. Run image-building gates exclusively. See
+[M15 repeat](M15_REPEAT.md) and [validation/M15.6](validation/M15.6.md) for
+retained artifacts, metadata differences and bootstrap limitations.

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 #![no_std]
 //! Bounded mounts with immutable ABI policy, shared files/maps, packet pairs, pipes and PTYs.
+//! Cached timestamps retain the backing filesystem's supported precision.
+//! Persistent regular files have a separate storage limit; tmpfs and shared caches stay bounded.
 //! One non-preemptible owner serializes all mutations; no hardware, locks or user pointers.
 extern crate alloc;
 pub mod archive;
@@ -32,6 +34,16 @@ pub enum Mount {
     Tmpfs,
     Devfs,
     Ext2,
+}
+impl Mount {
+    // Cached metadata must use the same precision as the persistent inode format.
+    fn timestamp(self, nanos: u64) -> u64 {
+        if self == Self::Ext2 {
+            nanos / 1_000_000_000 * 1_000_000_000
+        } else {
+            nanos
+        }
+    }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Device {
@@ -318,20 +330,13 @@ impl<'a> Vfs<'a> {
                 modified.map(seconds).transpose()?,
             )?;
         }
-        let precision = |time| {
-            if node.mount == Mount::Ext2 {
-                time / 1_000_000_000 * 1_000_000_000
-            } else {
-                time
-            }
-        };
         if let Some(time) = accessed {
-            node.accessed = precision(time);
+            node.accessed = node.mount.timestamp(time);
         }
         if let Some(time) = modified {
-            node.modified = precision(time);
+            node.modified = node.mount.timestamp(time);
         }
-        node.changed = precision(self.clock);
+        node.changed = node.mount.timestamp(self.clock);
         Ok(())
     }
     pub fn fsync(&mut self, files: &Descriptors, fd: u64) -> Result<(), i64> {
@@ -484,9 +489,9 @@ impl<'a> Vfs<'a> {
             data,
             inode: None,
             permissions,
-            modified: self.clock,
-            accessed: self.clock,
-            changed: self.clock,
+            modified: mount.timestamp(self.clock),
+            accessed: mount.timestamp(self.clock),
+            changed: mount.timestamp(self.clock),
             mapping: None,
         };
         // Unlinked nodes remain alive until their final open description is closed.
@@ -905,6 +910,21 @@ impl<'a> Vfs<'a> {
         self.opens[handle].as_mut().unwrap().offset = old.offset;
         result
     }
+    /// Return the backing limit of a writable regular file, independently of tmpfs/cache limits.
+    pub fn writable_file_limit(&self, fds: &Descriptors, fd: u64) -> Result<usize, i64> {
+        self.device(fds, fd, true)?;
+        let open = self.opens[fds.handle(fd)?].ok_or(BAD_DESCRIPTOR)?;
+        let Target::Node(node) = open.target else {
+            return Err(INVALID_ARGUMENT);
+        };
+        self.mutable_node(node)?;
+        match self.nodes[node].data {
+            Data::Mutable(_) => Ok(FILE_BYTES),
+            Data::Persistent { .. } => Ok(anova_storage::ext2::MAX_FILE),
+            Data::Directory => Err(IS_DIRECTORY),
+            _ => Err(READ_ONLY),
+        }
+    }
     /// Set regular-file length without modifying any shared open-description offset.
     pub fn set_len(&mut self, fds: &Descriptors, fd: u64, length: usize) -> Result<(), i64> {
         self.device(fds, fd, true)?;
@@ -921,6 +941,9 @@ impl<'a> Vfs<'a> {
         {
             return Err(BUSY);
         }
+        if length <= self.writable_file_limit(fds, fd)? {
+            self.prepare_mapping_growth(node, length)?;
+        }
         match &mut self.nodes[node].data {
             Data::Mutable(bytes) => {
                 if length > FILE_BYTES {
@@ -934,6 +957,10 @@ impl<'a> Vfs<'a> {
                 bytes.resize(length, 0);
             }
             Data::Persistent { size, .. } => {
+                if *size == length {
+                    // The backing resize is a no-op; keep its cached inode timestamps unchanged.
+                    return Ok(());
+                }
                 self.disk
                     .as_mut()
                     .ok_or(IO_ERROR)?
@@ -943,10 +970,25 @@ impl<'a> Vfs<'a> {
             Data::Directory => return Err(IS_DIRECTORY),
             _ => return Err(READ_ONLY),
         }
-        self.nodes[node].modified = self.clock;
-        self.nodes[node].changed = self.clock;
+        let timestamp = self.nodes[node].mount.timestamp(self.clock);
+        self.nodes[node].modified = timestamp;
+        self.nodes[node].changed = timestamp;
         if let Some(mapping) = &self.nodes[node].mapping {
             mapping.resize(length);
+        }
+        Ok(())
+    }
+    /// A live shared cache cannot cover larger files; idle caches can be discarded before growth.
+    fn prepare_mapping_growth(&mut self, node: usize, length: usize) -> Result<(), i64> {
+        if length > FILE_BYTES {
+            if self.nodes[node]
+                .mapping
+                .as_ref()
+                .is_some_and(MappedFile::active)
+            {
+                return Err(BUSY);
+            }
+            self.nodes[node].mapping = None;
         }
         Ok(())
     }
@@ -1395,8 +1437,9 @@ impl<'a> Vfs<'a> {
             } else if !matches!(self.nodes[node].data, Data::Device(_)) {
                 return Err(INVALID_ARGUMENT);
             }
-            self.nodes[node].modified = self.clock;
-            self.nodes[node].changed = self.clock;
+            let timestamp = self.nodes[node].mount.timestamp(self.clock);
+            self.nodes[node].modified = timestamp;
+            self.nodes[node].changed = timestamp;
             if let Some(mapping) = &self.nodes[node].mapping {
                 mapping.resize(0);
             }
@@ -1711,6 +1754,17 @@ impl<'a> Vfs<'a> {
             Target::Node(n) => {
                 self.mutable_node(n)?;
                 let inode = self.nodes[n].inode;
+                if let Data::Persistent { size, .. } = self.nodes[n].data {
+                    let offset = if open.flags & OPEN_APPEND != 0 {
+                        size
+                    } else {
+                        open.offset
+                    };
+                    let end = offset.checked_add(input.len()).ok_or(NO_SPACE)?;
+                    if end <= anova_storage::ext2::MAX_FILE {
+                        self.prepare_mapping_growth(n, end)?;
+                    }
+                }
                 match &mut self.nodes[n].data {
                     Data::Persistent { size, .. } => {
                         let offset = if open.flags & OPEN_APPEND != 0 {
@@ -1725,8 +1779,9 @@ impl<'a> Vfs<'a> {
                         )?;
                         self.opens[id].as_mut().unwrap().offset = offset + count;
                         *size = (*size).max(offset + count);
-                        self.nodes[n].modified = self.clock;
-                        self.nodes[n].changed = self.clock;
+                        let timestamp = self.nodes[n].mount.timestamp(self.clock);
+                        self.nodes[n].modified = timestamp;
+                        self.nodes[n].changed = timestamp;
                         if let Some(mapping) = &self.nodes[n].mapping {
                             mapping.write(offset, &input[..count]);
                         }
@@ -1750,8 +1805,9 @@ impl<'a> Vfs<'a> {
                         }
                         bytes[offset..end].copy_from_slice(input);
                         self.opens[id].as_mut().unwrap().offset = end;
-                        self.nodes[n].modified = self.clock;
-                        self.nodes[n].changed = self.clock;
+                        let timestamp = self.nodes[n].mount.timestamp(self.clock);
+                        self.nodes[n].modified = timestamp;
+                        self.nodes[n].changed = timestamp;
                         if let Some(mapping) = &self.nodes[n].mapping {
                             mapping.write(offset, input);
                         }
@@ -1867,5 +1923,10 @@ impl<'a> Vfs<'a> {
             self.opens.iter().flatten().count(),
             self.pipes.iter().flatten().count(),
         )
+    }
+    /// Allocated namespace slots, including unlinked slots retained for later reuse.
+    /// This measures the vector's high-water extent, not just currently linked names.
+    pub fn node_slots(&self) -> usize {
+        self.nodes.len()
     }
 }

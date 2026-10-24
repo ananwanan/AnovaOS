@@ -524,3 +524,79 @@ pages and permanently disables reuse. The test profile checks actual hardware
 renderer identity, pixel output, lost-doorbell timeout/reset, CPU fallback and
 hardware reinitialization. See [M14 GPU](docs/M14_GPU.md) and
 [validation/M14.5](docs/validation/M14.5.md) for exact scope and evidence.
+
+## Bounded M15 source reconstruction
+
+The optional `bootstrap-metrics` kernel feature samples resource use at scheduler
+boundaries and emits a per-instance summary before successful ACPI shutdown. It
+adds no syscall ABI and changes no resource policy. `xtask bootstrap-prepare`
+imports locked unmodified bzip2 sources into a new Linux-personality work disk;
+`bootstrap-test` separately boots capacity rejection, guest GCC reconstruction
+and reboot/compiler-failure recovery. Only the guest links the reconstructed
+bzip2 ELF. Physical-frame deltas include kernel allocations and omit transient
+syscall peaks; end-of-boot storage usage is separate from transient demand.
+The original bzip2 acceptance changed no disk format, file/heap/task/descriptor
+limits or native ABI. M15.5 below separately raises persistent file capacity
+while retaining tmpfs and shared-cache bounds. See [M15 bootstrap](docs/M15_BOOTSTRAP.md) and
+[local evidence](docs/validation/M15.1-M15.2.md).
+
+The separate `bootstrap-gcc-test` assessment audits seven locked source archives
+without extracting complete trees, packages a bounded configure-startup subset
+and reuses M11 seed tools. Actual guest probes compile/run a C++11 fixture,
+reject missing GMP/MPFR/MPC headers and build-tool execs, capture the upstream
+configure entry-point rejection and exercise resource recovery. A second boot
+checks retained fixture execution and exact persisted hashes. The host records
+its diagnostic compilation, imported sources, seed inventories and image
+identities explicitly. A successful assessment may conclude that construction
+is blocked; no new compiler stage or capacity enlargement is implied. Full
+source inventories include optional tests/docs and are not minimum build
+requirements. See [M15 GCC feasibility](docs/M15_GCC.md) and
+[execution evidence](docs/validation/M15.3.md). Compiler source bootstrap remains separate; the M15.5 kernel reconstruction
+boundary and its executed scope are described below.
+
+
+## M15.5 guest kernel reconstruction boundary
+
+`ports/bootstrap/kernel_prepare.py` snapshots exact first-party kernel and crate
+sources and authenticates complete locked registry archives. Its generated root
+workspace omits host xtask dependencies and records every metadata adaptation.
+Official matching bare-metal core/alloc/compiler_builtins remain inherited
+binary seeds, overlaid read-only at `/rs` beside the Linux-musl compiler tools.
+The readonly `/ks/source` tree avoids consuming persistent inodes for inputs.
+
+The host-built guest recipe `ports/bootstrap/kernel-build.c` drives actual
+Cargo/rustc/rust-lld processes, captures logs and atomically publishes only a
+validated high-half static kernel ELF. Explicit target selection isolates
+kernel flags from Linux-musl build scripts. Persistent outputs can reach
+4 MiB within the existing ext2 single-indirect layout; tmpfs and readonly shared
+caches retain their 1 MiB bounds. Active shared caches prevent oversized growth,
+while inactive caches are discarded before persistent growth. Each ext2 write
+snapshots its indirect table once, avoiding repeated device reads while
+preserving per-operation bounds and ordered pointer/length publication.
+
+`xtask/src/bootstrap_kernel.rs` retains the guest ELF, packages it through an
+image path that never rebuilds a kernel, independently compares ISO kernel
+bytes, then requires its embedded source/seed/recipe identity during actual
+boot and failure/recovery sessions. The host still supplies locked seeds,
+creates the initial work disk and boot images, extracts the guest output and
+packages the accepted kernel. This is separate from compiler reconstruction,
+guest-only image generation and repeated clean-build reproducibility. See
+[M15 kernel](docs/M15_KERNEL.md) and [status](docs/STATUS.md).
+
+## M15.6 independent build comparison boundary
+
+`xtask/src/bootstrap_repeat.rs` runs both accepted reconstruction gates twice
+sequentially. Each gate checks a source-only or empty initial work disk before
+compilation. The orchestrator snapshots all repository source bytes, verifies
+source stability, archives each stopped disk, ISO, initramfs, manifest and log
+before the next invocation, and requires matching declared input/seed/recipe
+identities and full bzip2 output/kernel ELF bytes. Failure leaves diagnostic
+evidence and no successful aggregate result. Each component retains its own
+compiler-rejection, reboot and filesystem checks.
+
+Metadata differences, including kernel intermediate output differences, remain
+recorded separately from final artifact equality. No source or artifact is
+normalized to force a match. Compiler source reconstruction, complete guest-only
+image generation, power-loss recovery and general reproducibility remain
+separate. See [M15 repeat](docs/M15_REPEAT.md) and
+[local evidence](docs/validation/M15.6.md).

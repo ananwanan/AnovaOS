@@ -112,5 +112,10 @@ general configure projects, compiler self-hosting/bootstrap, Rust/Cargo,
 SMP, public toolchain package publication and general Linux/glibc compatibility
 are not claimed. GCC's optional sysinfo/getrusage and madvise probes may return
 ENOSYS; the tested build path uses explicit GC settings and does not depend
-on those optimizations or profiling interfaces. ext2 still has a 1 MiB file
-limit, no journal, rename transaction or power-loss recovery guarantee.
+on those optimizations or profiling interfaces. The M15.5 implementation raises
+persistent ext2 regular files to 4 MiB within the existing single-indirect format;
+tmpfs files and readonly shared-file caches remain limited to 1 MiB. Growth past
+the cache bound is rejected with `EBUSY` while a shared mapping is live. This
+change does not add journaling or a power-loss recovery guarantee. The original
+M11 validation retains its historical limits; the current reconstruction profile
+and acceptance status are recorded separately in [M15 kernel](M15_KERNEL.md).

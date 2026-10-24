@@ -1,3 +1,4 @@
+<!-- Define persistent storage ownership, ext2 bounds, durability and serial source editing. -->
 # M7 persistent storage and source editing
 
 This document defines the PCI/virtio DMA boundary, supported ext2 profile,
@@ -53,7 +54,7 @@ ext2, without a partition table; the ISO/ESP and writable data image are separat
 | Metadata | Block bitmap 2, inode bitmap 3, inode table 4, contiguous reserved metadata |
 | Features | COMPAT=0, INCOMPAT=FILETYPE only (2), RO_COMPAT=0 |
 | Objects | Regular files and directories; no ext2 links, hard links, xattrs, ACLs or devices |
-| Files | Direct and one single-indirect block; at most 1 MiB per file |
+| Files | Direct and one single-indirect block; at most 4 MiB per persistent regular file since M15.5 |
 | Directories | Existing directories up to 12 direct blocks; new directories one block; no directory growth/removal |
 | Namespace | Existing VFS limits: 96 total nodes, 63-byte names, 128-byte paths; disk import depth at most eight |
 | Editor | 16 KiB ASCII buffer and canonical terminal lines up to 255 bytes |
@@ -78,6 +79,16 @@ image manifest selects the native personality for executable-mode disk files.
 ET_EXEC, segments and permissions. ELF OSABI is never used to guess Linux/native
 identity. This disk is a native-v1 image; Linux executables need M8's separate
 personality and acceptance policy.
+
+M15.5 raises the persistent regular-file limit from 1 MiB to 4 MiB within the
+existing direct/single-indirect layout; it does not change the disk format or
+reformat existing images. tmpfs files and the readonly shared-file mapping cache
+remain limited to 1 MiB. A live shared mapping prevents a file from growing past
+that cache limit and returns `EBUSY`; after its final mapping is released, an idle
+cache can be discarded before larger persistent-file growth. Larger ext2 files
+remain available through ordinary I/O and private mappings. See
+[M15 kernel reconstruction](M15_KERNEL.md) for the build profile and its
+independently recorded acceptance status.
 
 ## Ordering, errors and shutdown
 

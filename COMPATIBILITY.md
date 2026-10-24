@@ -201,6 +201,17 @@ shared-file mappings and persistent mmap writeback remain rejected. Exact bounds
 and configuration: [M12_NETWORK](docs/M12_NETWORK.md). Actual command results:
 [M12 acceptance](docs/validation/M12.md).
 
+## Persistent-file capacity in the M15.5 implementation
+
+Persistent ext2 regular files now admit 4 MiB within the existing direct and
+single-indirect format. Existing images retain their format; no reformatting is
+required. tmpfs files and readonly shared-file caches remain limited to 1 MiB.
+An active shared mapping prevents growth past the cache limit with `EBUSY`;
+ordinary file I/O and private mappings can access larger persistent files.
+This capacity change does not establish additional compiler/bootstrap or
+arbitrary Cargo-project compatibility. The kernel reconstruction profile and
+its acceptance status are recorded separately in [M15 kernel](docs/M15_KERNEL.md).
+
 ## M13 application package admission
 
 SDK 1.0.0 keeps native v1 numbers, errors and layouts frozen. ANOVAPK2 adds
@@ -212,3 +223,16 @@ admission is deferred without changing the independently tested M9 ELF runtime.
 This package profile does not establish general Linux package compatibility,
 glibc, a dependency solver, signature authentication or per-process sandboxes.
 See [M13 design](docs/M13_SDK.md) and [validation](docs/validation/M13.md).
+
+
+## M15.5 guest-built kernel profile
+
+The local `bootstrap-kernel-test` gate rebuilds the actual bare-metal kernel
+with inherited Rust/Cargo/rust-lld running in AnovaOS Linux-musl processes.
+The host packages the exact retained guest ELF; independent extraction and
+actual boot identity verify the selected kernel. Three sessions cover build,
+boot, syntax rejection with old-kernel retention and recovery. See
+[M15 kernel](docs/M15_KERNEL.md) and [local evidence](docs/validation/M15.5.md).
+The accepted configuration is stripped opt-z with bootstrap metrics and no GUI;
+target libraries remain inherited seeds. Compiler reconstruction, guest-only
+image generation and independent repeated clean builds remain separate.
