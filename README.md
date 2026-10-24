@@ -38,7 +38,9 @@ failure recovery. M15.3/M15.4 assess GCC and independent Rust/LLVM/Cargo
 feasibility with actual guest probes; current dependency/capacity blockers
 prevent compiler reconstruction. M15.5 reconstructs and boots the actual
 kernel using inherited guest tools, with exact retained-ELF host-assisted
-packaging. Compiler reconstruction and guest-only image generation remain
+packaging. M15.6 adds `cargo xtask bootstrap-repeat-test` for independent clean
+bzip2/kernel builds, retained evidence and exact artifact/recovery comparison;
+two clean builds of each target and all 12 boot/recovery sessions passed locally. Compiler reconstruction and guest-only image generation remain
 unverified.
 General Linux/glibc remains future work; device IRQs stay masked.**
 
@@ -253,8 +255,12 @@ Three boots verify construction, exact retained-ELF host-assisted packaging,
 actual kernel identity and failure/reboot recovery. Persistent files allow
 4 MiB while tmpfs and shared caches remain at 1 MiB. See
 [M15 kernel](docs/M15_KERNEL.md) and [local evidence](docs/validation/M15.5.md).
-Compiler reconstruction, guest-only image generation and M15.6 independent
-clean-build comparisons remain unverified.
+`cargo xtask bootstrap-repeat-test` independently repeats both reconstructions
+on fresh work disks. Two bzip2 builds and two complete kernel ELFs matched
+byte-for-byte; all 12 boot/rejection/recovery sessions passed. Kernel intermediate
+metadata differences are retained without claiming identical build directories.
+See [M15 repeat](docs/M15_REPEAT.md) and [local evidence](docs/validation/M15.6.md).
+Compiler reconstruction and guest-only image generation remain unverified.
 
 ## License
 

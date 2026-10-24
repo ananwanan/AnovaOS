@@ -163,6 +163,7 @@ pub fn verify(root: &Path) -> Result<()> {
     let mut implementation = Files::new();
     for name in [
         "xtask/src/bootstrap_kernel.rs",
+        "xtask/src/bootstrap_repeat.rs",
         "xtask/src/main.rs",
         "xtask/src/bootstrap.rs",
         "xtask/src/rust.rs",
@@ -237,6 +238,18 @@ pub fn verify(root: &Path) -> Result<()> {
         SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos()
     ));
     disk::create_profile(root, &disk_path, true)?;
+    let mut initial_disk = mount(&disk_path)?;
+    let has_workspace = initial_disk
+        .entries(2)
+        .map_err(|e| format!("Initial kernel disk: {e}"))?
+        .iter()
+        .any(|entry| &entry.name[..entry.length] == b"kernel");
+    initial_disk
+        .shutdown()
+        .map_err(|e| format!("Initial kernel disk shutdown: {e}"))?;
+    if has_workspace {
+        return Err("Fresh kernel disk contains a previous build workspace".into());
+    }
     let provenance = json!({
         "source_branch": version("git", &["branch", "--show-current"] )?,
         "source_commit": version("git", &["rev-parse", "HEAD"] )?,
@@ -345,6 +358,7 @@ pub fn verify(root: &Path) -> Result<()> {
     let evidence = json!({
         "result": "Ok", "scope": "Guest kernel ELF construction, exact host-assisted packaging and actual boot/recovery; no compiler or complete image bootstrap",
         "prepared": provenance, "construction": construction, "reboot": reboot, "recovery": recovery,
+        "clean_build": true,
         "guest_kernel": retained, "guest_kernel_sha256": kernel_hash, "guest_kernel_bytes": kernel.len(),
         "guest_iso": guest_iso, "guest_iso_sha256": hash(&fs::read(&guest_iso)?),
         "packaged_kernel_byte_identical": true, "failed_compilation_preserves_kernel": true,

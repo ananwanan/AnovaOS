@@ -361,6 +361,20 @@ pub fn verify(root: &Path) -> Result<()> {
     let (iso, path) = prepare(root)?;
     let prepared: Value =
         serde_json::from_slice(&fs::read(root.join("build/bootstrap/prepared.json"))?)?;
+    let mut initial_disk = mount(&path)?;
+    let workspace = initial_disk
+        .entries(2)
+        .map_err(storage)?
+        .into_iter()
+        .find(|entry| &entry.name[..entry.length] == b"bootstrap")
+        .ok_or("Missing fresh bzip2 workspace")?
+        .inode;
+    let mut initial = Files::new();
+    read_tree(&mut initial_disk, workspace, "", &mut initial)?;
+    initial_disk.shutdown().map_err(storage)?;
+    if initial != source_files(root)? {
+        return Err("Fresh bzip2 workspace contains non-source files".into());
+    }
     let mut steps = Vec::new();
     checked(&mut steps, "m15-capacity", 0);
     steps.push(("anova> ".into(), b"shutdown\r".to_vec()));
@@ -406,6 +420,7 @@ pub fn verify(root: &Path) -> Result<()> {
     let report = json!({
         "result": "Ok", "profile": "M15.1/M15.2 bzip2 1.0.8", "work_disk": path,
         "boots": 3, "compiler_execution": "guest", "host_compiled_bzip2": false, "prepared": prepared,
+        "clean_build": true, "initial_workspace_files_sha256": hashes(&initial),
         "capacity_probe": capacity, "build": build, "reboot_and_failure_recovery": reboot,
         "files": hashes(&first), "logical_file_bytes": first.values().map(Vec::len).sum::<usize>(),
         "max_file_bytes": first.values().map(Vec::len).max(), "source_and_elf_reboot_hashes": "identical",

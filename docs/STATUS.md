@@ -1,7 +1,7 @@
 <!-- Record locally verified subsystem capabilities, runtime limits and the next development task. -->
 # Implementation status
 
-Recorded 2026-10-24 (Asia/Shanghai). M15.5 implementation base `104cdab`.
+Recorded 2026-10-24 (Asia/Shanghai). M15.6 implementation base `55e3751`; repeated-gate local acceptance passed.
 Task branch: `feat/m15-bootstrap`. M15.1/M15.2 are locally accepted for the
 bounded bzip2 reconstruction profile; see [M15 bootstrap](M15_BOOTSTRAP.md) and
 [validation/M15.1-M15.2](validation/M15.1-M15.2.md). M15.3 feasibility is locally assessed;
@@ -259,13 +259,19 @@ The persistent file ceiling is now 4 MiB within the same ext2 format; tmpfs and
 readonly shared caches stay at 1 MiB. Per-write private indirect-table snapshots
 reduce the counted 2 MiB/512-byte-append fixture from 16,211,368 to 175,376 sector
 reads while preserving ordering and rejection/recovery behavior.
-Next, M15.6 should compare at least two independent clean builds in the declared
-bzip2/kernel scope and exercise retained tools/kernel after failures. Compiler
+M15.6 now has local acceptance from `cargo xtask bootstrap-repeat-test`: two
+independent clean bzip2 builds and two kernel builds, retained per-round evidence,
+matching declared inputs, byte-identical bzip2 outputs/final kernel ELFs and all
+12 failure/reboot/recovery sessions passing. The complete bzip2 workspace file
+inventory matches; ten kernel log/cache/generated/intermediate files differ,
+including reordered smoltcp configuration constants. Raw differences are retained;
+this accepts the declared final artifacts, not all kernel intermediate bytes.
+See [M15 repeat](M15_REPEAT.md) and [validation/M15.6](validation/M15.6.md). Compiler
 reconstruction, guest-only image generation and GUI-enabled kernel rebuilding
 remain unverified; the original M15.3/M15.4 audits retain their historical
 1 MiB capacity profile rather than claiming to reassess a pruned source route.
 Preserve `cargo xtask bootstrap-test`, `bootstrap-gcc-test`, `bootstrap-rust-test`,
-`bootstrap-kernel-test`, all four source rejection suites and the `bootstrap-metrics` kernel check,
+`bootstrap-kernel-test`, `bootstrap-repeat-test`, all four source rejection suites and the `bootstrap-metrics` kernel check,
 as well as every previous runtime/storage/network, C/C++/Rust/Cargo, native SDK
 and graphical gate, plus `gpu-test` and headless `gpu-fallback-test`.
 Native libc/std, general Unicode/IME, PTY/ANSI graphical terminal behavior,
@@ -281,7 +287,7 @@ hardware and broad Linux GUI compatibility remain independently scoped.
 | M15.3 | GCC feasibility evidence, then a compiler stage or multistage bootstrap if viable | Assessment locally verified; current profile blocked; no compiler stage rebuilt |
 | M15.4 | Separate LLVM/rustc/Cargo feasibility and source builds where viable | Assessment locally verified; current profile blocked; no component rebuilt |
 | M15.5 | Guest-built kernel actually booted; image-generation scope reported separately | Locally accepted: guest ELF, exact host-assisted packaging, boot identity and failure/recovery; guest-only image generation unverified |
-| M15.6 | Repeated clean builds, artifact comparison and failure recovery | Not started |
+| M15.6 | Repeated clean builds, artifact comparison and failure recovery | Locally accepted for two clean bzip2/kernel builds, exact declared artifacts and 12 boot/recovery sessions; kernel intermediate differences retained |
 
 Complete M15.1 before M15.2; then advance M15.3, M15.4 and M15.5 as their
 actual prerequisites permit. M15.5 may use the already accepted guest rustc;

@@ -171,5 +171,7 @@ boot-image generation or two independent clean builds. The separate pinned
 supply M15.3/M15.4 source auditing and guest prerequisite/blocker probes
 without constructing compiler components. The separate [M15.5 kernel
 profile](M15_KERNEL.md) now has [local acceptance](validation/M15.5.md) for
-preserved guest ELF and actual boot evidence. M15.6 still needs repeated clean builds,
-artifact comparison and recovery within its declared completed scope.
+preserved guest ELF and actual boot evidence. The separate [M15.6 repeated gate](M15_REPEAT.md) now has
+[local acceptance](validation/M15.6.md) for two independent clean bzip2/kernel
+builds, declared final artifact comparisons and failure/reboot recovery.
+This single bzip2 profile does not itself establish that separate acceptance.

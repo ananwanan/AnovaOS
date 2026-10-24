@@ -105,7 +105,10 @@ caches stay at 1 MiB. Active shared caches reject growth beyond their bounds;
 private snapshots remain separate. Keep kernel flags away from host build
 scripts, retain source/seed and implementation hashes, and verify ISO kernel
 bytes plus actual boot identity. Packaging a guest-built ELF must never invoke
-a host kernel build. Guest-only image generation and M15.6 remain separate.
+a host kernel build. M15.6 repeats both reconstruction gates on independent clean disks;
+preserve `cargo xtask bootstrap-repeat-test` and its retained per-round evidence,
+exact artifact comparisons and rejection/reboot checks. See [M15 repeat](docs/M15_REPEAT.md).
+Guest-only image generation and compiler reconstruction remain separate.
 
 本文件是后续 Codex 开发规范。用户明确指令优先；已有修改应保留。日常、可逆的实现选择可自主完成，不因普通阶段切换反复请求确认。
 

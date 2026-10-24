@@ -582,3 +582,21 @@ creates the initial work disk and boot images, extracts the guest output and
 packages the accepted kernel. This is separate from compiler reconstruction,
 guest-only image generation and repeated clean-build reproducibility. See
 [M15 kernel](docs/M15_KERNEL.md) and [status](docs/STATUS.md).
+
+## M15.6 independent build comparison boundary
+
+`xtask/src/bootstrap_repeat.rs` runs both accepted reconstruction gates twice
+sequentially. Each gate checks a source-only or empty initial work disk before
+compilation. The orchestrator snapshots all repository source bytes, verifies
+source stability, archives each stopped disk, ISO, initramfs, manifest and log
+before the next invocation, and requires matching declared input/seed/recipe
+identities and full bzip2 output/kernel ELF bytes. Failure leaves diagnostic
+evidence and no successful aggregate result. Each component retains its own
+compiler-rejection, reboot and filesystem checks.
+
+Metadata differences, including kernel intermediate output differences, remain
+recorded separately from final artifact equality. No source or artifact is
+normalized to force a match. Compiler source reconstruction, complete guest-only
+image generation, power-loss recovery and general reproducibility remain
+separate. See [M15 repeat](docs/M15_REPEAT.md) and
+[local evidence](docs/validation/M15.6.md).

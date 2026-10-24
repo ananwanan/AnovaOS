@@ -7,6 +7,9 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 
 | File | Purpose |
 | --- | --- |
+| `xtask/src/bootstrap_repeat.rs` | Repeat clean guest bzip2/kernel builds, retain independent artifacts and compare exact inputs, bytes and recovery evidence. |
+| `docs/M15_REPEAT.md` | Define repeated clean reconstruction, archival, artifact comparison and recovery boundaries. |
+| `docs/validation/M15.6.md` | Record actual two-round guest reconstruction, artifact comparison and recovery execution evidence. |
 | `docs/validation/M15.5.md` | Record actual guest kernel compilation, exact retained-ELF boot and recovery evidence, capacity regressions and host-assistance limits. |
 | `xtask/src/bootstrap_kernel.rs` | Construct the kernel in guest processes, preserve and verify its exact ELF in a host-packaged ISO, then check boot identity and failure recovery. |
 | `ports/bootstrap/kernel_prepare.py` | Snapshot exact kernel sources, isolate metadata, authenticate offline registry sources and prepare inherited bare-metal target libraries. |

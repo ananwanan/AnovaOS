@@ -553,3 +553,15 @@ logs and inventories in `build/bootstrap-kernel/inputs.json` and `prepared.json`
 Run image-building gates sequentially. See [M15 kernel](M15_KERNEL.md) for
 source/seed provenance, 4 MiB persistent versus 1 MiB tmpfs/cache bounds,
 measurement limits and the separate guest-only image-generation scope.
+
+## Repeated clean reconstruction
+
+`cargo xtask bootstrap-repeat-test` runs both bzip2 and kernel gates twice
+sequentially on fresh work disks. It checks empty/source-only initial workspaces,
+retains each round under a unique `build/bootstrap-repeat/` run directory, and
+compares exact input/seed/recipe identities and full output bytes. Existing
+functional, compiler-rejection, reboot and filesystem checks run in each round.
+The successful aggregate is `build/logs/bootstrap-repeat.result.json`; mismatches
+retain `comparison.json` and fail. Run image-building gates exclusively. See
+[M15 repeat](M15_REPEAT.md) and [validation/M15.6](validation/M15.6.md) for
+retained artifacts, metadata differences and bootstrap limitations.

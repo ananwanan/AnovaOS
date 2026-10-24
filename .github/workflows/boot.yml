@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Gate runtimes, SDKs, guest tools, source assessments and actual guest-built kernel boots.
+# Gate runtimes, SDKs, guest tools and repeated clean reconstruction with exact artifacts and recovery.
 name: Bare-metal boot
 
 on:
@@ -105,7 +105,7 @@ jobs:
   guest-toolchain:
     needs: boot
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Install compiler construction and guest test utilities
@@ -122,8 +122,6 @@ jobs:
         run: cargo xtask toolchain-build
       - name: Verify guest C/C++, incremental make, negative builds and reboot retention
         run: cargo xtask toolchain-test
-      - name: Verify guest tool reconstruction, resource limits and reboot retention
-        run: cargo xtask bootstrap-test
       - name: Assess locked GCC source capacity and guest prerequisite blockers
         run: cargo xtask bootstrap-gcc-test
       - name: Prepare locked upstream Rust musl tools and offline vendor
@@ -132,10 +130,10 @@ jobs:
           cargo xtask rust-build
       - name: Assess independent LLVM, rustc and Cargo source-build prerequisites
         run: cargo xtask bootstrap-rust-test
-      - name: Reconstruct the kernel in guest and boot the exact retained ELF
+      - name: Compare independent clean guest tool/kernel builds and boot recovery
         run: |
           cargo fetch --locked
-          cargo xtask bootstrap-kernel-test
+          cargo xtask bootstrap-repeat-test
       - name: Verify Rust std, detached threads and real compiler startup
         run: |
           cargo xtask rust-cross-test
@@ -168,6 +166,7 @@ jobs:
             build/bootstrap-kernel/inputs.json
             build/bootstrap-kernel/prepared.json
             build/bootstrap-kernel/guest-kernel.elf
+            build/bootstrap-repeat/
             build/rust/stage.sha256
             build/rust/archive.sha256
             build/gui-sdk/

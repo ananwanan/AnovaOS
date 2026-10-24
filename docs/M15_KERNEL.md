@@ -162,7 +162,9 @@ execution. Only a fully successful gate publishes
 Host assistance still creates the work disk, supplies inherited compilers and
 target libraries, constructs the first boot image, extracts the guest output,
 packages the second image and drives verification. Guest-only image generation,
-new compiler construction, GUI-enabled kernel reconstruction, general
-reproducibility and M15.6's independent clean-build comparisons require their
-own evidence. Normal shutdown/reboot recovery does not establish power-loss
+new compiler construction, GUI-enabled kernel reconstruction and general
+reproducibility require their own evidence. The separate [M15.6 repeat
+profile](M15_REPEAT.md) now has [local acceptance](validation/M15.6.md) for
+two clean kernel ELFs and bzip2 outputs; raw kernel intermediate differences
+are retained and are not claimed byte-identical. Normal shutdown/reboot recovery does not establish power-loss
 recovery for the non-journaled ext2 implementation.
