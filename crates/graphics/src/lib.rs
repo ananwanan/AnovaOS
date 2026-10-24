@@ -5,6 +5,9 @@
 //! Colors use `0x00RRGGBB`; unused high bits are ignored. Layout validation and byte packing
 //! are separate from mapping, cache policy, volatile device writes and display synchronization,
 //! which remain the display driver's responsibility. Rendering does not allocate or use SIMD.
+//! The optional device path reuses the integer-only VirGL clear command encoder.
+
+pub mod virgl;
 
 /// The bounded software path accepts at most this many pixels on either axis.
 pub const MAX_DIMENSION: u32 = 4096;

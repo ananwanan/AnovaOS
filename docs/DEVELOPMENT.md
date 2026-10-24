@@ -455,3 +455,37 @@ across clean shutdown/reboot. Run image-building tests sequentially: their
 verified `build/apps` snapshots are intentionally invalidated by concurrent
 writers. [M14.4 validation](validation/M14.4.md) records actual results and the
 boundary between host checks, QEMU verification and untested physical hardware.
+
+## M14.5 bounded hardware clear/readback
+
+```sh
+cargo xtask gpu-test
+cargo xtask gpu-fallback-test
+cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features gpu -- -D warnings
+cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features gpu-test -- -D warnings
+```
+
+Both commands build `build/images/anova-gpu.iso` with `graphics,gui,gpu-test`.
+The full gate requires a working GTK/OpenGL environment and a recognized actual
+hardware renderer. It keeps standard VGA for recovery and attaches a secondary
+`virtio-gpu-gl-pci`. The compositor is launched from the real COM1 shell to
+render and compare offscreen pixels, inject a lost doorbell and demonstrate
+CPU fallback and subsequent GPU reuse. `gpu-fallback-test` requires no GUI/GL
+environment: it covers a 2D-only GPU and no GPU with the same user interface.
+
+On this WSLg host the full gate selects Gallium `d3d12` and a Wayland GTK backend
+for the QEMU child when the corresponding environment is available. Explicit
+`GALLIUM_DRIVER`/`GDK_BACKEND` settings are preserved. `ANOVA_GPU_DISPLAY` may
+select another QEMU GL display, for example `egl-headless` on a Linux host with
+a suitable DRM render node. The full gate reads the exact device's capset
+renderer and rejects software/unknown renderers; a successful external GL probe
+or mere presence of `/dev/dxg` does not establish hardware acceptance.
+
+The result directory `build/gpu/` contains per-boot results, exact commands,
+source ELF/ISO hashes, host graphics package versions, serial/QMP logs and full
+800×600 PPM comparisons. The full gate's successful output remains separate
+from the headless fallback result. Run image-building gates sequentially.
+Only headless fallback and kernel feature checks are added to ordinary CI;
+the hardware gate must be run explicitly on a supported host. See
+[M14 GPU](M14_GPU.md) and [M14.5 validation](validation/M14.5.md) for ownership,
+latency measurements and the boundary between GPU drawing and CPU presentation.

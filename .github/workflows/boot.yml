@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Gate software graphics, physical input, native GUI SDKs and guest development tools.
+# Gate software GUI, bounded GPU CPU fallback, physical input, SDKs and guest development tools.
 name: Bare-metal boot
 
 on:
@@ -48,6 +48,8 @@ jobs:
           cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features input-test -- -D warnings
           cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features graphics,gui -- -D warnings
           cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features graphics,gui,gui-test -- -D warnings
+          cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features gpu -- -D warnings
+          cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features gpu-test -- -D warnings
       - name: Test host logic
         run: cargo xtask test-host
       - name: Build the kernel
@@ -62,6 +64,8 @@ jobs:
         run: cargo xtask terminal-test
       - name: Verify software graphics, QMP screenshot and serial fallback
         run: cargo xtask graphics-test
+      - name: Verify bounded GPU admission and headless CPU fallback
+        run: cargo xtask gpu-fallback-test
       - name: Verify polled PS2 keyboard, pointer, cursor pixels and device fallback
         run: cargo xtask input-test
       - name: Verify isolated native windows, physical input, redraw and compositor recovery
@@ -87,6 +91,7 @@ jobs:
             build/logs/
             build/input/
             build/gui/
+            build/gpu/
           if-no-files-found: ignore
 
 

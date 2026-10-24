@@ -243,7 +243,9 @@ native SDK 从 M4 的 `no_std` 应用与最小 runtime 开始。开发者可先�
 
 The optional **M14.1 software display and M14.2 polled PS/2 input/cursor are
 implemented and locally verified**. The M14.3 isolated user-space compositor
-is also locally accepted; GUI runtime/SDK and GPU components remain planned. The authoritative design and the
+and the M14.4 GUI runtime/SDK are locally accepted. M14.5 now verifies a bounded
+hardware offscreen clear/readback path with CPU fallback; ordinary desktop
+composition remains software-rendered. The authoritative design and the
 independently gated M14.1–M14.5 stages are in
 [M14_GUI](docs/M14_GUI.md), with stage status in [ROADMAP](ROADMAP.md)
 and [STATUS](docs/STATUS.md).
@@ -505,3 +507,20 @@ and client using actual wait statuses. The Rust graphical terminal starts its
 pipe/command helper before GUI initialization so it never forks a live GUI owner.
 This developer profile provides no native libc/`std`, GPU driver or Linux GUI ABI.
 See [runtime contract](docs/M14_RUNTIME.md).
+
+## Bounded M14.5 GPU drawing
+
+The optional `gpu` feature owns a secondary modern virtio-gpu control queue
+and private coherent DMA32 pages. Only the authenticated user compositor can
+request a bounded offscreen clear/readback; dimensions, color, reserved fields
+and writable output pointers are checked before any device submission. No raw
+VirGL command stream or device mapping is exposed to applications.
+
+Every device response is fenced and length/context/used-ring checked. A
+completed readback is copied through owned staging memory to the caller; the
+compositor chooses CPU fallback and presents through the existing VGA path.
+Reset acknowledgement precedes DMA release. Failed reset quarantines exposed
+pages and permanently disables reuse. The test profile checks actual hardware
+renderer identity, pixel output, lost-doorbell timeout/reset, CPU fallback and
+hardware reinitialization. See [M14 GPU](docs/M14_GPU.md) and
+[validation/M14.5](docs/validation/M14.5.md) for exact scope and evidence.

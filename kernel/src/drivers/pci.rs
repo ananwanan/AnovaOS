@@ -69,6 +69,26 @@ struct Bar {
 }
 
 pub fn discover(mapper: &mut EarlyMapper<'_>, network: bool) -> Result<Option<VirtioConfig>, i64> {
+    discover_device(
+        mapper,
+        if network { 0x1041_1af4 } else { 0x1042_1af4 },
+        if network { 0x40000 } else { 0 },
+        8,
+    )
+}
+
+/// Keep GPU capabilities in a distinct supervisor UC/NX window from block/network MMIO.
+#[cfg(feature = "gpu")]
+pub fn discover_gpu(mapper: &mut EarlyMapper<'_>) -> Result<Option<VirtioConfig>, i64> {
+    discover_device(mapper, 0x1050_1af4, 0x80000, 16)
+}
+
+fn discover_device(
+    mapper: &mut EarlyMapper<'_>,
+    identity: u32,
+    window_offset: u64,
+    device_bytes: u32,
+) -> Result<Option<VirtioConfig>, i64> {
     let mut buses = [false; 256];
     buses[0] = true;
     let mut found = None;
@@ -107,14 +127,14 @@ pub fn discover(mapper: &mut EarlyMapper<'_>, network: bool) -> Result<Option<Vi
                     }
                     buses[secondary..=subordinate].fill(true);
                 }
-                if id == if network { 0x1041_1af4 } else { 0x1042_1af4 } {
+                if id == identity {
                     if found.is_some() {
                         return Err(UNSUPPORTED);
                     }
                     serial::write(format_args!(
-                        "[PCI:BLK] bdf={bus:02x}:{device:02x}.{function} network={network}\n"
+                        "[PCI:BLK] bdf={bus:02x}:{device:02x}.{function} device={identity:#x}\n"
                     ));
-                    found = Some(capabilities(f, mapper, network)?);
+                    found = Some(capabilities(f, mapper, window_offset, device_bytes)?);
                 }
             }
         }
@@ -128,7 +148,8 @@ pub fn discover(mapper: &mut EarlyMapper<'_>, network: bool) -> Result<Option<Vi
 fn capabilities(
     f: Function,
     mapper: &mut EarlyMapper<'_>,
-    network: bool,
+    window_offset: u64,
+    device_bytes: u32,
 ) -> Result<VirtioConfig, i64> {
     if f.read(0x0c) & 0x007f_0000 != 0 || f.read(4) & (1 << 20) == 0 {
         return Err(UNSUPPORTED);
@@ -180,7 +201,7 @@ fn capabilities(
     };
     let mut seen = [false; 256];
     let mut cap = (f.read(0x34) & 255) as u8;
-    let start = WINDOW + if network { 0x40000 } else { 0 };
+    let start = WINDOW + window_offset;
     let mut window = start;
     while cap != 0 {
         if cap < 0x40 || !cap.is_multiple_of(4) || seen[cap as usize] {
@@ -237,7 +258,9 @@ fn capabilities(
                         result.notify_bytes = bytes;
                         result.multiplier = f.read(cap + 16);
                     }
-                    4 if result.device == 0 && bytes >= 8 => result.device = virtual_address,
+                    4 if result.device == 0 && bytes >= device_bytes => {
+                        result.device = virtual_address
+                    }
                     _ => return Err(INVALID_ARGUMENT),
                 }
             }

@@ -13,7 +13,7 @@ M14.1 已增加可选软件显示、受检 framebuffer 映射和真实 QEMU 逐�
 M14.2 已实现轮询式 PS/2 物理输入与裁剪游标。M14.3 已通过本地 QEMU 验收，交付独立
 Rust 用户态窗口合成器、焦点输入与崩溃/重启恢复。M14.4 已交付 Rust GUI runtime、
 C/C++/Rust SDK 与图形应用，系统内独立构建、真实键鼠输入和重启保留通过验收；
-M14.5 GPU 渲染仍待实现。
+M14.5 已验证有界硬件 VirGL 离屏清屏/读回与 CPU fallback；普通桌面仍采用软件合成。
 
 日常开发与 Pull Request 的目标分支为 **`dev`**；`main` 保留阶段验收后的稳定快照。分支约定见 [GitHub 协作说明](docs/GITHUB_SETUP.md)。
 
@@ -143,7 +143,7 @@ cargo xtask run --disk build/disks/work.ext2 # 复用此盘，在系统内 shutd
 
 ## 下一步
 
-M13 已交付版本化 SDK 与应用格式，见 [M13 SDK](docs/M13_SDK.md)。M14.1 已交付受检软件绘制，M14.2 已实现有界 PS/2 输入/游标诊断；M14.3 用户态合成器和 M14.4 GUI runtime/SDK 已通过本地验收；[GUI 计划](docs/M14_GUI.md) 的 M14.5 GPU 渲染仍待实现。当前 Rust/Cargo 范围见 [M12 Rust](docs/M12_RUST.md)，另见 [当前状态](docs/STATUS.md) 和 [路线图](ROADMAP.md)。
+M13 已交付版本化 SDK 与应用格式，见 [M13 SDK](docs/M13_SDK.md)。M14.1 已交付受检软件绘制，M14.2 已实现有界 PS/2 输入/游标诊断；M14.3 用户态合成器和 M14.4 GUI runtime/SDK 已通过本地验收；M14.5 已验收[有界硬件清屏/读回](docs/M14_GPU.md)及 CPU fallback；普通桌面仍采用软件合成。当前 Rust/Cargo 范围见 [M12 Rust](docs/M12_RUST.md)，另见 [当前状态](docs/STATUS.md) 和 [路线图](ROADMAP.md)。
 
 ## 许可证
 
@@ -300,4 +300,21 @@ Rust note 应用演示编辑和复制。受限图形终端支持输入 `echo TEX
 构建后运行 `gui-run /persist/gui-c`，使用物理按键 `a`、点击按钮，再按 `q`
 关闭应用，最后 F11 结束合成器并返回串口输入。完整步骤与边界见
 [开发说明](docs/DEVELOPMENT.md)、[runtime 契约](docs/M14_RUNTIME.md) 和
-[M14.4 验收](docs/validation/M14.4.md)。GPU 加速仍属于 M14.5。
+[M14.4 验收](docs/validation/M14.4.md)。有界 GPU 路径见下文。
+
+## M14.5 有界 GPU 绘制与 CPU fallback
+
+```sh
+cargo xtask gpu-test
+cargo xtask gpu-fallback-test
+```
+
+完整 gate 使用第二块 virtio-gpu/VirGL 设备完成真实离屏 render-target 清屏和 fence 读回。
+本地该设备实际报告 `D3D12 (NVIDIA GeForce RTX 4060 Ti)`。测试逐像素对照 CPU 颜色，
+验证非整齐尺寸的输出保护、非法参数拒绝、真实 timeout/reset、CPU fallback 与 GPU 重建。
+无界面的 fallback gate 覆盖仅 2D 和缺少 GPU 的情况，并已纳入 CI。
+
+认证的 Rust 合成器通过保留的 VGA framebuffer 显示结果。普通桌面合成与画面复制仍在 CPU
+完成；这不证明 shader draw、guest GL/Vulkan API 或性能提升。范围、运行环境及证据见
+[M14 GPU](docs/M14_GPU.md)、[开发说明](docs/DEVELOPMENT.md)和
+[M14.5 验收](docs/validation/M14.5.md)。

@@ -31,7 +31,8 @@ and a clipped cursor. M14.3 adds an isolated Rust user-space compositor,
 bounded private windows, focused input and checked crash/restart recovery.
 M14.4 adds the Rust GUI runtime, C/C++/Rust SDKs and graphical applications,
 with independent guest builds, physical input and reboot retention verified.
-M14.5 GPU rendering remains planned.
+M14.5 verifies bounded hardware VirGL clear/readback with CPU fallback;
+ordinary desktop composition remains software-rendered.
 General Linux/glibc remains future work; device IRQs stay masked.**
 
 Repository: [ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS).
@@ -203,8 +204,8 @@ is reported separately from [local validation](docs/validation/M12.md).
 M13 delivers the versioned SDK and application format described in
 [M13 SDK](docs/M13_SDK.md). M14.1 delivers checked software drawing and M14.2
 implements bounded PS/2 input/cursor diagnostics. M14.3 user-space composition
-and M14.4 GUI runtime/SDKs are locally accepted; M14.5 GPU rendering remains under the
-[separate GUI plan](docs/M14_GUI.md). Current Rust/Cargo limits remain in
+and M14.4 GUI runtime/SDKs are locally accepted. M14.5 verifies the bounded
+[hardware clear/readback profile](docs/M14_GPU.md) with CPU fallback. Current Rust/Cargo limits remain in
 [M12 Rust](docs/M12_RUST.md). See [current status](docs/STATUS.md) and
 [roadmap](ROADMAP.md).
 
@@ -400,4 +401,24 @@ pipes, and displays their output. It has no PTY/job control or ANSI emulation.
 Run `gui-run /persist/gui-c` after building; use physical `a`, the button and
 `q`, then F11 to stop the compositor and return to serial input. See the
 [development walkthrough](docs/DEVELOPMENT.md), [runtime contract](docs/M14_RUNTIME.md)
-and [M14.4 evidence](docs/validation/M14.4.md). GPU acceleration remains M14.5.
+and [M14.4 evidence](docs/validation/M14.4.md). The bounded GPU path is described below.
+
+## M14.5 bounded GPU drawing and CPU fallback
+
+```sh
+cargo xtask gpu-test
+cargo xtask gpu-fallback-test
+```
+
+The full gate uses a secondary virtio-gpu/VirGL device for actual offscreen
+render-target clears and fenced readbacks. This exact device reported
+`D3D12 (NVIDIA GeForce RTX 4060 Ti)` locally. It compares all returned pixels
+with a CPU reference, checks guarded odd dimensions and invalid parameters,
+then verifies actual timeout/reset, CPU fallback and GPU reinitialization.
+The headless fallback gate covers 2D-only and absent GPU devices and runs in CI.
+
+The authenticated Rust compositor presents the result through retained VGA
+scanout. Ordinary desktop composition and display copying remain on the CPU;
+this does not establish shader draws, a guest GL/Vulkan API or a speedup.
+See [M14 GPU](docs/M14_GPU.md), [development setup](docs/DEVELOPMENT.md)
+and [M14.5 evidence](docs/validation/M14.5.md).

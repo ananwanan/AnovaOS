@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Own bounded authenticated GUI mailboxes and exclusive checked display/input access.
-//! Called only by the BSP scheduler at IF=0; window policy and all rendering remain in userspace.
+//! Called only by the BSP scheduler at IF=0; window policy stays in userspace.
+//! An optional server-only GPU extension copies bounded clear/readback requests through owned DMA.
 use crate::{
     boot, graphics,
     mm::{self, uaccess, user::UserSpace},
@@ -337,9 +338,49 @@ impl Gui {
                 self.disconnect(pointer);
                 Ok(0)
             }
+            #[cfg(feature = "gpu")]
+            GPU_CLEAR => {
+                self.server(pid)?;
+                gpu_clear(space, pointer, length)
+            }
+            #[cfg(feature = "gpu-test")]
+            GPU_TEST_TIMEOUT => {
+                self.server(pid)?;
+                scalar(pointer, length)?;
+                crate::drivers::gpu::force_timeout()?;
+                Ok(0)
+            }
             _ => Err(UNSUPPORTED),
         }
     }
+}
+
+/// Stage GPU output away from process memory; bad pointers are rejected before device submission.
+#[cfg(feature = "gpu")]
+fn gpu_clear(space: &UserSpace, pointer: u64, length: u64) -> Result<i64, i64> {
+    exact(length, size_of::<GpuClear>())?;
+    let mut request = [0; size_of::<GpuClear>()];
+    copy_in(space, pointer, &mut request)?;
+    let field = |at| u32::from_le_bytes(request[at..at + 4].try_into().unwrap());
+    let output = u64::from_le_bytes(request[..8].try_into().unwrap());
+    let (width, height, rgb) = (field(8), field(12), field(16));
+    if !(1..=64).contains(&width) || !(1..=64).contains(&height) || rgb > 0xffffff || field(20) != 0
+    {
+        return Err(INVALID_ARGUMENT);
+    }
+    let count = width as usize * height as usize;
+    if !space.accessible(UserAddr(output), count * 4, true, false) {
+        return Err(BAD_ADDRESS);
+    }
+    let mut pixels = Vec::<u32>::new();
+    pixels.try_reserve_exact(count).map_err(|_| NO_MEMORY)?;
+    pixels.resize(count, 0);
+    crate::drivers::gpu::render(width, height, rgb, &mut pixels)?;
+    // SAFETY: Fully initialized exclusive u32 storage has no padding; only its live
+    // byte extent is borrowed until checked copy_out returns. DMA never targets user memory.
+    let bytes = unsafe { slice::from_raw_parts(pixels.as_ptr().cast::<u8>(), count * 4) };
+    copy_out(space, output, bytes)?;
+    Ok(0)
 }
 fn exact(length: u64, expected: usize) -> Result<(), i64> {
     if length == expected as u64 {

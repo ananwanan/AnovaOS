@@ -1,10 +1,11 @@
-<!-- Specify delivered software GUI/input/runtime SDK stages and the independent planned GPU gate. -->
+<!-- Specify delivered software GUI/input/runtime SDK stages and the independently bounded GPU gate. -->
 # M14: GUI architecture and five-stage delivery
 
-Status: **M14.1–M14.4 implemented and locally verified; M14.5 GPU remains planned**
-(2026-10-23). Actual local acceptance is recorded separately in
+Status: **M14.1–M14.4 locally verified; M14.5 bounded hardware clear/readback
+and CPU fallback locally verified** (2026-10-24). Actual local acceptance is recorded separately in
 [M14.1 validation](validation/M14.1.md), [M14.2 validation](validation/M14.2.md),
-[M14.3 validation](validation/M14.3.md) and [M14.4 validation](validation/M14.4.md).
+[M14.3 validation](validation/M14.3.md), [M14.4 validation](validation/M14.4.md)
+and [M14.5 validation](validation/M14.5.md).
 This design is subordinate to [AGENTS](../AGENTS.md), [architecture](../ARCHITECTURE.md),
 [roadmap](../ROADMAP.md), and [implementation status](STATUS.md). Do not interpret the
 Limine framebuffer boot response or any rendered host mockup as a functioning desktop.
@@ -222,18 +223,19 @@ resource reclamation. Demonstrate the full edit/build/run cycle in AnovaOS.
 
 ### M14.5 — Optional hardware-accelerated rendering
 
-Dependencies: working software desktop, device/PCI/DMA ownership, safe shared
-memory and a selected tested graphics-device/userspace stack.
+Dependencies: working software desktop, device/PCI/DMA ownership, bounded
+coherent backing buffers and a selected tested graphics-device/userspace interface.
+The accepted profile uses private copied output, not public shared mappings.
 
-- [ ] Evaluate a selected `virtio-gpu` display path, document 2D scanout
+- [x] Evaluate a selected `virtio-gpu` display path, document 2D scanout
       separately from true accelerated rendering and keep M14.1 fallback.
-- [ ] Specify device queues, buffer allocation, mapping/cache coherence,
+- [x] Specify device queues, buffer allocation, mapping/cache coherence,
       synchronization/fences, resource resets and isolation from untrusted apps.
-- [ ] Implement and verify at least one **actual GPU-rendered** composition or
+- [x] Implement and verify at least one **actual GPU-rendered** composition or
       drawing path using a demonstrated device, driver and user-space interface.
-- [ ] Compare deterministic rendered output with the CPU reference under
+- [x] Compare deterministic rendered output with the CPU reference under
       supported modes, recovery and device-reset/failure cases.
-- [ ] Record chosen versions, driver limitations, platform assumptions and
+- [x] Record chosen versions, driver limitations, platform assumptions and
       measured performance; avoid claiming Vulkan/OpenGL support without
       testing their real user-space stacks and drivers.
 
@@ -241,6 +243,19 @@ memory and a selected tested graphics-device/userspace stack.
 presented output and failure recovery are tested, and CPU fallback passes
 regression. Virtio-gpu scanout or a framebuffer alone does **not** satisfy
 the acceleration gate. If no such path is implemented, M14.5 stays open.
+
+The accepted [M14 GPU profile](M14_GPU.md) submits actual VirGL render-target
+clears and fenced readbacks through a secondary device reporting the RTX 4060 Ti
+D3D12 backend. Its authenticated user compositor chooses CPU fallback and copies
+pixels to the retained VGA display. It verifies a 7×5 nontrivial-color output,
+four 64×64 colors, real lost-doorbell timeout/reset, hardware reinitialization,
+2D-only/absent devices, full scanout comparisons and serial recovery.
+
+This is bounded offscreen GPU drawing. Ordinary window composition and display
+copying remain on the CPU; shader drawing, guest GL/Vulkan APIs, broad hardware
+support, zero-copy scanout and speedup claims are outside this acceptance.
+The reset-refusal quarantine policy is implemented but not physically induced
+by the acknowledged-reset gate. Exact evidence is in [M14.5 validation](validation/M14.5.md).
 
 ## 6. Stage dependency, related work and exclusions
 
@@ -413,7 +428,8 @@ graphical terminal/text, user-space compositor, public GUI event ABI and GUI
 SDK remain outside M14.2. M14.3 is accepted separately under
 [M14_COMPOSITOR](M14_COMPOSITOR.md) and [its validation](validation/M14.3.md);
 M14.4 is separately accepted under [runtime](M14_RUNTIME.md) and
-[validation](validation/M14.4.md); M14.5 GPU rendering remains open.
+[validation](validation/M14.4.md); M14.5 bounded GPU drawing is accepted separately
+under [M14 GPU](M14_GPU.md).
 
 ## 9. M14.4 runtime implementation
 
@@ -423,4 +439,5 @@ terminal use the same runtime as the independent language demos. The guest build
 profile uses the accepted GCC/G++ and Rust compilers to generate native outputs;
 it does not establish native libc or Rust `std`. See [runtime contract](M14_RUNTIME.md)
 and [M14.4 validation](validation/M14.4.md) for concrete API/ownership details,
-actual gate results and exclusions. M14.5 still requires a separately proven GPU path.
+actual gate results and exclusions. M14.5 now has a separately verified bounded
+GPU clear/readback path; it does not accelerate the ordinary desktop.

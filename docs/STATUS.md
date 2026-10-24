@@ -1,10 +1,11 @@
 <!-- Record locally verified subsystem capabilities, runtime limits and the next development task. -->
 # Implementation status
 
-Recorded 2026-10-23 (Asia/Shanghai). M14.4 continuation baseline `b9af1e3`.
+Recorded 2026-10-24 (Asia/Shanghai). M14.5 continuation baseline `0fa4799`.
 Task branch: `feat/m14-framebuffer`. See [M14 GUI](M14_GUI.md),
 [validation/M14.1](validation/M14.1.md), [validation/M14.2](validation/M14.2.md)
-[validation/M14.3](validation/M14.3.md) and [validation/M14.4](validation/M14.4.md).
+[validation/M14.3](validation/M14.3.md), [validation/M14.4](validation/M14.4.md)
+and [validation/M14.5](validation/M14.5.md).
 Remote CI and publication are separate from local acceptance.
 
 ## Implemented and locally verified
@@ -56,7 +57,7 @@ Remote CI and publication are separate from local acceptance.
   is restricted to the controlled host peer and generated test CA.
 - DEV-001 remains mandatory: English purpose headers plus the checked
   [file inventory](FILE_PURPOSES.md). Current command results are in
-  [validation/M14.4](validation/M14.4.md).
+  [validation/M14.5](validation/M14.5.md).
 - Historical M12 acceptance recorded 83 host tests, host/kernel/user Clippy,
   formatting and all 13 QEMU scenarios passing. Ordinary UART and persistence/error sessions consume ordered stdout
   directly; diagnostic-log snapshots cannot invalidate their matching cursors.
@@ -74,6 +75,7 @@ Remote CI and publication are separate from local acceptance.
 | COW, writable shared-file mmap/writeback, ASLR, SMP and physical hardware | Not implemented or verified |
 | M14.3 isolated native software compositor/windows | Locally accepted within M14_COMPOSITOR |
 | M14.4 Rust GUI runtime and guest-built C/C++/Rust SDK applications | Locally accepted within M14_RUNTIME |
+| M14.5 bounded hardware VirGL clear/readback and CPU fallback | Locally accepted within M14_GPU; ordinary desktop remains software-rendered |
 | M10 IPv4 client networking and controlled native packages/TLS | Locally accepted within M10_NETWORK_PACKAGES |
 | M11 offline GCC/G++ 11.2.0, binutils, make and matching musl/C++ sysroot | Locally accepted within M11_TOOLCHAIN |
 | M12 guest Rust 1.90.0/std, offline Cargo/vendor, build.rs/C FFI and the fixed Cargo macro graph | Locally accepted within M12_RUST |
@@ -206,11 +208,13 @@ bounds recorded here. Native limits remain separate.
 
 ## Next task
 
-M14.5 remains open for optional hardware GPU rendering with a separately
-verified CPU fallback. A framebuffer or 2D scanout does not establish GPU
-acceleration. M14.4's bounded native GUI runtime/SDK, note and interactive
-command terminal passed the two-boot guest gate. Preserve every prior
-runtime/storage/network, C/C++/Rust/Cargo, native SDK and graphical gate.
+The five M14 stages now have separate local acceptance records, with M14.5
+limited to hardware offscreen VirGL clear/readback and CPU display copying.
+Shader drawing, GPU window composition and broader device support remain
+independent extensions; the ordinary desktop uses its accepted software path.
+M15 is the next optional roadmap stage, not an implicit part of GUI acceptance.
+Preserve every previous runtime/storage/network, C/C++/Rust/Cargo, native SDK
+and graphical gate, plus `gpu-test` and headless `gpu-fallback-test`.
 Native libc/std, general Unicode/IME, PTY/ANSI graphical terminal behavior,
 shared clipboard policy, dynamic GUI package-service admission, physical
 hardware and broad Linux GUI compatibility remain independently scoped.
@@ -229,7 +233,7 @@ constraints, candidate dependency policy and five independent gates are in
 | M14.2 | Keyboard/pointer events and visible cursor | Local QEMU gate passed |
 | M14.3 | Isolated user-space compositor; two windows and correct focus | Local QEMU gate passed |
 | M14.4 | GUI runtime and C/C++/Rust SDK demos compiled/run in guest | Local QEMU gate passed |
-| M14.5 | Verified GPU-rendered path with CPU fallback | Not started |
+| M14.5 | Bounded hardware GPU clear/readback with CPU fallback | Local three-boot QEMU gate passed |
 
 The optional graphics feature validates the reserved framebuffer span and each
 supervisor RW/NX WC mapping before writing. A dependency-free `no_std` library
@@ -309,7 +313,7 @@ The pure GUI library adds eleven host tests; total host coverage is 163 tests.
 CPU stores have no vblank/atomic multi-upload guarantee. USB, device IRQs,
 physical hardware, writable shared surfaces and GPU rendering remain outside
 this profile. M14.4 GUI runtime/text/widgets/terminal and the independent C/C++/Rust GUI SDK
-are accepted separately below; M14.5 acceleration remains open.
+are accepted separately below; M14.5 has its own bounded GPU drawing acceptance.
 
 ## M14.4 GUI runtime and SDK — locally verified (2026-10-23)
 
@@ -345,5 +349,29 @@ Cargo manifest. CI includes the gate, but no remote CI or physical-hardware
 result is claimed. Current limits include one bounded private window per
 client, ASCII bitmap shapes/Unicode fallback boxes, process-local clipboard,
 US key text, no GUI callbacks/threads, a bounded echo/pwd command terminal,
-static linkage and no dynamic GUI package-service admission. GPU rendering
-remains M14.5.
+static linkage and no dynamic GUI package-service admission. Bounded GPU drawing
+is accepted independently under M14.5 below.
+
+## M14.5 bounded hardware drawing — locally verified (2026-10-24)
+
+An optional modern virtio-gpu control queue submits actual VirGL offscreen
+render-target clears and fenced host-to-guest readback. This exact device
+reports `D3D12 (NVIDIA GeForce RTX 4060 Ti)` through capset 2. A compositor-only
+checked operation returns at most 64×64 RGB pixels; it exposes no raw commands,
+user DMA addresses or shared device mappings. The independent user compositor
+selects CPU fallback and uses the existing checked VGA presentation path.
+
+`cargo xtask gpu-test` passed three boots: hardware VirGL, a 2D-only GPU and
+no GPU. The hardware boot verifies four 64×64 colors, a 7×5 intermediate-color
+readback with a guarded output tail, calibrated lost-doorbell timeout, actual
+reset/DMA reclamation, CPU fallback and subsequent hardware reinitialization.
+Five complete 800×600 screenshots match the CPU reference across these boots.
+All cases require admitted-operation negatives, successful compositor exits,
+COM1 recovery and clean shutdown. The independent headless fallback command
+is included in CI; remote execution remains unverified.
+
+This accepts GPU clear/readback drawing only. Scanout copying and ordinary
+window composition remain on the CPU; no shader draws, guest OpenGL/Vulkan API,
+zero-copy scanout, performance speedup, physical GPU passthrough or recovery
+from an unacknowledged reset is established. Exact scope and current regression
+evidence are in [M14 GPU](M14_GPU.md) and [validation/M14.5](validation/M14.5.md).

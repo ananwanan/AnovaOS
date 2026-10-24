@@ -33,6 +33,8 @@ smoltcp = { version = "=0.12.0", default-features = false, features = ["alloc", 
 graphics = ["dep:anova-graphics", "dep:anova-input"]
 gui = ["graphics", "dep:anova-gui"]
 gui-test = ["gui"]
+gpu = ["gui"]
+gpu-test = ["gpu"]
 input-test = ["graphics"]
 qemu-test = []
 test-panic = ["qemu-test"]

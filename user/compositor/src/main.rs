@@ -3,6 +3,9 @@
 #![no_main]
 //! Run window policy and damage composition in a protected native user process.
 //! Kernel authority only exposes copied IPC, physical events and checked synchronous scanout.
+//! The explicit GPU probe exercises bounded offscreen rendering with user-selected CPU fallback.
+
+mod gpu;
 
 use anova_gui::{Compositor, Error, Reply, Request, STORAGE_PIXELS, reply_kind, transport as t};
 use anova_gui_user as gui;
@@ -228,6 +231,9 @@ unsafe extern "C" fn anova_main(argc: usize, argv: *const *const u8) -> u32 {
     let mode = unsafe { rt::Args::from_raw(argc, argv) }
         .nth(1)
         .unwrap_or(b"");
+    if mode == b"gpu" || mode == b"gpu-fail" {
+        return gpu::run(mode == b"gpu-fail");
+    }
     run(mode == b"test", mode == b"restart")
 }
 

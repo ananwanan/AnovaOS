@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Experimental M14.3 kernel transport, separate from frozen native v1 and the future GUI C ABI.
+//! Experimental compositor kernel transport, separate from frozen native v1 and GUI library ABI.
 //! Packets are copied synchronously; identities are assigned by the kernel, never by clients.
 
 pub const SYS_GUI: u64 = 0x100;
@@ -16,6 +16,10 @@ pub const CLOSE: u64 = 9;
 pub const UNBIND: u64 = 10;
 /// Server-only eviction of a stalled connection; pointer argument is a scalar client identity.
 pub const DROP_CLIENT: u64 = 11;
+/// Compositor-only bounded offscreen VirGL clear/readback; no raw device commands or mappings.
+pub const GPU_CLEAR: u64 = 12;
+/// Test-image-only lost-doorbell injection; production kernels return UNSUPPORTED.
+pub const GPU_TEST_TIMEOUT: u64 = 13;
 pub const PACKET_BYTES: usize = 4096;
 pub const CONNECTED: u32 = 1;
 pub const REQUEST: u32 = 2;
@@ -76,6 +80,18 @@ pub struct Scanout {
     pub stride: u32,
     pub reserved: u32,
 }
+/// The output is width*height packed 0x00RRGGBB u32 pixels, at most 64*64.
+/// The kernel copies the request, renders into private DMA and retains no user pointer.
+#[derive(Clone, Copy, Default)]
+#[repr(C)]
+pub struct GpuClear {
+    pub pixels: u64,
+    pub width: u32,
+    pub height: u32,
+    pub rgb: u32,
+    pub reserved: u32,
+}
 const _: () = assert!(size_of::<Envelope>() == 4120 && size_of::<Delivery>() == 72);
 const _: () = assert!(size_of::<HardwareEvent>() == 24 && size_of::<DisplayInfo>() == 16);
 const _: () = assert!(size_of::<Scanout>() == 32);
+const _: () = assert!(size_of::<GpuClear>() == 24 && align_of::<GpuClear>() == 8);

@@ -70,7 +70,11 @@ GUI runtime, versioned C ABI, C++/Rust ownership wrappers, note/interactive
 graphical terminal and independently guest-built native clients. Preserve
 `cargo xtask gui-sdk-test`, `anova-gui-runtime` host tests and generated GUI
 header checks. Read [M14 runtime](docs/M14_RUNTIME.md) and
-[validation/M14.4](docs/validation/M14.4.md). M14.5 GPU rendering remains open;
+[validation/M14.4](docs/validation/M14.4.md). M14.5 locally verifies bounded hardware VirGL offscreen clear/readback and CPU
+fallback. Preserve `cargo xtask gpu-test`, headless `cargo xtask gpu-fallback-test`
+and both `gpu`/`gpu-test` kernel checks; see [M14 GPU](docs/M14_GPU.md) and
+[validation/M14.5](docs/validation/M14.5.md). Ordinary desktop composition remains
+software-rendered; shader draws and a guest GL/Vulkan API remain outside this profile;
 GDB stubs, native std and compiler bootstrap remain independently scoped.
 
 本文件是后续 Codex 开发规范。用户明确指令优先；已有修改应保留。日常、可逆的实现选择可自主完成，不因普通阶段切换反复请求确认。

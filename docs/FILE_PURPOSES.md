@@ -7,6 +7,12 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 
 | File | Purpose |
 | --- | --- |
+| `crates/graphics/src/virgl.rs` | Encode bounded VirGL clear commands with integer UNORM conversion and independent host reference tests. |
+| `kernel/src/drivers/gpu.rs` | Own an optional polled modern virtio-gpu queue, fenced hardware readback, reset and DMA quarantine. |
+| `user/compositor/src/gpu.rs` | Exercise the server-only GPU API, guarded readback comparisons and user-selected CPU fallback. |
+| `xtask/src/gpu.rs` | Gate exact-device hardware rendering, full scanout comparisons, fault/reset recovery and headless CPU fallback. |
+| `docs/M14_GPU.md` | Define the bounded offscreen GPU profile, ownership, user interface, synchronization and fallback. |
+| `docs/validation/M14.5.md` | Record actual local hardware rendering, fallback, regression evidence and explicit limits. |
 | `.cargo/config.toml` | Routes host commands through xtask and confines kernel code-generation flags to its target. |
 | `.gitattributes` | Normalize first-party text to LF while preserving binary images and archives. |
 | `.github/workflows/boot.yml` | Gate host/user/kernel checks, graphics/input/native composition and QEMU regressions, retain GUI evidence, and run a separate source-built guest compiler job. |
