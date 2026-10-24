@@ -159,6 +159,19 @@ remain separate. Run `cargo xtask rust-build`, `rust-cross-test`,
 
 能够在 AnovaOS 中重建 GCC、Rust、LLVM 或自身内核是更高等级的自举能力，单列 M15；需要额外资源和构建生态，不能作为应用开发的隐性前置条件。
 
+The planned [M15.1–M15.6 roadmap](../ROADMAP.md#m15可选自举与系统自编译)
+separates capacity/build-environment work, a small guest-built C/C++ tool,
+the GCC route, the Rust/LLVM route, kernel rebuilding/booting and repeated
+build/comparison/recovery evidence. All six stages remain unimplemented.
+GCC and Rust/LLVM start with separate pinned feasibility evaluations; full
+compiler bootstrap is conditional on the resulting dependencies and resources.
+Kernel reconstruction may use the already accepted guest rustc without first
+rebuilding the compiler. Report guest kernel ELF construction, host-assisted
+image packaging and image generation inside the guest as separate capabilities,
+and ensure packaging preserves the exact guest ELF instead of rebuilding it
+on the host. Repeat-build comparisons retain their declared inputs, seed
+tools and nondeterminism limits.
+
 ## M13 SDK delivery
 
 The source-distributed [SDK 1.0.0](M13_SDK.md) gives host C/C++/Rust developers

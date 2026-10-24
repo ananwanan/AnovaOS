@@ -213,11 +213,40 @@ limited to hardware offscreen VirGL clear/readback and CPU display copying.
 Shader drawing, GPU window composition and broader device support remain
 independent extensions; the ordinary desktop uses its accepted software path.
 M15 is the next optional roadmap stage, not an implicit part of GUI acceptance.
+Its six planned stages are defined in [ROADMAP](../ROADMAP.md#m15可选自举与系统自编译);
+none is implemented or accepted. Start with M15.1 resource measurements and
+the build environment, then M15.2 controlled C/C++ tool reconstruction.
 Preserve every previous runtime/storage/network, C/C++/Rust/Cargo, native SDK
 and graphical gate, plus `gpu-test` and headless `gpu-fallback-test`.
 Native libc/std, general Unicode/IME, PTY/ANSI graphical terminal behavior,
 shared clipboard policy, dynamic GUI package-service admission, physical
 hardware and broad Linux GUI compatibility remain independently scoped.
+
+### M15 bootstrap plan — not implemented
+
+| Planned stage | Intended result | Current status |
+| --- | --- | --- |
+| M15.1 | Measured capacity, sufficient build environment and persistent work disk | Not started |
+| M15.2 | Controlled C/C++ tool built in guest and executed again after reboot | Not started |
+| M15.3 | GCC feasibility evidence, then a compiler stage or multistage bootstrap if viable | Not started |
+| M15.4 | Separate LLVM/rustc/Cargo feasibility and source builds where viable | Not started |
+| M15.5 | Guest-built kernel actually booted; image-generation scope reported separately | Not started |
+| M15.6 | Repeated clean builds, artifact comparison and failure recovery | Not started |
+
+Complete M15.1 before M15.2; then advance M15.3, M15.4 and M15.5 as their
+actual prerequisites permit. M15.5 may use the already accepted guest rustc;
+compiler source bootstrap is not its prerequisite. Full GCC and Rust/LLVM
+bootstrap remain conditional on feasibility, with unexecuted capabilities
+explicitly unverified. Retain input manifests, commands, logs and hashes at
+each stage, and consolidate the declared scope in M15.6.
+
+The current Rust development disk is 16 MiB with 512 inodes, writable files
+are bounded at 1 MiB, and the VFS has 2,048 nodes. The 16 MiB kernel heap and
+32 task slots remain bounded as documented above. Additional QEMU RAM alone
+does not remove these limits; M15.1 must measure and address actual blockers.
+Guest kernel compilation, host-assisted image packaging and image generation
+inside the guest require separate evidence. Two matching builds establish
+only the recorded comparison, not general reproducibility or seed-free bootstrap.
 
 ## M14.1 software display — locally verified (2026-10-23)
 
