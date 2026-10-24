@@ -1,7 +1,7 @@
 <!-- Track milestone dependencies, implementation checklists and acceptance criteria. -->
 # 开发路线与阶段验收
 
-日期：2026-10-24。**M0–M13（受限离线与联网范围）及 M14.1 软件显示已通过本地 q35/TCG 验收；M14.2 输入与游标已通过本地 q35/TCG 验收；M14.3 用户态合成器已通过本地 q35/TCG 验收；M14.4 GUI runtime/三语言 SDK 已通过本地验收；M14.5 已通过有界硬件清屏/读回及 CPU fallback 的本地验收，M15 尚未实现，外设 IRQ 路由启用待对应驱动。** 证据见 [M13 验证记录](docs/validation/M13.md)、[M14.1 验证记录](docs/validation/M14.1.md)、[M14.2 验证记录](docs/validation/M14.2.md)、[M14.3 验证记录](docs/validation/M14.3.md)、[M14.4 验证记录](docs/validation/M14.4.md)、[M14.5 验证记录](docs/validation/M14.5.md) 与 [STATUS](docs/STATUS.md)。[FIRST_TASK](docs/FIRST_TASK.md) 记录 M0/M1 原始实现顺序；当前 M2 边界见 [CPU 基线](docs/M2_CPU.md)。
+日期：2026-10-24。**M0–M13（受限离线与联网范围）及 M14.1 软件显示已通过本地 q35/TCG 验收；M14.2 输入与游标已通过本地 q35/TCG 验收；M14.3 用户态合成器已通过本地 q35/TCG 验收；M14.4 GUI runtime/三语言 SDK 已通过本地验收；M14.5 已通过有界硬件清屏/读回及 CPU fallback 的本地验收，M15.1/M15.2 已通过受控 bzip2 源码重建的本地验收，M15.3–M15.6 尚未实现，外设 IRQ 路由启用待对应驱动。** 证据见 [M13 验证记录](docs/validation/M13.md)、[M14.1 验证记录](docs/validation/M14.1.md)、[M14.2 验证记录](docs/validation/M14.2.md)、[M14.3 验证记录](docs/validation/M14.3.md)、[M14.4 验证记录](docs/validation/M14.4.md)、[M14.5 验证记录](docs/validation/M14.5.md) 与 [STATUS](docs/STATUS.md)。[FIRST_TASK](docs/FIRST_TASK.md) 记录 M0/M1 原始实现顺序；当前 M2 边界见 [CPU 基线](docs/M2_CPU.md)。
 
 ## 阶段总览
 
@@ -22,7 +22,7 @@
 | M12 | 系统内 Rust/Cargo 应用开发 | M11、M9；联网依赖 M10 | 离线与受限 HTTPS registry/Git 本地验收通过；原生端口独立推进 |
 | M13 | 可发布的 SDK 与应用包 | M4 基础 SDK、M11/M12 | 本地 SDK/包/诊断验收通过 |
 | M14 | Rust 图形桌面与 C/C++/Rust GUI SDK（M14.1–M14.5） | M9、M13；具体依赖见 M14 文档 | M14.1–M14.4 本地通过；M14.5 有界硬件清屏/读回与 CPU fallback 本地通过 |
-| M15 | 可选的工具链/内核自举（M15.1–M15.6） | M11–M13，资源满足 | 已规划六个子阶段；均未开始 |
+| M15 | 可选的工具链/内核自举（M15.1–M15.6） | M11–M13，资源满足 | M15.1/M15.2 受控 bzip2 范围本地通过；其余阶段未开始 |
 
 可以交叉推进互不依赖的工作，但不得跳过实际前置条件。网络包获取、图形桌面和完整自举不阻塞第一次离线应用开发。
 
@@ -322,7 +322,9 @@ NVMe/AHCI/USB、glibc 指定版本、Wayland/X11/SDL/Qt 等 Linux GUI 兼容，
 
 ## M15：可选自举与系统自编译
 
-**以下六个子阶段均为计划，尚未实现或验收。** M15 是独立的可选自举工作流，
+**M15.1/M15.2 已通过受控 bzip2 1.0.8 源码重建的本地验收；M15.3–M15.6 尚未实现或验收。**
+设计与实测见 [M15 bootstrap](docs/M15_BOOTSTRAP.md) 和
+[验证记录](docs/validation/M15.1-M15.2.md)。M15 是独立的可选自举工作流，
 不影响 M11–M13 已验收的系统内应用开发能力。优先沿用受测的 Linux-musl 兼容工具链；
 原生 libc/std、SMP 和完整 Linux 兼容仍按独立工作流推进。
 
@@ -335,10 +337,11 @@ GCC 多阶段与完整 Rust/LLVM bootstrap 按可行性结果决定是否实施�
 
 ### M15.1：构建环境与容量
 
-- [ ] 为选定构建目标测量内存、磁盘、inode、文件大小、文件描述符、进程/线程和耗时需求。
-- [ ] 根据实际瓶颈扩展存储、VFS、内存与运行时边界，保留旧镜像兼容性、越限诊断和失败回滚。
-- [ ] 准备独立的持久构建工作盘、锁定的离线输入与构建配方，明确 build/host/target、ABI 和 sysroot。
+- [x] 为选定构建目标测量内存、磁盘、inode、文件大小、文件描述符、进程/线程和耗时需求。
+- [x] 根据实际瓶颈扩展存储、VFS、内存与运行时边界，保留旧镜像兼容性、越限诊断和失败回滚。
+- [x] 准备独立的持久构建工作盘、锁定的离线输入与构建配方，明确 build/host/target、ABI 和 sysroot。
 
+选定 bzip2 构建已在现有容量内实测通过，没有扩大资源边界；可选 PostScript 文档超过单文件上限，保留 HTML 文档并排除该非构建输入。
 当前开发盘为 16 MiB、512 inode，可写单文件上限为 1 MiB，VFS 为 2,048 节点；
 另有 16 MiB 内核堆和 32 个进程/线程槽等限制。数值与适用边界见 [STATUS](docs/STATUS.md)
 及 [M12 Rust](docs/M12_RUST.md)。增加 QEMU RAM 不会自动解除这些边界，扩容目标须由实测决定。
@@ -348,12 +351,16 @@ GCC 多阶段与完整 Rust/LLVM bootstrap 按可行性结果决定是否实施�
 
 ### M15.2：小型 C/C++ 工具源码重建
 
-- [ ] 选择一个体量小、依赖受控的实际 C/C++ 工具，锁定版本、源码校验和、许可证和必要补丁。
-- [ ] 使用 guest 内的编译器完成源码准备、编译、链接和工具功能测试，记录实际子工具和依赖。
-- [ ] 持久保存源码、配方和产物，验证真实构建失败的非零退出及旧可用产物保留。
+- [x] 选择一个体量小、依赖受控的实际 C/C++ 工具，锁定版本、源码校验和、许可证和必要补丁。
+- [x] 使用 guest 内的编译器完成源码准备、编译、链接和工具功能测试，记录实际子工具和依赖。
+- [x] 持久保存源码、配方和产物，验证真实构建失败的非零退出及旧可用产物保留。
 
 **验收：** 完成 guest 内源码 → 构建 → 运行 → 保存 → 正常关机 → 重启运行闭环，
 重启前后源码和产物哈希一致；宿主预先编译的二进制不能替代该阶段的 guest 构建产物。
+
+本地 `cargo xtask bootstrap-test` 通过三次启动：资源越限/回收、八个编译单元的 guest GCC 构建、
+重启运行及真实编译失败后旧工具保留。压缩字节与官方样本一致，解压由 guest 与宿主独立验证；
+各次关机后 e2fsck 干净。容量数据为调度边界采样与关机后磁盘用量，不声明精确 RSS 或瞬时磁盘峰值。
 
 ### M15.3：GCC 自举路线
 

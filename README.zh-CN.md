@@ -14,6 +14,7 @@ M14.2 已实现轮询式 PS/2 物理输入与裁剪游标。M14.3 已通过本�
 Rust 用户态窗口合成器、焦点输入与崩溃/重启恢复。M14.4 已交付 Rust GUI runtime、
 C/C++/Rust SDK 与图形应用，系统内独立构建、真实键鼠输入和重启保留通过验收；
 M14.5 已验证有界硬件 VirGL 离屏清屏/读回与 CPU fallback；普通桌面仍采用软件合成。
+M15.1/M15.2 已验证容量测量、系统内 bzip2 源码重建、重启与编译失败恢复；编译器/内核自举仍未验证。
 
 日常开发与 Pull Request 的目标分支为 **`dev`**；`main` 保留阶段验收后的稳定快照。分支约定见 [GitHub 协作说明](docs/GITHUB_SETUP.md)。
 
@@ -144,6 +145,20 @@ cargo xtask run --disk build/disks/work.ext2 # 复用此盘，在系统内 shutd
 ## 下一步
 
 M13 已交付版本化 SDK 与应用格式，见 [M13 SDK](docs/M13_SDK.md)。M14.1 已交付受检软件绘制，M14.2 已实现有界 PS/2 输入/游标诊断；M14.3 用户态合成器和 M14.4 GUI runtime/SDK 已通过本地验收；M14.5 已验收[有界硬件清屏/读回](docs/M14_GPU.md)及 CPU fallback；普通桌面仍采用软件合成。当前 Rust/Cargo 范围见 [M12 Rust](docs/M12_RUST.md)，另见 [当前状态](docs/STATUS.md) 和 [路线图](ROADMAP.md)。
+
+## M15 受控源码重建
+
+```sh
+cargo xtask bootstrap-prepare
+cargo xtask bootstrap-test
+```
+
+在独立的 16 MiB Linux personality 工作盘上准备校验锁定的官方 bzip2 1.0.8 源码，
+由 guest GCC 编译、链接工具，压缩字节须与官方样本一致。三次 QEMU 启动分别验证
+资源越限与回收、源码重建、正常重启及真实编译失败后的旧产物保留。容量报告明确区分
+调度边界采样与关机后磁盘用量。见 [M15 设计](docs/M15_BOOTSTRAP.md) 与
+[本地验收](docs/validation/M15.1-M15.2.md)。M15.3–M15.6 尚未实现；下一步为独立的
+M15.3 GCC 可行性评估。
 
 ## 许可证
 

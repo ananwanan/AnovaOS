@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Schedule bounded native/Linux processes and shared-root threads with private stacks on one BSP.
 //! User traps capture state; lifecycle, polled devices, copying and reclamation run on the kernel root.
+//! Optional bootstrap diagnostics sample resource use within each independent scheduler instance.
+#[cfg(feature = "bootstrap-metrics")]
+mod bootstrap;
 mod diagnostics;
 mod linux;
 pub(crate) fn network_seed(bytes: &mut [u8]) -> Result<(), i64> {
@@ -121,6 +124,8 @@ struct Kernel {
     terminal: fs::Terminal,
     #[cfg(feature = "gui")]
     gui: crate::gui::Gui,
+    #[cfg(feature = "bootstrap-metrics")]
+    resources: bootstrap::Samples,
 }
 impl Kernel {
     fn new(first_pid: u64) -> Result<Self, loader::LoadError> {
@@ -138,6 +143,8 @@ impl Kernel {
             terminal: fs::Terminal::new().map_err(|_| anova_memory::Error::OutOfMemory)?,
             #[cfg(feature = "gui")]
             gui: crate::gui::Gui::default(),
+            #[cfg(feature = "bootstrap-metrics")]
+            resources: bootstrap::Samples::new(),
         })
     }
     fn load_image(
@@ -505,6 +512,8 @@ impl Kernel {
                     self.process_mut(i).context.frame.rax = error as u64;
                     return;
                 }
+                #[cfg(feature = "bootstrap-metrics")]
+                self.sample_resources();
                 // Stop all writers and close orphaned files before recording a clean unmount.
                 for process in self.processes.iter_mut().flatten() {
                     self.fs.clear(&mut process.files);
@@ -526,6 +535,8 @@ impl Kernel {
                             ));
                             crate::halt();
                         }
+                        #[cfg(feature = "bootstrap-metrics")]
+                        self.resources.report();
                         crate::arch::x86_64::acpi::poweroff();
                     }
                     Err(error) => {
@@ -645,6 +656,8 @@ impl Kernel {
         let mut previous = None;
         let mut preempted = false;
         loop {
+            #[cfg(feature = "bootstrap-metrics")]
+            self.sample_resources();
             if let Err(error) = self.fs.collect_mappings() {
                 serial::write(format_args!(
                     "[FS:FAIL] mapped inode cleanup error={error}\n"
@@ -773,6 +786,8 @@ impl Kernel {
                 }
                 continue;
             }
+            #[cfg(feature = "bootstrap-metrics")]
+            self.sample_resources();
             let p = self.process(i);
             let mut capture = user::Context::new(0, 0);
             CAPTURE.store(&mut capture, Ordering::Release);

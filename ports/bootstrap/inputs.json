@@ -1,0 +1,21 @@
+{
+  "purpose": "Lock the official bzip2 source archive and the selected unmodified guest build inputs.",
+  "name": "bzip2",
+  "version": "1.0.8",
+  "url": "https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz",
+  "archive": "bzip2-1.0.8.tar.gz",
+  "root": "bzip2-1.0.8",
+  "sha256": "ab5a03176ee106d3f0fa90e381da478ddae405918153cca248e682cd0c4a2269",
+  "sha512": "083f5e675d73f3233c7930ebe20425a533feedeaaa9d8cc86831312a6581cefbe6ed0d08d2fa89be81082f2a5abdabca8b3c080bf97218a1bd59dc118a30b9f3",
+  "checksum_source": "https://sourceware.org/pub/bzip2/sha512.sum",
+  "license": "bzip2-1.0.6",
+  "license_file": "LICENSE",
+  "patches": [],
+  "selected": [
+    "blocksort.c", "huffman.c", "crctable.c", "randtable.c", "compress.c",
+    "decompress.c", "bzlib.c", "bzip2.c", "bzlib.h", "bzlib_private.h",
+    "Makefile", "LICENSE", "README", "CHANGES", "manual.html",
+    "sample1.ref", "sample1.bz2", "sample2.ref", "sample2.bz2",
+    "sample3.ref", "sample3.bz2"
+  ]
+}

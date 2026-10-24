@@ -32,7 +32,9 @@ bounded private windows, focused input and checked crash/restart recovery.
 M14.4 adds the Rust GUI runtime, C/C++/Rust SDKs and graphical applications,
 with independent guest builds, physical input and reboot retention verified.
 M14.5 verifies bounded hardware VirGL clear/readback with CPU fallback;
-ordinary desktop composition remains software-rendered.
+ordinary desktop composition remains software-rendered. M15.1/M15.2 add
+measured capacity and guest-built bzip2 source reconstruction with reboot and
+failure recovery; compiler/kernel bootstrap remains unverified.
 General Linux/glibc remains future work; device IRQs stay masked.**
 
 Repository: [ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS).
@@ -207,7 +209,23 @@ implements bounded PS/2 input/cursor diagnostics. M14.3 user-space composition
 and M14.4 GUI runtime/SDKs are locally accepted. M14.5 verifies the bounded
 [hardware clear/readback profile](docs/M14_GPU.md) with CPU fallback. Current Rust/Cargo limits remain in
 [M12 Rust](docs/M12_RUST.md). See [current status](docs/STATUS.md) and
-[roadmap](ROADMAP.md).
+[roadmap](ROADMAP.md). The next bootstrap task is the separate M15.3 GCC
+feasibility evaluation, following the bounded M15.1/M15.2 profile below.
+
+## M15 controlled source reconstruction
+
+```sh
+cargo xtask bootstrap-prepare
+cargo xtask bootstrap-test
+```
+
+A fresh 16 MiB Linux-personality work disk carries checksum-locked official
+bzip2 1.0.8 sources. The guest GCC compiles and links the compressor, whose
+compressed bytes match the official fixture. Three QEMU boots verify resource
+rejection/recovery, reconstruction, clean reboot and retained outputs after a
+real compiler error. Measurements report scheduler-boundary observations and
+end-of-boot disk use. See [M15 bootstrap](docs/M15_BOOTSTRAP.md) and
+[local evidence](docs/validation/M15.1-M15.2.md). M15.3–M15.6 remain unimplemented.
 
 ## License
 

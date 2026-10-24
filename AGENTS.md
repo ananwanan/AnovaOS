@@ -77,6 +77,14 @@ and both `gpu`/`gpu-test` kernel checks; see [M14 GPU](docs/M14_GPU.md) and
 software-rendered; shader draws and a guest GL/Vulkan API remain outside this profile;
 GDB stubs, native std and compiler bootstrap remain independently scoped.
 
+M15.1/M15.2 add a locked bzip2 source workspace and actual guest tool
+reconstruction with separately measured resource limits and reboot/failure
+recovery. Preserve `cargo xtask bootstrap-test`, source preparation rejection
+tests and the `bootstrap-metrics` kernel check. Read [M15 bootstrap](docs/M15_BOOTSTRAP.md)
+and [validation/M15.1-M15.2](docs/validation/M15.1-M15.2.md). Sampling at
+scheduler boundaries does not establish exact peak RSS; inherited compilers
+are seeds, not compiler-bootstrap evidence. M15.3–M15.6 remain separate.
+
 本文件是后续 Codex 开发规范。用户明确指令优先；已有修改应保留。日常、可逆的实现选择可自主完成，不因普通阶段切换反复请求确认。
 
 日常开发基线与 Pull Request 默认目标为 `dev`。除用户明确指定外，不直接在 `main` 开发；`main` 用于接收阶段验收后的稳定快照。开始工作前检查并切换到实际的 `dev` 或由其创建的任务分支，不仅依赖 GitHub 页面当前选中的分支。

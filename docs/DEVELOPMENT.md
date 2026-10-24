@@ -489,3 +489,16 @@ Only headless fallback and kernel feature checks are added to ordinary CI;
 the hardware gate must be run explicitly on a supported host. See
 [M14 GPU](M14_GPU.md) and [M14.5 validation](validation/M14.5.md) for ownership,
 latency measurements and the boundary between GPU drawing and CPU presentation.
+
+## Controlled source reconstruction
+
+After preparing the M11 compiler/sysroot, run `cargo xtask bootstrap-prepare`
+to create a new source-only bzip2 1.0.8 workspace disk and instrumented ISO.
+`cargo xtask bootstrap-test` creates its own fresh disk and verifies resource
+limits, actual guest compilation and reboot/compiler-rejection recovery.
+Keep the printed work disk and shut down cleanly. Inputs, seed identities,
+source/output hashes and sampled resource observations are retained in
+`build/bootstrap/prepared.json` and `build/logs/bootstrap.result.json`; complete
+per-boot serial/QEMU evidence uses the `bootstrap-` log prefix. See
+[M15 bootstrap](M15_BOOTSTRAP.md) for prerequisites and measured-profile limits,
+and [local acceptance](validation/M15.1-M15.2.md) for exact executed scope.

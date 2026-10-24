@@ -524,3 +524,18 @@ pages and permanently disables reuse. The test profile checks actual hardware
 renderer identity, pixel output, lost-doorbell timeout/reset, CPU fallback and
 hardware reinitialization. See [M14 GPU](docs/M14_GPU.md) and
 [validation/M14.5](docs/validation/M14.5.md) for exact scope and evidence.
+
+## Bounded M15 source reconstruction
+
+The optional `bootstrap-metrics` kernel feature samples resource use at scheduler
+boundaries and emits a per-instance summary before successful ACPI shutdown. It
+adds no syscall ABI and changes no resource policy. `xtask bootstrap-prepare`
+imports locked unmodified bzip2 sources into a new Linux-personality work disk;
+`bootstrap-test` separately boots capacity rejection, guest GCC reconstruction
+and reboot/compiler-failure recovery. Only the guest links the reconstructed
+bzip2 ELF. Physical-frame deltas include kernel allocations and omit transient
+syscall peaks; end-of-boot storage usage is separate from transient demand.
+The existing disk format, writable-file/heap/task/descriptor limits, native ABI
+and default kernel stay unchanged. See [M15 bootstrap](docs/M15_BOOTSTRAP.md) and
+[local evidence](docs/validation/M15.1-M15.2.md). Compiler source bootstrap and
+guest kernel reconstruction remain separate future stages.

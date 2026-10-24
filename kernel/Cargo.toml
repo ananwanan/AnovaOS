@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Builds the bare-metal kernel and isolated QEMU failure-injection configurations.
+# Builds the bare-metal kernel, opt-in resource sampling and isolated QEMU failure injection.
 [package]
 name = "anova-kernel"
 version.workspace = true
@@ -30,6 +30,7 @@ anova-storage = { path = "../crates/storage" }
 smoltcp = { version = "=0.12.0", default-features = false, features = ["alloc", "medium-ethernet", "proto-ipv4", "socket-tcp", "socket-udp"] }
 
 [features]
+bootstrap-metrics = []
 graphics = ["dep:anova-graphics", "dep:anova-input"]
 gui = ["graphics", "dep:anova-gui"]
 gui-test = ["gui"]

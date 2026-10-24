@@ -162,7 +162,9 @@ remain separate. Run `cargo xtask rust-build`, `rust-cross-test`,
 The planned [M15.1–M15.6 roadmap](../ROADMAP.md#m15可选自举与系统自编译)
 separates capacity/build-environment work, a small guest-built C/C++ tool,
 the GCC route, the Rust/LLVM route, kernel rebuilding/booting and repeated
-build/comparison/recovery evidence. All six stages remain unimplemented.
+build/comparison/recovery evidence. M15.1/M15.2 now have a bounded
+[bzip2 guest reconstruction profile](M15_BOOTSTRAP.md) with
+[local acceptance](validation/M15.1-M15.2.md); M15.3–M15.6 remain unimplemented.
 GCC and Rust/LLVM start with separate pinned feasibility evaluations; full
 compiler bootstrap is conditional on the resulting dependencies and resources.
 Kernel reconstruction may use the already accepted guest rustc without first

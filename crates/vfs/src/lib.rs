@@ -1868,4 +1868,9 @@ impl<'a> Vfs<'a> {
             self.pipes.iter().flatten().count(),
         )
     }
+    /// Allocated namespace slots, including unlinked slots retained for later reuse.
+    /// This measures the vector's high-water extent, not just currently linked names.
+    pub fn node_slots(&self) -> usize {
+        self.nodes.len()
+    }
 }

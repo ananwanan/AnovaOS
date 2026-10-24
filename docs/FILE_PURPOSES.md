@@ -7,6 +7,18 @@ third-party exceptions to top-of-file comments. Maintain it with DEV-001;
 
 | File | Purpose |
 | --- | --- |
+| `kernel/src/task/bootstrap.rs` | Sample scheduler-instance frame, heap, task, descriptor and namespace use without allocation or a public ABI. |
+| `xtask/src/bootstrap.rs` | Prepare a locked bzip2 work disk and verify guest compilation, independent compression checks, limits and reboot recovery. |
+| `ports/bootstrap/inputs.json` | Lock official bzip2 1.0.8 checksums, source selection, version and licensing metadata. |
+| `ports/bootstrap/prepare.py` | Verify official source archives and safely publish a source-only offline guest workspace. |
+| `ports/bootstrap/Makefile.anova` | Compile eight unchanged bzip2 C units sequentially with the guest GCC and test retained-output compiler rejection. |
+| `ports/bootstrap/README.md` | Explain the locked source selection, guest recipe and host preparation boundary. |
+| `ports/bootstrap/test_prepare.py` | Reject tampered archives, unsafe members, missing inputs and selected files beyond the guest limit. |
+| `tests/guest/m15/capacity.c` | Probe persistent file, descriptor and task limits, resource recovery and preserved file bytes. |
+| `tests/guest/m15/rejected.c` | Trigger a deliberate real guest compiler error while retaining the prior reconstructed tool. |
+| `docs/M15_BOOTSTRAP.md` | Define the bounded source-reconstruction workflow, preparation provenance and measurement limitations. |
+| `docs/third-party/m15.md` | Record official bzip2 source checksums, selected notices, licensing and inherited seed-tool boundaries. |
+| `docs/validation/M15.1-M15.2.md` | Record actual local capacity, guest bzip2 build, reboot, rejection, hash and regression evidence. |
 | `crates/graphics/src/virgl.rs` | Encode bounded VirGL clear commands with integer UNORM conversion and independent host reference tests. |
 | `kernel/src/drivers/gpu.rs` | Own an optional polled modern virtio-gpu queue, fenced hardware readback, reset and DMA quarantine. |
 | `user/compositor/src/gpu.rs` | Exercise the server-only GPU API, guarded readback comparisons and user-selected CPU fallback. |

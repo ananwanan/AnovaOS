@@ -42,6 +42,7 @@ jobs:
       - name: Check the bare-metal kernel
         run: |
           cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features qemu-test -- -D warnings
+          cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features bootstrap-metrics -- -D warnings
           cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features test-double-fault -- -D warnings
           cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features test-no-execute -- -D warnings
           cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features graphics -- -D warnings
@@ -52,6 +53,8 @@ jobs:
           cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features gpu-test -- -D warnings
       - name: Test host logic
         run: cargo xtask test-host
+      - name: Test bootstrap source integrity and archive rejection
+        run: python3 ports/bootstrap/test_prepare.py
       - name: Build the kernel
         run: cargo xtask build
       - name: Fetch verified boot inputs
@@ -115,6 +118,8 @@ jobs:
         run: cargo xtask toolchain-build
       - name: Verify guest C/C++, incremental make, negative builds and reboot retention
         run: cargo xtask toolchain-test
+      - name: Verify guest tool reconstruction, resource limits and reboot retention
+        run: cargo xtask bootstrap-test
       - name: Prepare locked upstream Rust musl tools and offline vendor
         run: |
           rustup target add x86_64-unknown-linux-musl
@@ -142,6 +147,8 @@ jobs:
             build/toolchain/package.sha256
             build/toolchain/stage.sha256
             build/toolchain/archive.sha256
+            build/bootstrap/inputs.json
+            build/bootstrap/prepared.json
             build/rust/stage.sha256
             build/rust/archive.sha256
             build/gui-sdk/

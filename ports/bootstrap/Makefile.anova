@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: Apache-2.0
+# Rebuild the unchanged bzip2 compressor with the bounded guest GCC/musl profile.
+# No configure, host compilation, generated sources or library bootstrap is involved.
+SHELL = /linux/sh
+CC = gcc
+CFLAGS = -O1 -g0 -Wall -Wextra -D_FILE_OFFSET_BITS=64
+OBJECTS = blocksort.o huffman.o crctable.o randtable.o compress.o decompress.o bzlib.o bzip2.o
+
+.PHONY: all clean fail failure
+all: bzip2
+
+bzip2: $(OBJECTS)
+	$(CC) $(CFLAGS) -o $@ $(OBJECTS)
+
+%.o: %.c bzlib.h bzlib_private.h
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# A real compiler rejection must leave the already linked compressor untouched.
+fail: failure
+
+failure:
+	$(CC) $(CFLAGS) -c rejected.c -o rejected.o
+
+# Native rm accepts one path; the Linux shell supplies its own test/loop builtins.
+clean:
+	for file in $(OBJECTS) bzip2 rejected.o; do if test -f "$$file"; then /bin/rm "$$file"; fi; done
