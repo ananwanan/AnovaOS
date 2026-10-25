@@ -5,6 +5,10 @@
 
 This index covers matching English and Simplified Chinese designs, development guides and historical acceptance evidence. Local profiles cover M0–M13, M14.1–M14.5 and M15.1–M15.6. M15.3/M15.4 are compiler feasibility assessments with blockers; M15.5/M15.6 still use host-assisted kernel image packaging.
 
+Planned follow-ups are M16 resources/VFS/ext4, M17 development desktop and conditional M18
+self-hosting. They have no implementation or new acceptance results; see the roadmap and
+the separate M16/M17 design pages below.
+
 [Project README](../../README.md) · [Development rules](../../AGENTS.md) · [Current status](guides/STATUS.md) · [Roadmap](ROADMAP.md)
 
 ## Project design
@@ -43,6 +47,8 @@ This index covers matching English and Simplified Chinese designs, development g
 - [M15_KERNEL.md](milestones/M15_KERNEL.md)
 - [M15_REPEAT.md](milestones/M15_REPEAT.md)
 - [M15_RUST.md](milestones/M15_RUST.md)
+- [M16_FOUNDATION.md](milestones/M16_FOUNDATION.md)
+- [M17_DESKTOP.md](milestones/M17_DESKTOP.md)
 - [M2_CPU.md](milestones/M2_CPU.md)
 - [M3_MEMORY.md](milestones/M3_MEMORY.md)
 - [M4_USERSPACE.md](milestones/M4_USERSPACE.md)

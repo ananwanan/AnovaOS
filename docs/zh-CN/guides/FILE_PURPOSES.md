@@ -101,6 +101,8 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `docs/en/milestones/M15_KERNEL.md` | 定义系统内内核构建、保留 ELF 打包、源码/种子身份与独立镜像生成边界（英文）。 |
 | `docs/en/milestones/M15_REPEAT.md` | 定义独立干净重建、归档、精确最终产物比较、差异和恢复边界（英文）。 |
 | `docs/en/milestones/M15_RUST.md` | 分别定义 Rust/LLVM/Cargo 源码可行性、规定 stage0、依赖阻塞与重建前提（英文）。 |
+| `docs/en/milestones/M16_FOUNDATION.md` | 规划桌面之前的实测资源、文件系统后端解耦、受控 ext4 与经验证的新盘迁移。 |
+| `docs/en/milestones/M17_DESKTOP.md` | 规划受监督开发桌面、PTY 终端、可靠编辑、诊断及图形开发验收。 |
 | `docs/en/milestones/M2_CPU.md` | 定义 CPU 表、受保护异常栈、ACPI/APIC 时钟及上下文规则（英文）。 |
 | `docs/en/milestones/M3_MEMORY.md` | 定义物理页/页表所有权、栈、堆、权限、保留区与 OOM 回滚（英文）。 |
 | `docs/en/milestones/M4_USERSPACE.md` | 定义 Ring 3、ELF、原生 v1 ABI、用户复制、Rust/C SDK 与生命周期（英文）。 |
@@ -168,6 +170,8 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `docs/zh-CN/milestones/M15_KERNEL.md` | 定义系统内内核构建、保留 ELF 打包、源码/种子身份与独立镜像生成边界（简体中文，与英文对应）。 |
 | `docs/zh-CN/milestones/M15_REPEAT.md` | 定义独立干净重建、归档、精确最终产物比较、差异和恢复边界（简体中文，与英文对应）。 |
 | `docs/zh-CN/milestones/M15_RUST.md` | 分别定义 Rust/LLVM/Cargo 源码可行性、规定 stage0、依赖阻塞与重建前提（简体中文，与英文对应）。 |
+| `docs/zh-CN/milestones/M16_FOUNDATION.md` | 翻译 M16 资源、VFS、ext4 和迁移计划，保持验收边界一致。 |
+| `docs/zh-CN/milestones/M17_DESKTOP.md` | 翻译 M17 开发桌面、图形开发流程与独立恢复计划。 |
 | `docs/zh-CN/milestones/M2_CPU.md` | 定义 CPU 表、受保护异常栈、ACPI/APIC 时钟及上下文规则（简体中文，与英文对应）。 |
 | `docs/zh-CN/milestones/M3_MEMORY.md` | 定义物理页/页表所有权、栈、堆、权限、保留区与 OOM 回滚（简体中文，与英文对应）。 |
 | `docs/zh-CN/milestones/M4_USERSPACE.md` | 定义 Ring 3、ELF、原生 v1 ABI、用户复制、Rust/C SDK 与生命周期（简体中文，与英文对应）。 |

@@ -54,3 +54,23 @@ Added 2026-10-25 by project-owner request. Keep documentation current as develop
 - Keep language variants aligned; retain identifiers, paths, commands and legal text accurately.
   Check local links and file inventory after moves or additions. Documentation consistency is
   a required completion check; do not claim tests that were not run.
+
+## DEV-004: resources and ext4 before the development desktop
+
+Added 2026-10-26 by project-owner request. This records planned work, not implementation.
+
+- Follow M16 resources/VFS/ext4, then M17 development desktop, then conditional M18 compiler
+  reconstruction and guest-only images. Detailed stages and exits are in the
+  [roadmap](../ROADMAP.md), [M16](../milestones/M16_FOUNDATION.md) and
+  [M17](../milestones/M17_DESKTOP.md).
+- Restore verified CI dependency acquisition and measure a declared real build before choosing
+  capacities. Expand VFS/cache/heap/task resources independently of the disk format.
+- Introduce controlled ext4 read-only, writes and JBD2 recovery in separate accepted stages.
+  Retain ext2 images/recovery; migrate by copying and checking a fresh image, without an
+  in-place conversion. A new AnovaFS format is outside the development critical path.
+- Use existing guest GCC/G++ and Rust/Cargo for a real graphical PTY terminal, editing/files,
+  logs/resource inspection and the all-GUI edit/build/run/error-repair/reboot workflow.
+- Do not make full compiler bootstrap, native std, SMP or physical drivers prerequisites for
+  the developer desktop. Retain COM1/QEMU/host recovery for kernel, boot or display failures.
+- Keep every new stage planned until its actual positive, pressure, failure and recovery
+  checks pass; preserve prior gates and distinguish local acceptance from remote CI.

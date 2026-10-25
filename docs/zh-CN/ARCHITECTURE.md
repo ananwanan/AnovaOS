@@ -3,7 +3,8 @@
 
 [English](../en/ARCHITECTURE.md) | **简体中文**
 
-本文覆盖至 M15.6 已验收重建范围内的实现边界，另注明未来架构。guest 工具链、原生 SDK、
+本文覆盖至 M15.6 已验收重建范围内的实现边界，另注明未来架构。下文 M16 资源/ext4 与
+M17 桌面属于计划，不改变已实现能力。guest 工具链、原生 SDK、
 有界 Rust GUI/GPU 均已实现；完整编译器重建、guest 独立镜像生成、SMP 和实机另计。
 当前能力与证据见 [STATUS](guides/STATUS.md)。
 
@@ -351,3 +352,23 @@ input/seed/recipe和完整bzip2/内核ELF bytes相同。失败保诊断、不出
 编译拒绝/重启/fs检查。metadata和kernel intermediate差异与最终相同分开，不normalize源码/
 产物强求匹配；compiler source、guest-only image、断电恢复、通用reproducibility另计。
 见[repeat](milestones/M15_REPEAT.md)/[M15.6证据](validation/M15.6.md)。
+
+## 计划中的 M16 存储/资源与 M17 桌面
+
+本节是未来契约，不代表已实现后端或桌面。[M16 基础能力](milestones/M16_FOUNDATION.md)
+先于 [M17 桌面](milestones/M17_DESKTOP.md)，阶段划分见[路线图](ROADMAP.md)。
+
+- 受检块设备 I/O 位于文件系统策略之下。用窄后端边界替换 VFS 对 ext2 的直接依赖，
+  覆盖身份、元数据、文件/目录操作和明确支持的能力，并保留 native/Linux ABI 准入元数据。
+- 使用有界可回收缓存按需加载命名空间，替代挂载时导入全部 inode。按实测负载扩大
+  堆/task/fd/存储预算，保留受检分配、OOM 回滚和旧 ext2 行为。仅换磁盘格式不能解除 VFS
+  限制或长时间不可抢占 I/O 的停顿。
+- 分别实现受控 ext4 只读、可写和 JBD2 崩溃恢复。拒绝未知特性，使用独立工具与崩溃注入
+  验证字节、分配和恢复。保持 ext2 旧盘可用；默认配置变更前，先复制到新工作盘并验证。
+- 桌面/会话/合成器策略保留在 Rust 用户进程中。PTY 终端把原生 GUI 连接至显式准入的
+  Linux-musl shell/编译器进程。扩展传输/SDK 限额时验证版本和所有权，保留 C/C++/Rust 契约。
+- 提供真实日志及全局资源容量测量，明确任务/服务控制权限。通过受检生命周期操作恢复
+  用户态客户端/合成器故障，保留 COM1/QEMU/宿主处理引导、内核或显示故障的入口。
+
+M18 编译器重建和 guest 独立镜像生成在开发桌面之后独立推进。原生 std、SMP、设备 IRQ/
+异步 I/O 与实机驱动属于单独架构改动。全新文件系统格式不进入 M16/M17 关键路径。

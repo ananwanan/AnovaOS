@@ -110,6 +110,17 @@ preserve `cargo xtask bootstrap-repeat-test` and its retained per-round evidence
 exact artifact comparisons and rejection/reboot checks. See [M15 repeat](docs/en/milestones/M15_REPEAT.md).
 Guest-only image generation and compiler reconstruction remain separate.
 
+The owner-approved follow-up order is planned **M16 resources/VFS/controlled ext4 →
+M17 development desktop → M18 conditional compiler/image self-hosting**. See
+[M16 foundation](docs/en/milestones/M16_FOUNDATION.md),
+[M17 desktop](docs/en/milestones/M17_DESKTOP.md), [ROADMAP](docs/en/ROADMAP.md) and
+[DEV-004](docs/en/guides/REQUIREMENTS.md). Start with CI baseline recovery and measured
+budgets; preserve ext2 images while separately validating ext4 read-only, writes,
+journal recovery and fresh-disk migration. None of M16–M18 is implemented by this
+plan. Use existing guest compilers for M17; full compiler bootstrap, SMP, physical
+drivers and a new filesystem format are not its prerequisites. Keep serial/host
+recovery independent of the desktop and retain all accepted regression gates.
+
 本文件是后续 Codex 开发规范。用户明确指令优先；已有修改应保留。日常、可逆的实现选择可自主完成，不因普通阶段切换反复请求确认。
 
 日常开发基线与 Pull Request 默认目标为 `dev`。除用户明确指定外，不直接在 `main` 开发；`main` 用于接收阶段验收后的稳定快照。开始工作前检查并切换到实际的 `dev` 或由其创建的任务分支，不仅依赖 GitHub 页面当前选中的分支。

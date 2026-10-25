@@ -46,20 +46,24 @@ and guest-only boot-image generation remain unverified. See
 
 ## Next development work
 
-1. Resolve the measured compiler prerequisites: guest build utilities,
-   GMP/MPFR/MPC development inputs, Rust's prescribed stage0/offline dependency
-   closure and sufficient memory/storage. Reassess GCC, LLVM, rustc and Cargo
-   independently before claiming a reconstructed stage.
-2. Extend M15.5's exact guest-built kernel handoff toward guest-only image
-   generation; current ISO preparation and packaging still run on the host.
-3. Keep M15.6's clean-build, rejection and recovery gates as regression coverage.
-   Scope native `std`, broader Cargo/GUI APIs and real hardware as independently
-   tested follow-up work.
+The owner-approved order is **M16 resources/VFS/ext4 → M17 development desktop →
+M18 conditional compiler and image self-hosting**. All three are planned, not implemented.
 
-These priorities follow the [roadmap](docs/en/ROADMAP.md),
-[M15 GCC](docs/en/milestones/M15_GCC.md),
-[M15 Rust](docs/en/milestones/M15_RUST.md) and
-[M15 repeat](docs/en/milestones/M15_REPEAT.md).
+1. [M16 foundation](docs/en/milestones/M16_FOUNDATION.md): restore the remote
+   toolchain CI baseline, measure a declared workload, expand resources and
+   decouple filesystem backends. Introduce controlled ext4 read-only, write and
+   journal-recovery stages; retain ext2 and migrate through separately verified images.
+2. [M17 desktop](docs/en/milestones/M17_DESKTOP.md): deliver a real PTY terminal,
+   reliable editing, file browsing and diagnostics, then complete C/C++/Rust
+   edit/build/run/error-repair/reboot entirely through the desktop using existing tools.
+3. [M18 follow-up](docs/en/ROADMAP.md#m18-conditional-self-hosting): independently
+   reassess GCC, LLVM/rustc/Cargo and guest-only image generation after their
+   measured prerequisites are met. Full compiler bootstrap does not gate M17.
+
+Preserve prior runtime, storage, GUI and M15 reconstruction gates. Native `std`,
+SMP, device IRQ/async I/O, physical hardware and a new filesystem format remain
+separate work. [STATUS](docs/en/guides/STATUS.md) records the observed failed
+toolchain dependency download separately from local acceptance.
 
 ## Build and boot
 
@@ -124,7 +128,7 @@ and diagrams belong under `docs/assets/` when added.
 | [Project outline](docs/en/PROJECT_OUTLINE.md), [roadmap](docs/en/ROADMAP.md) | Goals, dependencies, acceptance and remaining work |
 | [Architecture](docs/en/ARCHITECTURE.md), [compatibility](docs/en/COMPATIBILITY.md) | Subsystem ownership, ABIs, limits and tested software |
 | [Guides](docs/en/index.md#guides) | Setup, style, toolchains, licensing, requirements, status and file inventory |
-| [Milestones](docs/en/index.md#milestone-designs), [validation](docs/en/index.md#validation) | Implemented contracts and historical execution evidence through M15.6 |
+| [Milestones](docs/en/index.md#milestone-designs), [validation](docs/en/index.md#validation) | Accepted contracts/evidence through M15.6 and separate M16/M17 plans |
 | [Third-party inputs](docs/en/index.md#third-party-inputs-and-notices) | Provenance and preserved upstream license texts |
 | [Native SDK](sdk/README.md), [GUI SDK](sdk/gui/README.md), [bootstrap recipes](ports/bootstrap/README.md) | Adjacent development entry points, each with a Chinese companion |
 

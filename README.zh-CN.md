@@ -41,16 +41,20 @@ ext2 没有日志或断电恢复。通用 Linux/glibc、SMP、USB/实机支持�
 
 ## 下一步开发
 
-1. 补齐已测得的编译器前置条件：系统内构建工具、GMP/MPFR/MPC 开发输入、Rust 规定的
-   stage0/离线依赖闭包，以及足够的内存和存储；分别重新评估 GCC、LLVM、rustc 和 Cargo，
-   实际重建后才能宣称获得新的编译器阶段。
-2. 从 M15.5 已保留的系统内构建内核出发，推进完全由 guest 生成镜像；当前 ISO 准备和打包
-   仍由宿主完成。
-3. 持续保留 M15.6 的干净构建、拒绝与恢复回归；原生 `std`、更广泛 Cargo/GUI API 与实机
-   支持另行定义范围并独立验收。
+项目所有者确定的顺序为 **M16 资源/VFS/ext4 → M17 开发桌面 → M18 有条件的编译器及镜像自举**。
+三个阶段目前均为计划，尚未实现。
 
-优先级依据[路线图](docs/zh-CN/ROADMAP.md)、[M15 GCC](docs/zh-CN/milestones/M15_GCC.md)、
-[M15 Rust](docs/zh-CN/milestones/M15_RUST.md)和[M15 重复构建](docs/zh-CN/milestones/M15_REPEAT.md)。
+1. [M16 基础能力](docs/zh-CN/milestones/M16_FOUNDATION.md)：先恢复远端工具链 CI 基线，
+   测量明确工作负载，扩大资源并解耦文件系统后端；分开验收 ext4 只读、可写和日志恢复。
+   保留 ext2，通过独立验证的新镜像迁移数据。
+2. [M17 开发桌面](docs/zh-CN/milestones/M17_DESKTOP.md)：提供真正的 PTY 终端、可靠编辑、
+   文件浏览与诊断，利用现有工具在桌面完成 C/C++/Rust 编辑、构建、运行、修错和重启保留。
+3. [M18 后续自举](docs/zh-CN/ROADMAP.md#m18有条件的自举)：满足实测前置条件后，分别重新评估
+   GCC、LLVM/rustc/Cargo 和 guest 独立镜像生成；完整编译器自举不阻塞 M17。
+
+保留既有运行时、存储、GUI 和 M15 重建门禁。原生 `std`、SMP、设备 IRQ/异步 I/O、实机和
+全新文件系统格式独立推进。[STATUS](docs/zh-CN/guides/STATUS.md) 将已观察到的工具链依赖下载
+失败与本地验收分开记录。
 
 ## 构建与启动
 
@@ -110,7 +114,7 @@ UEFI/Limine、四级页表，并分别配置内核/用户态编译参数。
 | [项目大纲](docs/zh-CN/PROJECT_OUTLINE.md)、[路线图](docs/zh-CN/ROADMAP.md) | 目标、依赖、验收与剩余工作 |
 | [架构](docs/zh-CN/ARCHITECTURE.md)、[兼容范围](docs/zh-CN/COMPATIBILITY.md) | 子系统所有权、ABI、限制及受测软件 |
 | [开发指南](docs/zh-CN/index.md#开发指南) | 配置、风格、工具链、许可、需求、状态与文件用途 |
-| [阶段设计](docs/zh-CN/index.md#阶段设计)、[验收记录](docs/zh-CN/index.md#验收记录) | 已实现契约和截至 M15.6 的历史执行证据 |
+| [阶段设计](docs/zh-CN/index.md#阶段设计)、[验收记录](docs/zh-CN/index.md#验收记录) | 截至 M15.6 的验收契约/证据及独立的 M16/M17 计划 |
 | [第三方输入与声明](docs/zh-CN/index.md#第三方输入与声明) | 来源及原样保留的上游许可证正文 |
 | [原生 SDK](sdk/README.zh-CN.md)、[GUI SDK](sdk/gui/README.zh-CN.md)、[重建配方](ports/bootstrap/README.zh-CN.md) | 各组件旁的双语开发入口 |
 

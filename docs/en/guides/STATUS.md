@@ -3,7 +3,7 @@
 
 **English** | [简体中文](../../zh-CN/guides/STATUS.md)
 
-Documentation reviewed 2026-10-25 (Asia/Shanghai) on synchronized `dev` at `f091049`,
+Plan reviewed 2026-10-26 (Asia/Shanghai) on synchronized `dev` at `05a5fb1`,
 which includes M15.6 delivery `16c0ddf`. The acceptance records below describe their
 original executed revisions; the M15.6 gate used implementation base `55e3751`
 with its retained source snapshot. This documentation audit does not rerun
@@ -23,6 +23,40 @@ boot/failure/recovery checks; see [M15 kernel](../milestones/M15_KERNEL.md) and
 [validation/M14.3](../validation/M14.3.md), [validation/M14.4](../validation/M14.4.md)
 and [validation/M14.5](../validation/M14.5.md).
 Remote CI and publication are separate from local acceptance.
+
+## Planned M16–M18 follow-up (2026-10-26)
+
+The owner selected **resources/VFS/ext4 → usable development desktop → conditional
+compiler/image self-hosting**. None of M16–M18 is implemented or accepted by this
+documentation change; existing limits and historical validation remain unchanged.
+
+| Plan | Scope | Next prerequisite |
+| --- | --- | --- |
+| [M16 foundation](../milestones/M16_FOUNDATION.md) | CI/budgets, backend isolation and resources, ext4 read-only, writes, JBD2 recovery and new-work-disk adoption | Start M16.1: restore remote toolchain execution and measure the declared workload |
+| [M17 desktop](../milestones/M17_DESKTOP.md) | Supervised session, PTY terminal, files/editor, diagnostics and all-GUI C/C++/Rust workflow | Accepted M16 workspace/resources; use inherited guest compilers |
+| [M18 self-hosting](../ROADMAP.md#m18-conditional-self-hosting) | Separate compiler component stages, guest-only image generation and repeated recovery | Per-component tools, source closure, stage0/dependencies and measured capacity after M16/M17 |
+
+Ext4 is the planned medium-term work-volume format; retain existing ext2 images
+and recovery gates. A new AnovaFS format is outside this critical path. VFS
+node/cache policy, heap and task bounds require separate changes whichever disk
+format is selected. The present graphical terminal supports only echo/pwd;
+general PTY/ANSI development-terminal behavior remains M17 work. Full compiler
+bootstrap, SMP and physical drivers are not desktop prerequisites.
+
+Remote baseline checked on 2026-10-26: [run 40116492704 at `05a5fb1`](https://github.com/ananwanan/AnovaOS/actions/runs/40116492704)
+completed with `boot=success`, `guest-toolchain=failure`. Its source-build step
+could not download the musl.cc bootstrap seed (`curl` exit 28, HTTPS connection
+timeout); downstream guest-toolchain, bootstrap and GUI SDK steps were skipped.
+This is a host dependency-fetch failure, not evidence of a guest kernel fault.
+It does not revoke historical local acceptance or establish remote success.
+Recover verified input acquisition and execute the downstream gates in M16.1;
+do not weaken checks or infer success from skipped steps.
+
+This planning delivery checks bilingual coverage, language navigation and local
+links with `python3 scripts/check_docs.py`, file-purpose inventory with
+`cargo xtask check-files`, workspace/user formatting and `git diff --check`.
+Those checks passed locally; no kernel/QEMU gate was rerun for the documentation
+change. Its subsequent remote CI result must be checked on the resulting commit.
 
 ## Documentation maintenance (2026-10-25)
 

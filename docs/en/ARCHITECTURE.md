@@ -6,7 +6,8 @@
 This describes implemented boundaries through the accepted M15.6 reconstruction profile and
 separately scoped future architecture. Guest toolchains, native SDKs and bounded Rust GUI/GPU
 profiles are implemented; full compiler reconstruction, guest-only image generation, SMP and
-physical hardware remain separate. Current capability and evidence are in [STATUS](guides/STATUS.md).
+physical hardware remain separate. Planned M16 resources/ext4 and M17 desktop boundaries are
+described below; they do not change implemented capabilities. Current evidence is in [STATUS](guides/STATUS.md).
 
 ## 1. Overall structure
 
@@ -626,3 +627,31 @@ normalized to force a match. Compiler source reconstruction, complete guest-only
 image generation, power-loss recovery and general reproducibility remain
 separate. See [M15 repeat](milestones/M15_REPEAT.md) and
 [local evidence](validation/M15.6.md).
+
+## Planned M16 storage/resources and M17 desktop
+
+This section is a future contract, not an implemented backend or desktop.
+[M16 foundation](milestones/M16_FOUNDATION.md) precedes
+[M17 desktop](milestones/M17_DESKTOP.md); see [ROADMAP](ROADMAP.md) for stages.
+
+- Keep checked block-device I/O below filesystem policy. Replace the VFS's direct
+  ext2 dependency with a narrow backend boundary for identities, metadata, file/directory
+  operations and declared capabilities. Preserve native/Linux ABI admission metadata.
+- Load namespace metadata on demand with bounded reclaimable caches instead of importing
+  every inode at mount. Expand heap/task/fd/storage budgets against measured workloads;
+  preserve checked allocation, OOM rollback and old ext2 behavior. Disk format changes
+  alone cannot remove VFS limits or long non-preemptible I/O stalls.
+- Implement a controlled ext4 feature profile in separate read-only, write and JBD2
+  crash-recovery stages. Reject unsupported features; use independent tooling and crash
+  injection to verify byte identity, allocation and recovery. Keep existing ext2 images
+  usable and copy into new verified work disks before any default-profile change.
+- Keep desktop/session/compositor policy in Rust user processes. A PTY terminal connects
+  the native GUI to explicitly admitted Linux-musl shell/compiler processes. Extend
+  transport/SDK bounds only with version/ownership tests; retain the C/C++/Rust contract.
+- Expose actual logs and measured global resource capacity, and define authorization for
+  task/service controls. Recover user-space client/compositor failures through checked
+  lifecycle operations; retain COM1/QEMU/host recovery for boot, kernel or display failure.
+
+M18 compiler reconstruction and guest-only image generation continue independently after
+the developer desktop. Native std, SMP, device IRQ/async I/O and physical drivers remain
+separate architecture changes. A new filesystem format is outside the M16/M17 critical path.

@@ -103,6 +103,8 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `docs/en/milestones/M15_KERNEL.md` | Define guest kernel construction, retained-ELF packaging, source/seed identities and separate image-bootstrap acceptance boundaries. |
 | `docs/en/milestones/M15_REPEAT.md` | Define repeated clean reconstruction, archival, artifact comparison and recovery boundaries. |
 | `docs/en/milestones/M15_RUST.md` | Define independent Rust, LLVM and Cargo feasibility, prescribed stage0, measured blockers and reconstruction prerequisites. |
+| `docs/en/milestones/M16_FOUNDATION.md` | Plan measured resources, filesystem backend isolation, controlled ext4 and verified migration before desktop work. |
+| `docs/en/milestones/M17_DESKTOP.md` | Plan the supervised development desktop, PTY terminal, reliable editing, diagnostics and graphical acceptance. |
 | `docs/en/milestones/M2_CPU.md` | BSP traps, ISTs, ACPI/APIC timer, interrupt context and M2 limitations. |
 | `docs/en/milestones/M3_MEMORY.md` | Frame/table/heap ownership, virtual layout, locks and original M3 limitations. |
 | `docs/en/milestones/M4_USERSPACE.md` | Historical M4 entry/loader/copy/SDK contracts, with M5 supersession and ownership notes. |
@@ -170,6 +172,8 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `docs/zh-CN/milestones/M15_KERNEL.md` | Provide the complete Simplified Chinese counterpart of `docs/en/milestones/M15_KERNEL.md`, preserving technical scope, commands, evidence and original legal texts. |
 | `docs/zh-CN/milestones/M15_REPEAT.md` | Provide the complete Simplified Chinese counterpart of `docs/en/milestones/M15_REPEAT.md`, preserving technical scope, commands, evidence and original legal texts. |
 | `docs/zh-CN/milestones/M15_RUST.md` | Provide the complete Simplified Chinese counterpart of `docs/en/milestones/M15_RUST.md`, preserving technical scope, commands, evidence and original legal texts. |
+| `docs/zh-CN/milestones/M16_FOUNDATION.md` | Translate the planned M16 resource, VFS, ext4 and migration contract with matching acceptance boundaries. |
+| `docs/zh-CN/milestones/M17_DESKTOP.md` | Translate the planned M17 development desktop, graphical workflow and independent recovery contract. |
 | `docs/zh-CN/milestones/M2_CPU.md` | Provide the complete Simplified Chinese counterpart of `docs/en/milestones/M2_CPU.md`, preserving technical scope, commands, evidence and original legal texts. |
 | `docs/zh-CN/milestones/M3_MEMORY.md` | Provide the complete Simplified Chinese counterpart of `docs/en/milestones/M3_MEMORY.md`, preserving technical scope, commands, evidence and original legal texts. |
 | `docs/zh-CN/milestones/M4_USERSPACE.md` | Provide the complete Simplified Chinese counterpart of `docs/en/milestones/M4_USERSPACE.md`, preserving technical scope, commands, evidence and original legal texts. |

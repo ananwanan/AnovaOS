@@ -3,7 +3,7 @@
 
 [English](../../en/guides/STATUS.md) | **简体中文**
 
-文档于 2026-10-25（Asia/Shanghai）对照已同步 `dev` 的 `f091049` 复核，其中包含 M15.6
+计划于 2026-10-26（Asia/Shanghai）对照已同步 `dev` 的 `05a5fb1` 复核，其中包含 M15.6
 交付 `16c0ddf`。以下验收记录对应各自实际执行版本；M15.6 使用实现基线 `55e3751` 及保留
 源码快照。此次文档审查没有重新运行运行时/QEMU 门禁，也不证明远端 CI 通过。
 历史 M15 任务分支为 `feat/m15-bootstrap`。M15.1/M15.2 有界 bzip2 重建本地通过；
@@ -18,6 +18,32 @@ M15.3 GCC 与 M15.4 Rust/LLVM/Cargo 可行性评估及 guest 探针本地通过�
 图形设计和验收见 [M14 GUI](../milestones/M14_GUI.md)、[M14.1](../validation/M14.1.md)、
 [M14.2](../validation/M14.2.md)、[M14.3](../validation/M14.3.md)、
 [M14.4](../validation/M14.4.md)、[M14.5](../validation/M14.5.md)。
+
+## M16–M18 后续计划（2026-10-26）
+
+项目所有者确定顺序为 **资源/VFS/ext4 → 可用开发桌面 → 有条件的编译器/镜像自举**。
+此次文档变更没有实现或验收 M16–M18；现有限制和历史验证保持原有范围。
+
+| 计划 | 范围 | 下一前置条件 |
+| --- | --- | --- |
+| [M16 基础能力](../milestones/M16_FOUNDATION.md) | CI/预算、后端解耦与资源、ext4 只读、可写、JBD2 恢复和新工作盘采用 | 从 M16.1 开始：恢复远端工具链执行并测量明确负载 |
+| [M17 开发桌面](../milestones/M17_DESKTOP.md) | 受监督会话、PTY 终端、文件/编辑器、诊断和全 GUI C/C++/Rust 流程 | M16 工作盘/资源验收；使用继承 guest 编译器 |
+| [M18 自举](../ROADMAP.md#m18有条件的自举) | 独立编译器组件阶段、guest 独立镜像生成和重复恢复 | M16/M17 后各组件工具、源码闭包、stage0/依赖和实测容量 |
+
+ext4 是中期工作盘格式计划；保留 ext2 旧镜像和恢复门禁。全新 AnovaFS 格式不进入此关键
+开发路径。无论选择哪种磁盘格式，VFS 节点/缓存策略、堆与任务上限均需单独修改。现有
+图形终端仅支持 echo/pwd，通用 PTY/ANSI 开发终端仍是 M17 工作。完整编译器自举、SMP
+和实机驱动不作为开发桌面的前置条件。
+
+2026-10-26 核对远端基线：[提交 `05a5fb1` 的运行 40116492704](https://github.com/ananwanan/AnovaOS/actions/runs/40116492704)
+结果为 `boot=success`、`guest-toolchain=failure`。源码构建步骤下载 musl.cc 种子工具链时
+HTTPS 连接超时（`curl` 退出 28），后续 guest 工具链、自举和 GUI SDK 步骤被跳过。
+这是宿主依赖获取失败，不是 guest 内核故障证据；它不撤销历史本地验收，也不证明远端通过。
+M16.1 应恢复受检输入获取并实际执行后续门禁，不降低检查要求，不把 skipped 视为成功。
+
+本次计划交付用 `python3 scripts/check_docs.py` 检查双语覆盖、语言导航和本地链接，
+用 `cargo xtask check-files` 检查用途清单，并检查 workspace/user 格式及 `git diff --check`。
+这些本地检查已通过；文档变更未重跑内核/QEMU 门禁。后续远端 CI 结果须按实际提交核对。
 
 ## 文档维护（2026-10-25）
 

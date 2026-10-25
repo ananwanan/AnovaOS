@@ -171,6 +171,7 @@ without first rebuilding that compiler.
 [M15.6 repeat](../milestones/M15_REPEAT.md) is locally accepted: two independent clean bzip2 and
 kernel builds, equal declared inputs/final artifact bytes and all 12 boot/rejection/recovery sessions.
 Kernel intermediate differences are retained; see [evidence](../validation/M15.6.md).
+
 These comparisons establish only the declared conditions, not universal reproducibility or seed-free bootstrap.
 Keep guest kernel compilation, host image packaging and guest-only image generation separate;
 retain input/seed/recipe identities and disclose nondeterminism and host assistance.
@@ -186,3 +187,17 @@ M11/M12 compilers keep their independently accepted Linux-musl tools and explici
 Native SDK export is not a native libc/std port or compiler-bootstrap proof. M14.4's separately
 versioned [GUI SDK](../../../sdk/gui/README.md) is locally accepted and uses the same native
 application personality through the independent `anova.gui.v1` library ABI.
+
+## 9. Planned resource, desktop and self-hosting order
+
+The [roadmap](../ROADMAP.md) now schedules [M16 resources/VFS/ext4](../milestones/M16_FOUNDATION.md)
+before [M17 development desktop](../milestones/M17_DESKTOP.md), followed by conditional M18
+compiler/image work. These stages are unimplemented. First recover checksum-verified CI input
+acquisition and downstream toolchain execution. Then validate selected POSIX utilities and
+real build workloads on the expanded workspace, preserving existing compiler seeds and gates.
+
+M17 uses already accepted GCC/G++ and Rust/Cargo; it does not require rebuilding them.
+Native GUI and Linux-musl compiler/shell processes still need explicit admission and a tested
+PTY bridge. Native std, reconstructed compilers and guest-only boot images remain separate.
+M18 must reassess each source closure, arithmetic dependencies, build tools, prescribed stage0
+and offline vendor requirements; old M15 assessments are not new construction evidence.

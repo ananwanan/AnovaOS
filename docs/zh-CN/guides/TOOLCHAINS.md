@@ -163,3 +163,15 @@ rustc/rust-lld，宿主原样打包保留 ELF，不重建，比较 ISO 提取字
 磁盘策略。原生 SDK 不等于原生 libc/std 或编译器自举。M14.4 独立版本
 [GUI SDK](../../../sdk/gui/README.zh-CN.md) 已本地验收，通过独立 `anova.gui.v1` 库 ABI
 使用相同 native 应用 personality。
+
+## 9. 计划中的资源、桌面与自举顺序
+
+[路线图](../ROADMAP.md) 将 [M16 资源/VFS/ext4](../milestones/M16_FOUNDATION.md) 安排在
+[M17 开发桌面](../milestones/M17_DESKTOP.md) 之前，随后有条件推进 M18 编译器/镜像工作。
+这些阶段均未实现。先恢复经校验的 CI 输入获取和后续工具链执行，再在扩容工作空间上
+验证选定 POSIX 工具和真实构建负载，保留现有编译器种子和门禁。
+
+M17 使用已验收的 GCC/G++ 与 Rust/Cargo，不要求先重建它们。原生 GUI 与 Linux-musl
+编译器/shell 进程仍需显式准入和已测试的 PTY 桥接。原生 std、重建编译器和 guest 独立
+启动镜像各自独立。M18 必须重新评估每个源码闭包、数学库依赖、构建工具、发行要求的
+stage0 和离线 vendor 条件；旧 M15 评估不是新的构建证据。

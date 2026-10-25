@@ -92,10 +92,13 @@ Compiler reconstruction and image generation entirely inside AnovaOS remain futu
 
 ## 4. Implementation order and remaining priorities
 
-[ROADMAP](ROADMAP.md) records M0–M15 dependencies and accepted boundaries. M4 supplied a minimal
-SDK before M13; networking did not block offline compilation. Current follow-ups are to satisfy
-measured compiler build-utility/dependency/capacity requirements, attempt explicitly scoped
-compiler stages, and separately remove host image-packaging assistance. Native std, broader
+[ROADMAP](ROADMAP.md) records accepted M0–M15 boundaries and the planned M16–M18 sequence.
+M4 supplied a minimal SDK before M13; networking did not block offline compilation.
+The next work is [M16 resources/VFS/ext4](milestones/M16_FOUNDATION.md), followed by
+[M17 development desktop](milestones/M17_DESKTOP.md) using the existing guest compilers.
+Restore the CI baseline first; stage ext4 read-only, writes and crash recovery independently,
+retaining old ext2 images. Complete compiler reconstruction and guest-only image generation
+are conditional M18 work after the desktop. A new filesystem format, native std, broader
 GUI/runtime compatibility, SMP and physical hardware each need their own acceptance plan.
 
 ## 5. Architectural decisions

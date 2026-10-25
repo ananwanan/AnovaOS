@@ -1,9 +1,9 @@
-<!-- Track milestone dependencies, accepted bounded profiles and remaining compiler and image-bootstrap work. -->
+<!-- Track accepted milestones and planned resource, ext4, desktop and conditional self-hosting acceptance. -->
 # Development roadmap and acceptance
 
 **English** | [简体中文](../zh-CN/ROADMAP.md)
 
-Reviewed 2026-10-25 against synchronized `dev` at `f091049`. This updates documentation;
+Plan reviewed 2026-10-26 against synchronized `dev` at `05a5fb1`. This updates documentation;
 it does not rerun the historical gates. M0–M13's bounded offline/online profiles and
 M14.1–M14.5 are locally accepted. M15.1/M15.2 reconstruct bzip2; M15.3/M15.4
 complete feasibility assessments while compiler reconstruction remains blocked;
@@ -36,6 +36,9 @@ still requires corresponding drivers. See [STATUS](guides/STATUS.md),
 | M13 | Versioned SDK/packages | M4/M11/M12 | SDK/packages/diagnostics accepted |
 | M14 | Rust GUI/C/C++/Rust SDKs | M9/M13 and individual prerequisites | Five stages locally accepted; GPU scope bounded |
 | M15 | Optional source/kernel bootstrap | M11–M13 and measured resources | bzip2/kernel/repeats accepted; compiler assessment complete, reconstruction blocked |
+| M16 | Resources, backend-independent VFS and controlled ext4 | Existing storage/runtime; restored CI and measured budgets | Planned; no ext4 implementation or acceptance |
+| M17 | Usable development desktop and GUI-only app workflow | M16 accepted workspace/resources; M9/M14 and inherited tools | Planned; full compiler bootstrap is not required |
+| M18 | Conditional compiler reconstruction and guest-only images | Measured component prerequisites after M16/M17 | Planned; each component accepted independently |
 
 Independent work may proceed in parallel, without skipping actual prerequisites.
 Networking, desktop graphics and complete bootstrap do not block first offline app development.
@@ -422,9 +425,72 @@ not identical. Two matching outputs prove only the recorded comparison, not univ
 or seed-free bootstrap. M15 completion reports accepted, assessed and unverified capabilities separately;
 it is not required to develop applications inside AnovaOS.
 
+## M16: resources, VFS and controlled ext4
+
+Owner-approved plan dated 2026-10-26; every substage below is **planned and unimplemented**.
+The detailed contract is split into [M16 foundation](milestones/M16_FOUNDATION.md).
+Existing ext2 limits describe our implementation subset, not the format's maximum capacity.
+Use ext4 as the medium-term work-volume format; retain ext2 for existing images and recovery.
+A new AnovaFS format is an independent research project outside this sequence.
+
+| Stage | Planned deliverable | Acceptance boundary |
+| --- | --- | --- |
+| M16.1 | Recover CI and measure a declared build/workspace profile | Verified dependency inputs; actual downstream gates; memory/storage/inode/task/fd and latency budgets |
+| M16.2 | Isolate filesystem backends and expand VFS/resource management | On-demand namespace/cache policy, bounded allocation/reclamation and old ext2 regressions |
+| M16.3 | Controlled ext4 read-only backend | Multigroup/extents and admitted metadata checks; malformed/unsupported/dirty-without-replay images rejected |
+| M16.4 | Controlled ext4 writes and file semantics | Create/read/write/resize/rename/unlink/open lifetime and exhaustion/error recovery; default remains unchanged |
+| M16.5 | JBD2 replay and crash consistency | Recorded transaction/flush contract, write-point crash injection and independent filesystem checks |
+| M16.6 | New work-volume migration and actual development load | Copy/hash/reboot verification, retained ext2 fallback and builds with measured foreground responsiveness |
+
+Run M16.1 before capacity choices; complete M16.2–M16.5 before M16.6 promotes a new
+default work-volume profile. Unknown incompatible features are rejected rather than silently
+downgraded. Do not convert user disks in place. Extra QEMU RAM alone does not remove VFS,
+file, cache or fixed-heap bounds. Journal acceptance does not imply that unsynced application
+data survives a crash. Record local acceptance and remote CI separately.
+
+## M17: development desktop
+
+All substages are **planned and unimplemented**; see [M17 desktop](milestones/M17_DESKTOP.md).
+Implement after the M16 workspace/resource contract, using the accepted guest GCC/G++ and
+Rust/Cargo seeds. Compiler source reconstruction is not a prerequisite.
+
+| Stage | Planned deliverable | Acceptance boundary |
+| --- | --- | --- |
+| M17.1 | Supervised user-space desktop session | Launch/close, window focus/quotas and restartable compositor/session lifecycle |
+| M17.2 | Real graphical PTY terminal | Declared Linux-musl shell, build tools, input/output, Ctrl+C, resize, scrolling and explicit ANSI subset |
+| M17.3 | File browser and reliable source editing | Real persistent files, save/error handling, declared fsync/rename durability and retained source |
+| M17.4 | Logs, resource inspection and task/service controls | Actual status/capacity data, checked task termination and service restart, no fabricated accounting |
+| M17.5 | Entirely graphical developer acceptance | C/C++/Rust edit/save/build/run/error-repair/reboot, build-time responsiveness and GUI fault recovery |
+
+The existing echo/pwd graphical demo is not a general shell. Preserve explicit native/Linux
+execution admission when connecting the native GUI to tool processes. Application/service faults
+should be diagnosable from the desktop; kernel panic, boot or display/input failure still need
+COM1/QEMU/host recovery. Screenshots alone do not establish the workflow.
+
+## M18: conditional self-hosting
+
+This is a **planned follow-up**, not a claim that M15's blocked compiler goals are complete.
+Continue the original evidence contracts after M16/M17, independently for each route:
+
+- [ ] M18.1: reassess a declared GCC source closure, POSIX tools and GMP/MPFR/MPC inputs;
+  construct one viable stage, test actual applications, then decide whether stage2/stage3 is justified.
+- [ ] M18.2: independently scope LLVM, rustc and Cargo, including working build utilities,
+  selected prescribed stage0 and offline dependency closure; identify every inherited component.
+- [ ] M18.3: generate a bootable image inside AnovaOS from the retained guest-built kernel;
+  compare packaged bytes and boot identity, documenting any remaining host participation.
+- [ ] M18.4: repeat accepted component builds from clean workspaces and test failure/reboot
+  recovery, preserving previous tools and kernels and all observed artifact differences.
+
+M18.3 may use existing guest compilers without waiting for M18.1/M18.2. If a compiler route is
+still infeasible, retain the assessment and blocker; do not mark construction accepted.
+See [M15 GCC](milestones/M15_GCC.md), [M15 Rust](milestones/M15_RUST.md),
+[M15 kernel](milestones/M15_KERNEL.md) and [M15 repeat](milestones/M15_REPEAT.md).
+
 ## Current follow-up order
 
-Resolve measured compiler build utilities/arithmetic inputs/source-closure capacity, then attempt a
-bounded first compiler stage. Independently scope guest-only image generation, native libc/std,
-GUI-enabled kernel reconstruction and broader runtime/graphics/hardware. Keep both language trees,
-README, status, commands and evidence current under [DEV-003](guides/REQUIREMENTS.md).
+Start with M16.1, then complete resource/storage acceptance before M17's developer desktop.
+Advance M18's deeper self-hosting when its component prerequisites permit. Native libc/std,
+GUI-enabled kernel reconstruction, SMP, device IRQ/async I/O, USB/NVMe/AHCI, broader GPU APIs
+and physical hardware remain independently scoped; none is a blanket prerequisite for M17.
+Add new commands only with functioning implementations and evidence. Keep both language trees,
+README, status and acceptance boundaries current under [DEV-003/DEV-004](guides/REQUIREMENTS.md).
