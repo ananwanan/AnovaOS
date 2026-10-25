@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: Apache-2.0
+# Defines the SDK template's first-party local dependency, resolved without a registry.
+[package]
+name = "offline-message"
+version = "1.0.0"
+edition = "2024"
+license = "Apache-2.0"

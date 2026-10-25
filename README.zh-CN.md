@@ -1,0 +1,130 @@
+<!-- Provide the synchronized Simplified Chinese overview, current profiles and development entry points. -->
+# AnovaOS
+
+[English](README.md) | **简体中文**
+
+用 Rust 从零开发的 x86_64 操作系统，目标是在系统内编辑、编译、调试、运行应用，
+并逐步支持经过验证的现有 Linux 软件。
+
+日常开发与 Pull Request 目标为 **`dev`**；`main` 保留阶段验收后的稳定快照。
+项目仓库：[ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS)。
+
+## 当前状态
+
+本地已验收范围覆盖 **M0–M13、M14.1–M14.5、M15.1–M15.6**。
+其中 M15.3/M15.4 交付的是带明确阻塞结论的编译器可行性评估，尚未重建编译器。
+这些结果均有明确边界，不能据此宣称完整桌面系统或完整自举。
+
+| 阶段 | 本地验证的能力 |
+| --- | --- |
+| M0–M7 | UEFI/Limine 启动、内存保护、Ring 3、用户态抢占调度、原生应用、VFS/管道/init/shell、现代 virtio-blk、受检 ext2 `/persist`、源码编辑器、sync/fsync、正常关机和重启保留 |
+| M8–M9 | 固定 BusyBox 1.36.1 CLI 子集；musl 1.2.4 静态、静态 PIE、动态 ELF；pthread/TLS/futex、信号处理与中断/重启、poll/非阻塞 I/O、四组 PTY、启动共享库与 dlopen/TLS |
+| M10 | 可选轮询式 virtio-net IPv4 TCP/UDP、有界 DNS、严格用户态 TLS、校验锁定包的安装/升级/回滚/卸载及用户数据保留 |
+| M11 | 源码构建的系统内 GCC/G++ 11.2.0、binutils/make、配套 musl/C++ sysroot；实际编辑/编译/运行、异常、线程与重启保留 |
+| M12 | 系统内运行官方 Rust 1.90.0/std/Cargo 二进制工具；离线 vendor/build.rs/C FFI/过程宏；严格联网 registry/Git 和缓存离线重编译；固定公网来源通过配置的宿主代理验证 |
+| M13 | SDK 1.0.0、原生 C/C++/Rust 模板、ANOVAPK2 显式 ABI 包、安装策略与实际用户故障的源码符号化 |
+| M14.1–M14.4 | 受检 CPU framebuffer、轮询 PS/2 输入/游标、隔离 Rust 用户态合成器、版本化 `anova.gui.v1` C/C++/Rust SDK、系统内独立构建客户端、便笺和有界图形终端 |
+| M14.5 | 硬件 VirGL 离屏清屏/读回、受保护的逐像素对照、超时/reset/重新初始化和 CPU fallback；普通桌面仍采用软件合成 |
+| M15.1–M15.2 | 容量测量、锁定 bzip2 源码的系统内重建、固定样本精确比较、失败/重启恢复 |
+| M15.3–M15.4 | GCC 和 Rust/LLVM/Cargo 独立源码审计与实际 guest 前置依赖探测；编译器重建仍被阻塞 |
+| M15.5 | 使用继承工具和目标库在系统内编译真实内核；保留 ELF 后由宿主辅助打包，验证启动身份与恢复 |
+| M15.6 | bzip2 和内核各进行两轮独立干净构建，最终产物逐字节一致，归档证据与全部 12 次启动/拒绝/恢复会话通过 |
+
+证据按阶段收录在[验收索引](docs/zh-CN/index.md#验收记录)。本次文档整理未重新运行这些
+系统内验收。已配置 CI、远端 CI 实际结果和本地验收是分别记录的事实。
+
+系统当前为单 BSP、32 个进程/线程槽、内核不可抢占、固定 16 MiB 堆；外设 IRQ 保持屏蔽，
+设备 I/O 采用轮询。持久文件上限 4 MiB，tmpfs 和只读共享文件缓存上限仍为 1 MiB。
+ext2 没有日志或断电恢复。通用 Linux/glibc、SMP、USB/实机支持、原生 Rust `std`、
+编译器源码重建及完全由 guest 生成启动镜像仍未验证。详见
+[当前状态](docs/zh-CN/guides/STATUS.md)和[兼容范围](docs/zh-CN/COMPATIBILITY.md)。
+
+## 下一步开发
+
+1. 补齐已测得的编译器前置条件：系统内构建工具、GMP/MPFR/MPC 开发输入、Rust 规定的
+   stage0/离线依赖闭包，以及足够的内存和存储；分别重新评估 GCC、LLVM、rustc 和 Cargo，
+   实际重建后才能宣称获得新的编译器阶段。
+2. 从 M15.5 已保留的系统内构建内核出发，推进完全由 guest 生成镜像；当前 ISO 准备和打包
+   仍由宿主完成。
+3. 持续保留 M15.6 的干净构建、拒绝与恢复回归；原生 `std`、更广泛 Cargo/GUI API 与实机
+   支持另行定义范围并独立验收。
+
+优先级依据[路线图](docs/zh-CN/ROADMAP.md)、[M15 GCC](docs/zh-CN/milestones/M15_GCC.md)、
+[M15 Rust](docs/zh-CN/milestones/M15_RUST.md)和[M15 重复构建](docs/zh-CN/milestones/M15_REPEAT.md)。
+
+## 构建与启动
+
+宿主使用 x86_64 Ubuntu 24.04 或 WSL2，安装 rustup、QEMU 8.2.2、xorriso、curl、
+dpkg-deb、GCC/G++、make、musl-tools、QEMU-user、Python 3 和 e2fsprogs。
+仓库固定 Rust 1.90.0、rustfmt、Clippy 与 `x86_64-unknown-none`。
+[开发指南](docs/zh-CN/guides/DEVELOPMENT.md)说明完整安装、可选编译器依赖、产物路径和失败行为。
+
+```sh
+git clone --branch dev https://github.com/ananwanan/AnovaOS.git
+cd AnovaOS
+cargo xtask fetch
+cargo xtask doctor
+cargo xtask build
+cargo xtask apps
+cargo xtask image
+cargo xtask run
+```
+
+QEMU 默认使用临时数据盘。需要保留工作时，创建显式数据盘并在 guest 中执行 `shutdown`：
+
+```sh
+cargo xtask root-image build/disks/work.ext2
+cargo xtask run --disk build/disks/work.ext2
+```
+
+镜像、缓存和日志均位于 `build/`；命令仅操作普通镜像文件。内核采用 `no_std` + `alloc`、
+UEFI/Limine、四级页表，并分别配置内核/用户态编译参数。
+原生 ABI 与 Linux-musl personality 明确区分。
+
+## 开发配置与检查
+
+| 配置 | 命令与范围 |
+| --- | --- |
+| 系统基础 | `cargo xtask test-host`、`verify`、`terminal-test`、`persistence-test`、`test-compat`、`trace-compat` |
+| 网络/软件包 | `cargo xtask network-test`、`package-test`；交互使用 `cargo xtask run --network` |
+| 系统内 C/C++ | `cargo xtask toolchain-build`、`toolchain-image`、`toolchain-test`；`run --toolchain` 配合 Linux personality 数据盘 |
+| 系统内 Rust/Cargo | `cargo xtask rust-build`、`rust-image`、`rust-cross-test`、`rust-runtime-test`、`rust-test`、`rust-online-test`、`rust-public-test`；`run --rust` |
+| 原生 SDK | `cargo xtask sdk`、`app-new <c\|cpp\|rust> PROJECT`、`app-build PROJECT`、`app-pack MANIFEST OUTPUT`、`app-image PACKAGE SHA256`、`app-run PACKAGE SHA256`、`symbolize ELF ADDRESS...`；`sdk-test`、`app-test`、`package-v2-test`、`diagnostics-test` |
+| 显示/输入/合成器 | `cargo xtask graphics-test`、`input-test`、`gui-test`；交互使用 `run --graphics` 或 `run --gui` |
+| GUI runtime | `cargo xtask gui-sdk`、`gui-sdk-image`、`gui-sdk-test`、`gui-sdk-replay`；`run --gui-sdk` 配合原生数据盘 |
+| GPU | `cargo xtask gpu-test` 需要经确认的硬件 GL renderer；`gpu-fallback-test` 不需要图形显示 |
+| 源码重建 | `cargo xtask bootstrap-prepare`、`bootstrap-test`、`bootstrap-gcc-test`、`bootstrap-rust-test`、`bootstrap-kernel-test`、`bootstrap-repeat-test` |
+
+镜像构建 gate 共享受检产物快照，**必须顺序运行**。交互图形需要可用显示环境；无界面 QMP
+验收属于独立配置。应用编译确实运行于 AnovaOS 内核之上，但已安装种子工具本身不能证明
+已从源码重建编译器。
+
+## 文档
+
+完整对应的开发文档见[英文索引](docs/en/index.md)与[简体中文索引](docs/zh-CN/index.md)，
+每页均可切换语言。新增共享图片和图表放在 `docs/assets/` 下。
+
+| 入口 | 内容 |
+| --- | --- |
+| [AGENTS.md](AGENTS.md) | 强制开发、安全和交付规范 |
+| [项目大纲](docs/zh-CN/PROJECT_OUTLINE.md)、[路线图](docs/zh-CN/ROADMAP.md) | 目标、依赖、验收与剩余工作 |
+| [架构](docs/zh-CN/ARCHITECTURE.md)、[兼容范围](docs/zh-CN/COMPATIBILITY.md) | 子系统所有权、ABI、限制及受测软件 |
+| [开发指南](docs/zh-CN/index.md#开发指南) | 配置、风格、工具链、许可、需求、状态与文件用途 |
+| [阶段设计](docs/zh-CN/index.md#阶段设计)、[验收记录](docs/zh-CN/index.md#验收记录) | 已实现契约和截至 M15.6 的历史执行证据 |
+| [第三方输入与声明](docs/zh-CN/index.md#第三方输入与声明) | 来源及原样保留的上游许可证正文 |
+| [原生 SDK](sdk/README.zh-CN.md)、[GUI SDK](sdk/gui/README.zh-CN.md)、[重建配方](ports/bootstrap/README.zh-CN.md) | 各组件旁的双语开发入口 |
+
+后续每批开发都必须**及时同步文档**：两种语言、双语 README、状态、路线图、命令和验收边界
+应在同一批改动中更新。自有标识符、源码注释、日志及提交消息仍使用英文。
+每个自有文件需有用途说明并登记清单。
+
+```sh
+python3 scripts/check_docs.py
+cargo xtask check-files
+cargo fmt --all -- --check
+cargo fmt --manifest-path user/Cargo.toml --all -- --check
+git diff --check
+```
+
+原创代码、文档与示例采用 [Apache-2.0](LICENSE)；[NOTICE](NOTICE) 和第三方许可证保留
+各自的归属与条款，详见[许可指南](docs/zh-CN/guides/LICENSING.md)。

@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: Apache-2.0
+# Normalizes bounded PS/2 input without hardware access, allocation, text or GUI policy.
+[package]
+name = "anova-input"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true

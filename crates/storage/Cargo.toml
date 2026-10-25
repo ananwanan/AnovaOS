@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+# Shares checked sector I/O and the deliberately restricted ext2 disk format with host tests.
+[package]
+name = "anova-storage"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+anova-abi = { path = "../abi" }

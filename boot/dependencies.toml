@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: Apache-2.0
+# Locks verified compiler/QEMU versions and bootloader/firmware sources and hashes.
+# Change only with refreshed integrity checks and the complete M1 validation.
+rust = "1.90.0"
+qemu = "8.2.2"
+# Tested Ubuntu package: qemu-system-x86 1:8.2.2+ds-0ubuntu1.18 (amd64).
+# Source: https://snapshot.ubuntu.com/ubuntu/20260828T000000Z/pool/main/q/qemu/
+# Package SHA-256: 14602e262627adac030329d2cecfee5f6c0938b34566ff2ea2d4c9a9eb02430d
+# The runner enforces the release version; apt verifies host package contents.
+limine_version = "9.5.0"
+limine_commit = "0765b5db055680471cea3180e8277dcf701847dc"
+protocol_commit = "3a0526b700e356f0eac1b71a77697b3fd1c707a3"
+
+[[assets]]
+file = "BOOTX64.EFI"
+url = "https://raw.githubusercontent.com/Limine-Bootloader/Limine/0765b5db055680471cea3180e8277dcf701847dc/BOOTX64.EFI"
+sha256 = "e7ea2074864fe69188d9adc0e663b45e297cc92dc5cbd1379ec3e20fa83957c0"
+
+[[assets]]
+file = "limine-uefi-cd.bin"
+url = "https://raw.githubusercontent.com/Limine-Bootloader/Limine/0765b5db055680471cea3180e8277dcf701847dc/limine-uefi-cd.bin"
+sha256 = "a186953ae20c00e80499dfbae7eb54653907048a2941d44fd75a1a70521c30cc"
+
+[[assets]]
+file = "LIMINE-LICENSE"
+url = "https://raw.githubusercontent.com/Limine-Bootloader/Limine/0765b5db055680471cea3180e8277dcf701847dc/LICENSE"
+sha256 = "45a0d60afc1cdef1d531d788cd53680261cff75fc14e7d96f44dba68a2f56b8d"
+
+[firmware]
+version = "2024.02-2ubuntu0.9"
+url = "https://snapshot.ubuntu.com/ubuntu/20260828T000000Z/pool/main/e/edk2/ovmf_2024.02-2ubuntu0.9_all.deb"
+package_sha256 = "a094c13d06f2740691ff57d108dff32aa087179363ddb0de42d463b4f7f9bc13"
+code_sha256 = "949bfa5389c4c48582737481e7d24f46b3a16b276ef44c4089a56858c6a0a446"
+vars_sha256 = "5d2ac383371b408398accee7ec27c8c09ea5b74a0de0ceea6513388b15be5d1e"

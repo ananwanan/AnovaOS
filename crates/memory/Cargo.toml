@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+# Packages reusable no_std frame, heap and page-table policies for kernel/host tests.
+[package]
+name = "anova-memory"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+anova-platform = { path = "../platform" }

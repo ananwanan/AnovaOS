@@ -1,0 +1,10 @@
+{
+  "purpose": "Pin inherited bare-metal Rust 1.90.0 core, alloc and compiler-builtins seed artifacts for guest kernel reconstruction; these libraries are not rebuilt.",
+  "version": "1.90.0",
+  "target": "x86_64-unknown-none",
+  "name": "rust-std-1.90.0-x86_64-unknown-none.tar.xz",
+  "url": "https://static.rust-lang.org/dist/2025-09-18/rust-std-1.90.0-x86_64-unknown-none.tar.xz",
+  "sha256_url": "https://static.rust-lang.org/dist/2025-09-18/rust-std-1.90.0-x86_64-unknown-none.tar.xz.sha256",
+  "sha256": "47cb9f0ffcbeebeaee06a92a189ea81011b46d7dd10360a3b0801a041bc3b9af",
+  "root": "rust-std-1.90.0-x86_64-unknown-none"
+}

@@ -1,5 +1,7 @@
 # Rust and generated builds
 /target/
+__pycache__/
+/user/target/
 /build/
 /dist/
 /cache/

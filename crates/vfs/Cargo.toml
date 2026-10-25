@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+# Share mounted memory/disk VFS, archive, open-file and pipe semantics with host tests.
+[package]
+name = "anova-vfs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+anova-abi = { path = "../abi" }
+anova-storage = { path = "../storage" }
+anova-memory = { path = "../memory" }

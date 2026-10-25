@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: Apache-2.0
+# Instantiate a cold-network guest project with a fixed registry version and full Git revision.
+[package]
+name = "m12-online-app"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+
+[dependencies]
+m12-net-dep = { version = "=0.1.0", registry = "m12" }
+m12-git-dep = { git = "https://10.0.2.2:18443/git/dependency.git", rev = "@GIT_REV@" }
+
+[profile.dev]
+opt-level = 1
+debug = 0
+strip = "symbols"
+codegen-units = 1
+incremental = false
+
+[workspace]

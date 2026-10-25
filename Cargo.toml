@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0
+# Defines kernel/host packages and shared metadata; user binaries have a separate workspace.
+[workspace]
+members = ["kernel", "xtask", "crates/platform", "crates/memory", "crates/abi", "crates/elf", "crates/sched", "crates/vfs", "crates/storage", "crates/graphics", "crates/input", "crates/gui", "crates/gui-runtime"]
+exclude = ["user"]
+default-members = ["xtask"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+repository = "https://github.com/ananwanan/AnovaOS"
+
+[profile.dev]
+panic = "abort"
+opt-level = 1
+
+[profile.release]
+panic = "abort"
+debug = true
+

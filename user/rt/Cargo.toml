@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# Packages the no_std startup entry and native v1 syscall wrappers for Rust apps.
+[package]
+name = "anova-rt"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+
+[dependencies]
+anova-abi = { path = "../../crates/abi" }
