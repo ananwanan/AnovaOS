@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-// Pin tmpfs directory identities to exhaust the real VFS quota, then verify rollback and reuse.+// Run twice in one process so leaked cache slots cannot be hidden by a reboot.
+// Pin tmpfs directory identities to exhaust the real VFS quota, then verify rollback and reuse.
+// Run twice in one process so leaked cache slots cannot be hidden by a reboot.
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -9,12 +10,12 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "[M16:VFS:FAIL] line=%d errno=%d\n", __LINE__, errno); return -1; } } while (0)
 
 static int exhaust(void) {
-    CHECK(mkdir("/tmp/m16-vfs", 0700) == 0);
+    CHECK(mkdir("/tmp/m16-vfs", 0755) == 0);
     int count;
     char path[64];
     for (count = 0; count < 2048; ++count) {
         snprintf(path, sizeof(path), "/tmp/m16-vfs/d%04d", count);
-        if (mkdir(path, 0700)) {
+        if (mkdir(path, 0755)) {
             CHECK(errno == ENOSPC);
             break;
         }

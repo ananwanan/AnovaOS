@@ -82,3 +82,11 @@ an independent executable trigger; its actual event must be recorded as `push`,
 not `workflow_dispatch`. No manual-dispatch success is claimed without a run.
 
 Actual run/commit/job/artifact identities and final results are pending execution.
+
+## Initial execution corrections
+
+The first actual pressure boot passed heap exhaustion and FD/task reuse, then the
+new VFS probe requested mkdir mode 0700, outside the declared Linux mkdir profile
+(0755/0775/0777). The guest correctly returned EOPNOTSUPP. The probe now uses
+0755 without changing kernel permissions or the quota/recovery assertions. No
+acceptance is claimed for that interrupted session.
