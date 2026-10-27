@@ -1,10 +1,30 @@
 // SPDX-License-Identifier: Apache-2.0
 #![no_std]
-//! Define owned, synchronous sector devices and a checked ext2 subset, without hardware assumptions.
+//! Define owned sector devices, fallible backend ownership and checked ext2/ext4 filesystem profiles.
 extern crate alloc;
 pub mod ext2;
+pub mod ext4;
+pub mod filesystem;
 use alloc::boxed::Box;
-use anova_abi::{INVALID_ARGUMENT, IO_ERROR};
+use anova_abi::{INVALID_ARGUMENT, IO_ERROR, NO_MEMORY};
+
+/// Allocate an owning backend without invoking the allocator's infallible OOM handler.
+pub fn try_box<T>(value: T) -> Result<Box<T>, i64> {
+    let layout = core::alloc::Layout::new::<T>();
+    if layout.size() == 0 {
+        return Ok(Box::new(value));
+    }
+    // SAFETY: The nonzero layout is derived from T and accepted by the global allocator.
+    // A null allocation is returned as NO_MEMORY before writing or publishing any ownership.
+    let pointer = unsafe { alloc::alloc::alloc(layout) } as *mut T;
+    let pointer = core::ptr::NonNull::new(pointer).ok_or(NO_MEMORY)?;
+    // SAFETY: This uniquely owned allocation has T's size/alignment. Initialize exactly once,
+    // then transfer the allocation and its destructor to Box using the matching allocator/layout.
+    unsafe {
+        pointer.as_ptr().write(value);
+        Ok(Box::from_raw(pointer.as_ptr()))
+    }
+}
 
 pub const SECTOR: usize = 512;
 

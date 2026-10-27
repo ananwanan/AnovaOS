@@ -116,14 +116,21 @@ M17 development desktop → M18 conditional compiler/image self-hosting**. See
 [M17 desktop](docs/en/milestones/M17_DESKTOP.md), [ROADMAP](docs/en/ROADMAP.md) and
 [DEV-004](docs/en/guides/REQUIREMENTS.md). Start with CI baseline recovery and measured
 budgets; preserve ext2 images while separately validating ext4 read-only, writes,
-journal recovery and fresh-disk migration. None of M16–M18 is implemented by this
-plan. Use existing guest compilers for M17; full compiler bootstrap, SMP, physical
+journal recovery and fresh-disk migration. The planning commit implemented none of M16–M18. The current M16 delivery now implements
+backend/cache isolation and controlled ext4 readonly access; see [M16 evidence](docs/en/validation/M16.md).
+Preserve `cargo xtask foundation-test` and `python3 ports/gcc/test_fetch.py` with all prior gates.
+M16.4 adds explicit non-journal ext4 write-v1; preserve `cargo xtask foundation-write-test` and read [M16.4](docs/en/validation/M16.4.md).
+JBD2 recovery/migration now have the separate bounded acceptance below; the declared ext4 kernel budget/recovery profile is locally accepted; complete remote CI and M17/M18 remain pending. Use existing guest compilers for M17; full compiler bootstrap, SMP, physical
 drivers and a new filesystem format are not its prerequisites. Keep serial/host
 recovery independent of the desktop and retain all accepted regression gates.
 
 本文件是后续 Codex 开发规范。用户明确指令优先；已有修改应保留。日常、可逆的实现选择可自主完成，不因普通阶段切换反复请求确认。
 
 日常开发基线与 Pull Request 默认目标为 `dev`。除用户明确指定外，不直接在 `main` 开发；`main` 用于接收阶段验收后的稳定快照。开始工作前检查并切换到实际的 `dev` 或由其创建的任务分支，不仅依赖 GitHub 页面当前选中的分支。
+
+The owner-selected M16 working branch is `feat/m16-foundation`. Continue all remaining
+M16 development on this branch, including subsequent substages, with pull requests
+targeting `dev`.
 
 本项目原创代码、文档与示例采用 `Apache-2.0`；保留根目录 `LICENSE`、`NOTICE` 和已有归属声明。第三方代码保持原许可证，具体边界见 [docs/en/guides/LICENSING.md](docs/en/guides/LICENSING.md)。
 
@@ -323,3 +330,27 @@ GUI frameworks, shader draws and hardware support need independent acceptance.
   inventory, ownership/safety review, ABI compatibility tests and exact
   validation evidence requirements. Add `cargo xtask` GUI commands only
   together with their functioning implementation.
+
+## M16.5/M16.6 continuing acceptance
+
+The owner-selected `feat/m16-foundation` now includes opt-in internal JBD2 checksum-v3,
+synchronous data/metadata journal transactions, audited replay and persistent orphan
+recovery. Preserve `cargo xtask foundation-journal-test`, its sector/flush/tear matrix,
+independent e2fsck replay and allocation failures. Read [M16.5](docs/en/validation/M16.5.md).
+Fresh work disks and readonly-source ext2 migration remain explicit. Preserve
+`cargo xtask foundation-migrate-test`, actual guest bzip2 compilation, storage pressure,
+UART latency budgets, interruption, failed-build retention and ext2 fallback; read
+[M16.6](docs/en/validation/M16.6.md). Keep existing non-journal/ext2 gates. Default
+storage, full M16/remote CI acceptance, larger quotas and M17/M18 remain independent.
+
+The M16 kernel-capacity follow-up adds `cargo xtask foundation-capacity-test`. Preserve
+its separate pressure/build sessions, predeclared budgets, successful-mutation ext4
+allocation peaks and exact guest-built kernel boot/recovery. Read
+[M16 capacity](docs/en/validation/M16_CAPACITY.md); implementation alone is not acceptance.
+
+## Temporary main-only Actions policy
+
+The owner now limits GitHub Actions to pushes to `main`. Keep PR, manual-dispatch
+and all other branch triggers disabled until the owner changes this policy.
+Preserve the complete job/gate definitions. Feature-branch remote reruns are paused;
+record actual failures and local fixes without claiming complete remote acceptance.

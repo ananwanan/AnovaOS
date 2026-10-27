@@ -7,8 +7,16 @@ An x86_64 operating system built from scratch in Rust. Its goal is to edit,
 compile, debug and run applications inside AnovaOS, while gradually supporting
 selected existing Linux software.
 
-Daily development and pull requests target **`dev`**; `main` holds accepted stable
+Daily development is based on **`dev`**, and pull requests target it; `main` holds accepted stable
 snapshots. Repository: [ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS).
+
+All remaining M16 development continues on **`feat/m16-foundation`**, with pull
+requests targeting `dev`.
+
+
+GitHub Actions temporarily run **only on pushes to `main`**. PR, manual and other-branch
+triggers are disabled. The latest feature-branch CI failure and locally verified
+fixture correction are recorded separately from local capacity acceptance.
 
 ## Current status
 
@@ -31,28 +39,36 @@ claim of a complete desktop OS or complete self-hosting.
 | M15.3–M15.4 | Independent GCC and Rust/LLVM/Cargo source audits and real guest prerequisite probes; compiler reconstruction remains blocked |
 | M15.5 | Actual guest kernel compilation with inherited tools/target libraries, exact retained-ELF host-assisted packaging and verified boot identity/recovery |
 | M15.6 | Two independent clean builds each of bzip2 and kernel, identical final artifacts, archived evidence and all 12 boot/rejection/recovery sessions |
+| M16 (bounded local profile) | Verified inputs, backend/cache isolation, controlled ext4 readonly/writes and JBD2 recovery; fresh-disk bzip2/UART acceptance and actual kernel reconstruction after heap/VFS/fd/task/disk exhaustion; remote CI tracked separately |
 
 Evidence is recorded per stage in the [validation index](docs/en/index.md#validation).
-This documentation update does not rerun those guest gates. Configured CI,
-actual remote CI execution and local acceptance are separate facts.
+Each record identifies its executed checks. Configured CI, actual remote CI execution
+and local acceptance are separate facts.
 
 The current system uses one BSP, 32 process/thread slots, a non-preemptible
 kernel, a fixed 16 MiB heap and masked peripheral IRQs with polled device I/O.
-Persistent files are bounded at 4 MiB; tmpfs and readonly shared-file caches
+Writable ext2 files are bounded at 4 MiB; controlled ext4 files allow 256 MiB; tmpfs and readonly shared-file caches
 remain at 1 MiB. Ext2 has no journal or power-loss recovery. General Linux/glibc,
 SMP, USB/physical hardware support, native Rust `std`, reconstructed compilers
 and guest-only boot-image generation remain unverified. See
 [status](docs/en/guides/STATUS.md) and [compatibility](docs/en/COMPATIBILITY.md).
 
+`foundation-capacity-test` passed locally on a fresh 64 MiB ext4 work disk after
+real resource exhaustion/recovery. The actual kernel build used 9,494,480 heap bytes,
+1,564 VFS slots, 14 tasks, 16 FDs/process and 6,072 allocated 4 KiB blocks at peak.
+[M16 capacity](docs/en/validation/M16_CAPACITY.md) retains complete results and CI status.
+
 ## Next development work
 
 The owner-approved order is **M16 resources/VFS/ext4 → M17 development desktop →
-M18 conditional compiler and image self-hosting**. All three are planned, not implemented.
+M18 conditional compiler and image self-hosting**. M16 now has a locally verified backend/cache and
+controlled ext4 readonly/writes, JBD2 recovery and opt-in migration/build acceptance. M17/M18 remain planned.
 
-1. [M16 foundation](docs/en/milestones/M16_FOUNDATION.md): restore the remote
-   toolchain CI baseline, measure a declared workload, expand resources and
-   decouple filesystem backends. Introduce controlled ext4 read-only, write and
-   journal-recovery stages; retain ext2 and migrate through separately verified images.
+1. [M16 foundation](docs/en/milestones/M16_FOUNDATION.md): finish remote CI acceptance; the declared kernel capacity profile passed locally.
+   Broader workload sizing remains independent. JBD2 and fresh-image migration now have separate
+   [M16.5](docs/en/validation/M16.5.md)/[M16.6](docs/en/validation/M16.6.md) local gates. Backend
+   isolation, on-demand directories, reclaimable file nodes and controlled ext4 readonly
+   access are implemented; see [local evidence](docs/en/validation/M16.md) and [M16.4 writes](docs/en/validation/M16.4.md).
 2. [M17 desktop](docs/en/milestones/M17_DESKTOP.md): deliver a real PTY terminal,
    reliable editing, file browsing and diagnostics, then complete C/C++/Rust
    edit/build/run/error-repair/reboot entirely through the desktop using existing tools.
@@ -109,6 +125,9 @@ personality are explicit and independent.
 | Display/input/compositor | `cargo xtask graphics-test`, `input-test`, `gui-test`; interactive `run --graphics` or `run --gui` |
 | GUI runtime | `cargo xtask gui-sdk`, `gui-sdk-image`, `gui-sdk-test`, `gui-sdk-replay`; `run --gui-sdk` with a native disk |
 | GPU | `cargo xtask gpu-test` requires a verified hardware GL renderer; `gpu-fallback-test` is headless |
+| Writable ext4 (opt-in) | `cargo xtask foundation-write-test`; `ext4-image [--linux] build/disks/work.ext4`, then `run --ext4-write [--toolchain] --disk build/disks/work.ext4`; [profile and evidence](docs/en/validation/M16.4.md) |
+| JBD2 / fresh work disk | `cargo xtask foundation-journal-test`; `cargo xtask foundation-migrate-test`; [M16.5](docs/en/validation/M16.5.md), [M16.6](docs/en/validation/M16.6.md) |
+| Filesystem foundation | `cargo xtask foundation-test`: controlled ext4 readonly, 10,001-entry directory, 20 MiB file, 200 MiB sparse file, disk execution, reboot and rejection |
 | Source reconstruction | `cargo xtask bootstrap-prepare`, `bootstrap-test`, `bootstrap-gcc-test`, `bootstrap-rust-test`, `bootstrap-kernel-test`, `bootstrap-repeat-test` |
 
 Image-building gates share verified output snapshots: **run them sequentially**.
@@ -128,7 +147,7 @@ and diagrams belong under `docs/assets/` when added.
 | [Project outline](docs/en/PROJECT_OUTLINE.md), [roadmap](docs/en/ROADMAP.md) | Goals, dependencies, acceptance and remaining work |
 | [Architecture](docs/en/ARCHITECTURE.md), [compatibility](docs/en/COMPATIBILITY.md) | Subsystem ownership, ABIs, limits and tested software |
 | [Guides](docs/en/index.md#guides) | Setup, style, toolchains, licensing, requirements, status and file inventory |
-| [Milestones](docs/en/index.md#milestone-designs), [validation](docs/en/index.md#validation) | Accepted contracts/evidence through M15.6 and separate M16/M17 plans |
+| [Milestones](docs/en/index.md#milestone-designs), [validation](docs/en/index.md#validation) | Accepted contracts/evidence through M15.6, partial M16 implementation and M17 plans |
 | [Third-party inputs](docs/en/index.md#third-party-inputs-and-notices) | Provenance and preserved upstream license texts |
 | [Native SDK](sdk/README.md), [GUI SDK](sdk/gui/README.md), [bootstrap recipes](ports/bootstrap/README.md) | Adjacent development entry points, each with a Chinese companion |
 

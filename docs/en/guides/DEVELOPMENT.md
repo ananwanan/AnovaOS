@@ -580,3 +580,72 @@ Keep historical validation dates and scope; record local, remote CI and hardware
 results separately. Run `python3 scripts/check_docs.py`, `cargo xtask check-files`
 and `git diff --check`. The Python check validates page parity, language links,
 local files and heading fragments; reviewers still verify translation meaning.
+
+## M16 filesystem foundation
+
+`cargo xtask foundation-test` builds a normal native image and creates fresh controlled ext4
+fixtures below `build/foundation/`. Four real TCG boots check readonly access on writable and
+readonly devices, 10,001 directory entries, 20 MiB initialized bytes, a 200 MiB sparse file,
+native disk execution, clean reboot, unknown-feature/replay rejection and serial recovery.
+Each boot has a 120-second deadline (negative boots use the existing 60-second gate).
+The gate retains the exact ISO/initramfs, original and rejected disks, hashes/result JSON
+and `build/logs/foundation-*.serial.log`. Stopped valid disks must pass `e2fsck -fn`.
+`test-host` includes independent ext4 fixtures and VFS cache-pressure tests; CI also runs
+`python3 ports/gcc/test_fetch.py`. See [M16 evidence](../validation/M16.md).
+
+Compiler inputs now fall back from musl.cc to the locked official more.musl.cc archive.
+Both require the original digest. `ANOVA_SOURCE_CACHE=/absolute/directory` optionally
+supplies archives by their locked local names (including `bootstrap.tgz`); cache corruption
+or symlinks fail instead of bypassing verification. CI caches only checked source archives,
+not generated compiler outputs. Existing ext2 images remain writable/default. Ext4 writes,
+JBD2 recovery and migration/build responsiveness have no acceptance in this readonly gate.
+
+
+## M16.4 opt-in writable ext4
+
+```sh
+cargo xtask ext4-image --linux build/disks/work.ext4
+cargo xtask run --ext4-write --toolchain --disk build/disks/work.ext4
+cargo xtask foundation-write-test
+```
+
+The new 8 MiB image uses the pinned non-journal extent profile. Omit `--linux` and
+`--toolchain` for native applications. A writable run requires an explicit disk;
+ordinary runs still mount ext4 readonly and retain the default ext2 recovery path.
+The separate six-boot write gate verifies file/directory semantics, real guest
+GCC/make, native OOM, ENOSPC, reboot, host e2fsck/hashes and actual virtio read/write/
+flush failures. Its complete contract and retained evidence are in
+[M16.4](../validation/M16.4.md). This historical gate covers non-journal write-v1; the separate commands below accept JBD2 and opt-in migration.
+
+## M16.5/M16.6 journal and new work disks
+
+```sh
+cargo xtask ext4-journal-image --linux build/disks/new-work.ext4
+cargo xtask run --ext4-write --toolchain --disk build/disks/new-work.ext4
+cargo xtask ext4-migrate build/disks/old.ext2 build/disks/migrated.ext4
+cargo xtask foundation-journal-test
+cargo xtask foundation-migrate-test
+```
+
+The new 64 MiB/8 MiB-journal profile remains opt-in; both image commands require
+new destinations. Migration reads a stopped/clean ext2 source readonly and saves
+an exact inventory alongside the new image. JBD2 uses one synchronous checksum-v3
+data/metadata transaction, audited replay and persistent orphan recovery. The new
+gates retain write/flush/tear faults, independent e2fsck replay, real guest bzip2,
+interruption/reboot retention and host-measured foreground UART budgets. See
+[M16.5](../validation/M16.5.md) and [M16.6](../validation/M16.6.md). Default ext2,
+existing software quotas, broader M16/remote CI and M17/M18 remain separate.
+
+## M16 kernel capacity closeout
+
+`cargo xtask foundation-capacity-test` uses a fresh 64 MiB JBD2 disk with inherited Rust seeds,
+separates real heap/VFS/fd/task/disk exhaustion from clean guest kernel construction,
+and verifies exact retained-ELF boot/rejection/recovery. Budget, sampling and evidence
+contracts are in [M16 capacity](../validation/M16_CAPACITY.md). Actions temporarily run only on pushes to `main`; PR, manual and other-branch
+triggers are disabled by owner request.
+
+The local `e2db30f` execution passed all four sessions. Its measured normal build
+used 9,494,480 heap bytes, 1,564 VFS slots, 14 tasks, 16 FDs/process and 6,072 disk
+blocks at peak; the earlier pressure session separately reached real limits and
+verified reuse. Read the capacity record for frame sampling limits, exact input
+closure and complete retained logs before applying these figures to another recipe.

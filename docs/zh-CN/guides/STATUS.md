@@ -3,6 +3,29 @@
 
 [English](../../en/guides/STATUS.md) | **简体中文**
 
+## M16 基础能力进展（2026-10-27）
+
+新 ext4 内核容量门禁已在 `e2db30f` 本地通过：真实堆/VFS/FD/任务/磁盘耗尽与复用、
+在恢复后的 64 MiB 盘上干净重建真实内核、精确 ELF 打包、语法错误保留和两次新内核启动。
+构建峰值为 9,494,480 堆字节、额外 142,825 页、1,564 个 VFS 槽、14 个任务、
+每进程 16 个 FD，以及 6,072 块 / 241 个 inode。
+[M16 容量](../validation/M16_CAPACITY.md)保留完整测量、输入身份和原始日志。
+`1b63f42` 的 #57 通过核心、源码工具链构建及 guest C/C++，随后因镜像复制了
+runner 的 UID/GID 1001 而在 ext4 准入失败。新镜像所有权已本地修复（54 项 xtask
+测试与严格 Clippy 通过）。完整远端复验待完成：所有者现仅允许 `main` 推送触发
+Actions，关闭 PR/手动和功能分支入口。
+
+
+M16 开发已统一到 `feat/m16-foundation`，包含基础能力与 M16.4 写支持的全部提交。
+后续所有 M16 工作继续在此分支进行，Pull Request 目标为 `dev`。
+
+`feat/m16-foundation` 基于 `dev` `616ff47`，实现受检下载回退/缓存、文件系统后端边界、
+按需目录、可回收持久文件节点与受控 ext4 只读 v1；准确范围与检查见
+[M16 验证](../validation/M16.md)。默认 ext2 镜像、16 MiB 堆、32 task/fd 和 2,048 缓存槽
+保持原有限额。显式启用的无日志 ext4 write-v1 已实现，见 [M16.4](../validation/M16.4.md)。
+显式启用的 [JBD2 恢复](../validation/M16.5.md)及[新盘迁移/构建](../validation/M16.6.md)
+已按声明的 bzip2 配置本地验收，包含前台串口延迟预算。声明的 ext4 内核容量也已本地验收；完整远端 CI 待完成。ext2 仍为默认。
+
 计划于 2026-10-26（Asia/Shanghai）对照已同步 `dev` 的 `05a5fb1` 复核，其中包含 M15.6
 交付 `16c0ddf`。以下验收记录对应各自实际执行版本；M15.6 使用实现基线 `55e3751` 及保留
 源码快照。此次文档审查没有重新运行运行时/QEMU 门禁，也不证明远端 CI 通过。
@@ -22,11 +45,11 @@ M15.3 GCC 与 M15.4 Rust/LLVM/Cargo 可行性评估及 guest 探针本地通过�
 ## M16–M18 后续计划（2026-10-26）
 
 项目所有者确定顺序为 **资源/VFS/ext4 → 可用开发桌面 → 有条件的编译器/镜像自举**。
-此次文档变更没有实现或验收 M16–M18；现有限制和历史验证保持原有范围。
+当时的计划变更没有实现；上文 M16 进展已替代其未实现状态。M17/M18 及 M16 剩余阶段仍按计划推进。
 
 | 计划 | 范围 | 下一前置条件 |
 | --- | --- | --- |
-| [M16 基础能力](../milestones/M16_FOUNDATION.md) | CI/预算、后端解耦与资源、ext4 只读、可写、JBD2 恢复和新工作盘采用 | 从 M16.1 开始：恢复远端工具链执行并测量明确负载 |
+| [M16 基础能力](../milestones/M16_FOUNDATION.md) | CI/预算、后端解耦与资源、ext4 只读、可写、JBD2 恢复和新工作盘采用 | 完成远端 CI；JBD2、迁移、bzip2/串口和 ext4 内核容量已本地验收 |
 | [M17 开发桌面](../milestones/M17_DESKTOP.md) | 受监督会话、PTY 终端、文件/编辑器、诊断和全 GUI C/C++/Rust 流程 | M16 工作盘/资源验收；使用继承 guest 编译器 |
 | [M18 自举](../ROADMAP.md#m18有条件的自举) | 独立编译器组件阶段、guest 独立镜像生成和重复恢复 | M16/M17 后各组件工具、源码闭包、stage0/依赖和实测容量 |
 
@@ -337,3 +360,12 @@ fallback 门禁，远端未验。
 只验 GPU clear/readback；scanout 复制/普通窗口合成仍 CPU，没有 shader、guest GL/Vulkan、
 zero-copy、性能提升、物理 GPU passthrough 或未确认 reset 后恢复证据。见
 [M14 GPU](../milestones/M14_GPU.md) 与 [M14.5](../validation/M14.5.md)。
+
+## 本次交付回归检查
+
+本地通过 `foundation-journal-test`、`foundation-migrate-test`，以及原有
+`foundation-write-test`、`foundation-test`、`persistence-test` 和 `verify` 全部 13 个启动/
+故障场景。`test-host` 通过 224 个测试，最终 xtask 单独复跑 48 个测试全部通过。严格宿主
+Clippy、裸机 `ext4-write,bootstrap-metrics` 内核 Clippy、workspace/user 格式、Python/
+workflow 解析、双语文档、454 个文件用途覆盖及 `git diff --check` 均通过。以上为本地结果，
+远端 CI 已配置但未据此验收；当时 workflow 由 `dev` 推送/PR 或手动 dispatch 触发；当前策略已改为仅 main 推送。

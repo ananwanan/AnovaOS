@@ -78,11 +78,12 @@ M15.1/M15.2 测量资源并在 guest 重建锁定 bzip2；M15.3/M15.4 审计 GCC
 
 ## 4. 实施顺序与剩余重点
 
-[ROADMAP](ROADMAP.md) 记录 M0–M15 的验收边界及尚未实现的 M16–M18 计划。
-M4 已先于 M13 提供最小 SDK，联网也没有阻塞离线编译。下一步先做
-[M16 资源/VFS/ext4](milestones/M16_FOUNDATION.md)，再利用现有 guest 编译器完成
-[M17 开发桌面](milestones/M17_DESKTOP.md)。先恢复 CI 基线，分别验收 ext4 只读、可写与
-崩溃恢复，并保留旧 ext2 镜像。完整编译器重建和 guest 独立镜像生成属于桌面之后有条件
+[ROADMAP](ROADMAP.md) 记录 M0–M15 的验收边界、M16 有界实现及 M17–M18 计划。
+M4 已先于 M13 提供最小 SDK，联网也没有阻塞离线编译。
+[M16 资源/VFS/ext4](milestones/M16_FOUNDATION.md) 的只读/写入、JBD2、迁移/bzip2/串口
+及新 ext4 内核容量/恢复已本地验收。完整远端 CI 见 [M16 容量](validation/M16_CAPACITY.md)。
+随后利用现有 guest 编译器推进 [M17 开发桌面](milestones/M17_DESKTOP.md)，
+保留旧 ext2 镜像和全部回归门禁。完整编译器重建和 guest 独立镜像生成属于桌面之后有条件
 推进的 M18。全新文件系统格式、原生 std、更多 GUI/runtime 兼容、SMP 和实机各自需要验收方案。
 
 ## 5. 架构决定

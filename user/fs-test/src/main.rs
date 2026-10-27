@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 #![no_std]
 #![no_main]
-//! Exercise real VFS/ext2 syscalls, inherited offsets, exec/cwd, user buffers, reboot data and pipes.
+//! Exercise VFS/ext2/ext4 syscalls, real heap exhaustion, offsets, exec/cwd, reboot and pipes.
 //! Child modes validate resources after fork/exec; shell-check reads files produced by its script.
 use anova_rt::{self as rt, abi::*};
 mod disk;
+mod foundation;
 fn ok(pid: u64) {
     assert_eq!(
         rt::wait(pid).unwrap().status,
@@ -190,6 +191,20 @@ fn limits() {
     rt::write(b"[FS:CASE] limits-rollback-reuse passed=true\n");
 }
 fn heap_pressure() {
+    heap_pressure_inner(false);
+}
+fn heap_pressure_inner(ext4: bool) {
+    let disk_fd = if ext4 {
+        let fd = rt::open(
+            "/persist/oom-retained",
+            OPEN_READ | OPEN_WRITE | OPEN_CREATE,
+        )
+        .unwrap();
+        rt::write_all(fd, b"retained").unwrap();
+        Some(fd)
+    } else {
+        None
+    };
     let mut count = 0;
     let mut reached_oom = false;
     for i in 0..48 {
@@ -223,16 +238,71 @@ fn heap_pressure() {
         }
     }
     assert!(reached_oom);
+    let mut tail_count = 0;
+    if ext4 {
+        // A failed 1 MiB growth still leaves room for small metadata. Exhaust 4 KiB allocations too.
+        let mut small_oom = false;
+        for i in 0..1024 {
+            let mut path = *b"/tmp/tail-0000";
+            for digit in 0..4 {
+                path[10 + digit] = b'0' + ((i / 10usize.pow(3 - digit as u32)) % 10) as u8;
+            }
+            let fd = match rt::open(
+                core::str::from_utf8(&path).unwrap(),
+                OPEN_WRITE | OPEN_CREATE,
+            ) {
+                Ok(fd) => fd,
+                Err(NO_MEMORY) => {
+                    small_oom = true;
+                    break;
+                }
+                other => panic!("Unexpected small pressure open: {other:?}"),
+            };
+            tail_count += 1;
+            let result = rt::write_fd(fd, &[b'T'; 4096]);
+            rt::close(fd).unwrap();
+            match result {
+                Ok(4096) => {}
+                Err(NO_MEMORY) => {
+                    small_oom = true;
+                    break;
+                }
+                other => panic!("Unexpected small pressure write: {other:?}"),
+            }
+        }
+        assert!(small_oom);
+    }
+    if let Some(fd) = disk_fd {
+        assert_eq!(rt::write_fd(fd, b"must not publish"), Err(NO_MEMORY));
+        assert_eq!(rt::seek(fd, 0, 1), Ok(8));
+    }
     for i in 0..count {
         let mut path = *b"/tmp/pressure-aa";
         path[15] = b'a' + (i % 26) as u8;
         path[14] = b'a' + (i / 26) as u8;
         rt::unlink(core::str::from_utf8(&path).unwrap()).unwrap();
     }
+    for i in 0..tail_count {
+        let mut path = *b"/tmp/tail-0000";
+        for digit in 0..4 {
+            path[10 + digit] = b'0' + ((i / 10usize.pow(3 - digit as u32)) % 10) as u8;
+        }
+        rt::unlink(core::str::from_utf8(&path).unwrap()).unwrap();
+    }
     let fd = rt::open("/tmp/recovered", OPEN_WRITE | OPEN_CREATE).unwrap();
     rt::write_all(fd, &[b'R'; 4096]).unwrap();
     rt::close(fd).unwrap();
     rt::unlink("/tmp/recovered").unwrap();
+    if let Some(fd) = disk_fd {
+        rt::seek(fd, 0, 0).unwrap();
+        let mut bytes = [0; 16];
+        assert_eq!(rt::read(fd, &mut bytes), Ok(8));
+        assert_eq!(&bytes[..8], b"retained");
+        rt::write_all(fd, b"!").unwrap();
+        rt::close(fd).unwrap();
+        rt::unlink("/persist/oom-retained").unwrap();
+        rt::write(b"[M16:OOM] heap=exhausted bytes=retained offset=retained recovered=true\n");
+    }
     rt::write(b"[FS:CASE] tmpfs-oom-rollback passed=true\n");
 }
 fn shell_check() {
@@ -263,6 +333,9 @@ unsafe extern "C" fn anova_main(argc: usize, argv: *const *const u8) -> u32 {
         b"shell-check" => shell_check(),
         b"disk-suite" => disk::suite(),
         b"disk-reboot" => disk::reboot(),
+        b"foundation-readonly" => foundation::readonly(),
+        b"foundation-oom" => heap_pressure_inner(true),
+        b"foundation-read-error" => foundation::read_error(),
         b"disk-error" => disk::io_error(),
         b"suite" => {
             files();

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Exercise backend-specific file, descriptor and task limits and prove rejection preserves resources.
+// The optional ext4 argument selects its separately admitted 256 MiB persistent-file ceiling.
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -113,11 +114,12 @@ static int task_limit(void) {
 }
 
 int main(int argc, char **argv) {
-    if (argc > 2) {
-        fputs("Usage: m15-capacity [SCRATCH_PATH]\n", stderr);
+    if (argc > 3 || (argc == 3 && strcmp(argv[2], "ext4"))) {
+        fputs("Usage: m15-capacity [SCRATCH_PATH [ext4]]\n", stderr);
         return 2;
     }
-    if (file_limit(argc == 2 ? argv[1] : "/persist/m15-capacity", 4 * 1024 * 1024) < 0
+    off_t limit = argc == 3 ? 256 * 1024 * 1024 : 4 * 1024 * 1024;
+    if (file_limit(argc >= 2 ? argv[1] : "/persist/m15-capacity", limit) < 0
         || file_limit("/tmp/m15-capacity", 1024 * 1024) < 0) return 1;
     int descriptors = descriptor_limit();
     if (descriptors < 0) return 1;

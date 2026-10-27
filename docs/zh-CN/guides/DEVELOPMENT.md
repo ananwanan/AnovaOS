@@ -393,3 +393,62 @@ cargo xtask bootstrap-kernel-test
 历史证据保留原日期/范围；本地、远端 CI、实机结果分开记录。
 执行 `python3 scripts/check_docs.py`、`cargo xtask check-files`、`git diff --check`。
 脚本验证页面对应、语言导航、本地文件/标题链接，语义一致性仍需人工审查。
+
+## M16 文件系统基础
+
+`cargo xtask foundation-test` 构建普通原生镜像，在 `build/foundation/` 下新建受控 ext4
+测试盘。四次真实 TCG 启动验证可写/只读设备上的只读访问、10,001 项目录、20 MiB 普通
+文件、200 MiB 稀疏文件、盘上原生执行、正常重启、未知特性/需重放镜像拒绝及串口恢复。
+每次正向启动限时 120 秒，负向启动沿用 60 秒门禁。保留准确 ISO/initramfs、原始/拒绝盘、
+哈希/result JSON 和 `build/logs/foundation-*.serial.log`；正常停止盘必须通过 `e2fsck -fn`。
+`test-host` 包含独立 ext4 镜像与 VFS 缓存压力测试，CI 还执行
+`python3 ports/gcc/test_fetch.py`，见 [M16 证据](../validation/M16.md)。
+
+编译器输入在 musl.cc 传输失败后回退到锁定的官方 more.musl.cc 归档，两者使用原有摘要。
+可选 `ANOVA_SOURCE_CACHE=/absolute/directory` 按锁定本地文件名供应归档（包括
+`bootstrap.tgz`）；坏缓存或符号链接直接失败，不绕过检查。CI 仅缓存受检源码归档，
+不缓存生成的编译器产物。旧 ext2 镜像仍为默认可写路线；本只读门禁未验收 ext4 写入、
+JBD2 恢复或迁移/构建期间的前台响应。
+
+
+## M16.4 显式启用 ext4 可写
+
+```sh
+cargo xtask ext4-image --linux build/disks/work.ext4
+cargo xtask run --ext4-write --toolchain --disk build/disks/work.ext4
+cargo xtask foundation-write-test
+```
+
+新建的 8 MiB 镜像使用锁定的无日志 extent 配置；原生程序省略 `--linux` 与 `--toolchain`。
+可写启动必须明确指定磁盘；普通启动仍将 ext4 挂为只读，默认 ext2 恢复路线保留。
+独立六次启动的写入门禁验证文件/目录语义、真实 guest GCC/make、原生 OOM、ENOSPC、
+重启、宿主 e2fsck/哈希及真实 virtio 读/写/flush 错误；完整契约和保留证据见
+[M16.4](../validation/M16.4.md)。此历史门禁覆盖无日志 write-v1；以下独立命令验收 JBD2 与可选迁移。
+
+## M16.5/M16.6 日志与新工作盘
+
+```sh
+cargo xtask ext4-journal-image --linux build/disks/new-work.ext4
+cargo xtask run --ext4-write --toolchain --disk build/disks/new-work.ext4
+cargo xtask ext4-migrate build/disks/old.ext2 build/disks/migrated.ext4
+cargo xtask foundation-journal-test
+cargo xtask foundation-migrate-test
+```
+
+64 MiB/8 MiB 日志的新配置保持显式启用；两个创建/迁移命令都要求新目标。迁移只读打开已停止/
+干净的 ext2 源盘，在新盘旁保存准确清单。JBD2 使用单一同步 checksum-v3 数据/元数据事务、
+审计后重放及持久孤儿回收。新门禁保留 write/flush/tear 故障、独立 e2fsck 重放、真实 guest
+bzip2、中断/重启保留和宿主测量的前台 UART 预算。见 [M16.5](../validation/M16.5.md)、
+[M16.6](../validation/M16.6.md)。默认 ext2、现有软件限额、更广 M16/远端 CI 和 M17/M18 分别处理。
+
+## M16 内核容量结项
+
+`cargo xtask foundation-capacity-test` 使用新建 64 MiB JBD2 盘与继承 Rust 种子，
+将真实堆/VFS/FD/任务/磁盘耗尽与干净 guest 内核构建分开，并验证精确保留 ELF 的
+启动/拒绝/恢复。预算、采样和证据契约见 [M16 容量](../validation/M16_CAPACITY.md)。
+按所有者要求，Actions 暂时仅由 `main` 推送触发；关闭 PR、手动及其他分支入口。
+
+本地 `e2db30f` 执行的四次会话均通过。正常构建实测峰值为 9,494,480 堆字节、
+1,564 个 VFS 槽、14 个任务、每进程 16 个 FD 和 6,072 个磁盘块；此前独立压力
+会话真实达到上限并验证复用。将这些数字用于其他配方前，应阅读容量记录中的
+物理页采样限制、精确输入闭包与完整保留日志。

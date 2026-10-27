@@ -6,8 +6,8 @@
 This describes implemented boundaries through the accepted M15.6 reconstruction profile and
 separately scoped future architecture. Guest toolchains, native SDKs and bounded Rust GUI/GPU
 profiles are implemented; full compiler reconstruction, guest-only image generation, SMP and
-physical hardware remain separate. Planned M16 resources/ext4 and M17 desktop boundaries are
-described below; they do not change implemented capabilities. Current evidence is in [STATUS](guides/STATUS.md).
+physical hardware remain separate. M16 now implements the backend/cache boundary and a
+controlled ext4 profiles, explicit JBD2 recovery and opt-in migration/build acceptance; M17 desktop remains future work. Current evidence is in [STATUS](guides/STATUS.md).
 
 ## 1. Overall structure
 
@@ -475,7 +475,8 @@ both owners, while munmap/exec/exit release them. Mapped inodes outlive close,
 unlink and name replacement. Writable shared-file mappings remain rejected;
 this is not persistent mmap writeback. File timestamps retain access/modify/
 change fields, and explicit ext2 updates use the existing checked disk writes.
-Ext2 import traverses nested cache directories iteratively within the node cap.
+M16 replaces eager ext2 import with on-demand backend lookup and streaming directory cursors;
+directories remain pinned within the node quota, while inactive regular-file nodes can be evicted.
 
 `cargo-online` is an explicit launcher policy over the same official Cargo;
 networking, TLS, archive extraction and Git operate in user space. It preserves
@@ -628,23 +629,39 @@ image generation, power-loss recovery and general reproducibility remain
 separate. See [M15 repeat](milestones/M15_REPEAT.md) and
 [local evidence](validation/M15.6.md).
 
-## Planned M16 storage/resources and M17 desktop
+## M16 storage/resources and planned M17 desktop
 
-This section is a future contract, not an implemented backend or desktop.
+The backend/cache boundary and controlled ext4 readonly-v1 below are implemented.
+Opt-in write-v1, JBD2 and migration have bounded acceptance below; resource expansion and the desktop retain their independent exits.
+See [M16 evidence](validation/M16.md).
 [M16 foundation](milestones/M16_FOUNDATION.md) precedes
 [M17 desktop](milestones/M17_DESKTOP.md); see [ROADMAP](ROADMAP.md) for stages.
 
-- Keep checked block-device I/O below filesystem policy. Replace the VFS's direct
-  ext2 dependency with a narrow backend boundary for identities, metadata, file/directory
-  operations and declared capabilities. Preserve native/Linux ABI admission metadata.
-- Load namespace metadata on demand with bounded reclaimable caches instead of importing
-  every inode at mount. Expand heap/task/fd/storage budgets against measured workloads;
-  preserve checked allocation, OOM rollback and old ext2 behavior. Disk format changes
-  alone cannot remove VFS limits or long non-preemptible I/O stalls.
-- Implement a controlled ext4 feature profile in separate read-only, write and JBD2
-  crash-recovery stages. Reject unsupported features; use independent tooling and crash
-  injection to verify byte identity, allocation and recovery. Keep existing ext2 images
-  usable and copy into new verified work disks before any default-profile change.
+- `crates/storage/src/filesystem.rs` separates checked sector I/O from volume policy.
+  Backends declare root inode, file capacity, timestamp quantum, format and readonly state.
+  VFS owns one backend with immutable native/Linux ABI admission metadata. Persistent stat
+  identities use a separate 64-bit range independent of cache slots; directory cookies are
+  backend byte positions, including Linux getdents `d_off`. Native v1 layouts are unchanged.
+- Mount publishes only the root and ABI marker. Lookup loads metadata on demand; readdir
+  streams without caching every child. Cache vectors start at 32 slots and grow fallibly
+  within 2,048. Inactive regular-file nodes can be evicted; directories/cwds, open descriptions,
+  mapped files and the marker are pinned. Reserving a node slot precedes ext2 mutation.
+  The 16 MiB heap, 32 task/fd and existing mapping quotas are retained. This is bounded
+  metadata reclamation, not unconstrained directories, memory growth or nonblocking I/O.
+- `crates/storage/src/ext4.rs` reads the strict non-journal, 4 KiB/256-byte-inode
+  extent profile. It checks multiple local groups, metadata reservations/allocation,
+  extent depth/visited blocks/order/overlap and bounded file sizes. Unknown features,
+  dirty/recovery-required images, checksummed/64bit/flex/indexed layouts and unsupported
+  inode types fail closed. Sparse/unwritten regions read as zeros. No sector write or
+  flush is issued by this readonly backend. Ext2 remains the default writable recovery
+  profile; JBD2 recovery and verified copy migration use the separate opt-in contracts below.
+- Explicit `ext4-write` kernels admit [write-v1](validation/M16.4.md) only after auditing
+  global block ownership, namespace links and allocation counters. Bounded unpublished overlays
+  protect old bytes/names on preflight ENOSPC/OOM/read failures; data/flush/metadata publication
+  errors poison the mount and retain dirty state. Allocation/free, extent reconstruction,
+  directory moves/replacement, orphan close/unmap retries, modes and second-resolution times
+  share the existing backend boundary. Shared readonly mappings and cwd identity stay pinned.
+  The profile has no journal or crash recovery; ordinary kernels still mount ext4 readonly.
 - Keep desktop/session/compositor policy in Rust user processes. A PTY terminal connects
   the native GUI to explicitly admitted Linux-musl shell/compiler processes. Extend
   transport/SDK bounds only with version/ownership tests; retain the C/C++/Rust contract.
@@ -655,3 +672,39 @@ This section is a future contract, not an implemented backend or desktop.
 M18 compiler reconstruction and guest-only image generation continue independently after
 the developer desktop. Native std, SMP, device IRQ/async I/O and physical drivers remain
 separate architecture changes. A new filesystem format is outside the M16/M17 critical path.
+
+## M16.5/M16.6 journal and development-volume ownership
+
+`ext4/journal.rs` owns the immutable internal journal map, checksum-v3 records,
+fallible descriptor staging and a single synchronous data-plus-metadata transaction.
+It flushes recovery admission, journal head, log, commit, home checkpoint and head
+retirement in order. Replay validates checksums, immutable geometry, allocation,
+namespace and orphan ownership in an overlay before writing home blocks. The
+classic superblock/inode orphan chain shares each unlink/reclaim transaction.
+No VFS/native ABI change or new scheduler/device policy is required.
+
+`foundation_migrate.rs` opens ext2 sources readonly and copies to create-new ext4
+images, compares inventories and retains the source. Its guest supervisor runs
+real make/GCC/bzip2 and an independent storage writer, executes foreground commands,
+fsync/rename saves, reads compiler logs and interrupts a process group. Host UART
+wall times are separate from scheduler-boundary resource samples. See
+[M16.5](validation/M16.5.md) and [M16.6](validation/M16.6.md). Default ext2, fixed
+heap/task/cache bounds, M17 desktop and M18 compiler/image reconstruction remain separate.
+
+## M16 allocation observations
+
+The optional filesystem `usage` snapshot performs no allocation or device I/O. Ext4
+updates current/peak block and inode counts only after successful mutations and
+initializes them from the post-replay superblock on mount. The VFS forwards these
+observations; bootstrap diagnostics capture final orphan cleanup before detaching
+the device. This adds no native ABI or scheduling policy. The capacity gate compares
+final counters with the stopped disk and keeps pressure/build sessions independent.
+See [M16 capacity](validation/M16_CAPACITY.md).
+
+The actual fresh-ext4 kernel run at `e2db30f` stayed within existing quotas:
+9,494,480 sampled heap bytes, 142,825 additional frames, 1,564 VFS slots,
+14 tasks and 16 FDs/process; disk allocation peaked at 6,072 blocks / 241 inodes.
+Separate pressure reached the heap, all VFS/task/FD slots and disk ENOSPC, then
+the same recovered disk completed construction and new-kernel boot recovery.
+These observations size the declared non-GUI recipe; broader workloads require
+independent measurements. Complete results and raw logs are in the capacity record.

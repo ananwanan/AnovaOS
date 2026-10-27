@@ -294,7 +294,7 @@ pub(super) fn session(
     )
 }
 
-fn resource_summary(serial: &str) -> Result<BTreeMap<String, String>> {
+pub(super) fn resource_summary(serial: &str) -> Result<BTreeMap<String, String>> {
     let lines: Vec<_> = serial
         .lines()
         .filter_map(|line| line.strip_prefix("[M15:RESOURCES] "))

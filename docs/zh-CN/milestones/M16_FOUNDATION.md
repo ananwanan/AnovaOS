@@ -4,8 +4,10 @@
 [English](../../en/milestones/M16_FOUNDATION.md) | **简体中文**
 
 本计划于 2026-10-26（Asia/Shanghai）基于 `dev` 的 `05a5fb1` 制定。
-**以下六个阶段全部处于计划状态，尚未实现。** 本文定义未来工作与验收，
-不代表新增文件系统、资源扩容或 CI 结果。已实现边界见[路线图](../ROADMAP.md)、
+**2026-10-27 基于 `616ff47` 更新：后端/缓存解耦和受控 ext4 只读配置已实现并通过本地验证。**
+依赖获取已修复；JBD2 恢复、新盘迁移/构建响应已分别按 [M16.5](../validation/M16.5.md)/
+[M16.6](../validation/M16.6.md) 本地验收。新 ext4 内核容量/恢复配置已按 [M16 容量](../validation/M16_CAPACITY.md)本地验收；完整远端 CI 待完成。
+详见 [M16 证据](../validation/M16.md)。下文保留各阶段完整退出条件。已实现边界见[路线图](../ROADMAP.md)、
 [当前状态](../guides/STATUS.md)和[架构](../ARCHITECTURE.md)。
 
 M16 先扩展开发基础，再进入 [M17 开发者桌面](M17_DESKTOP.md)。完整编译器
@@ -23,8 +25,9 @@ Linux/native ELF 和启动参数的限制也必须分别处理。
 
 当前 ext2 实现仅支持一个 4 KiB block group，最多 32,768 blocks、4,096 inodes，
 普通文件使用 direct/single-indirect 寻址。这些是本项目实现子集的限制，
-不是 ext2 格式极限。VFS 直接持有 `Ext2`，挂载时导入整个持久命名空间，
-预先保留节点容量；仅扩大磁盘无法使命名空间和缓存具备可扩展行为。
+不是 ext2 格式极限。M16 前 VFS 直接持有 `Ext2`，挂载时导入整个命名空间并预留节点容量。
+现在通过能力明确的后端按需加载目录，缓存从 32 槽可失败扩展，在原有 2,048 槽限额内
+回收不活跃普通文件；目录/cwd、打开文件和映射保持固定身份。仅扩大磁盘无法使命名空间和缓存具备可扩展行为。
 历史 [GCC](M15_GCC.md)、[Rust](M15_RUST.md) 审计保留原始 1 MiB 文件配置；
 M15.5 已将当前持久文件上限提高到 4 MiB。
 
@@ -38,12 +41,12 @@ M15.5 已将当前持久文件上限提高到 4 MiB。
 
 | 阶段 | 计划结果 | 状态 |
 | --- | --- | --- |
-| M16.1 | 恢复 CI 基线，确定实测工作负载和资源预算 | 计划中；未实现 |
-| M16.2 | 文件系统后端边界与有界、可扩展的资源管理 | 计划中；未实现 |
-| M16.3 | 受控 ext4 只读挂载与数据访问 | 计划中；未实现 |
-| M16.4 | 受控 ext4 写入和明确的 POSIX 语义 | 计划中；未实现 |
-| M16.5 | JBD2 恢复和持久性验证 | 计划中；未实现 |
-| M16.6 | 新盘迁移、真实构建和可响应的前台操作 | 计划中；未实现 |
+| M16.1 | 恢复 CI 基线，确定实测工作负载和资源预算 | 新 ext4 内核容量/恢复已本地验收；完整远端 CI 待完成 |
+| M16.2 | 文件系统后端边界与有界、可扩展的资源管理 | 后端/缓存已本地验证；限额不变 |
+| M16.3 | 受控 ext4 只读挂载与数据访问 | 只读 v1 已本地验证；见证据 |
+| M16.4 | 受控 ext4 写入和明确的 POSIX 语义 | 已实现显式启用的 write-v1；[配置与证据](../validation/M16.4.md) |
+| M16.5 | JBD2 恢复和持久性验证 | 显式 checksum-v3/数据日志配置已本地验收；[证据](../validation/M16.5.md) |
+| M16.6 | 新盘迁移、真实构建和可响应的前台操作 | 保留 ext2 的复制、guest bzip2 和串口预算已本地验收；[证据](../validation/M16.6.md)；不切默认 |
 
 ## M16.1：CI 基线与实测工作负载
 
@@ -91,6 +94,9 @@ scheduler boundary 采样不等于准确峰值 RSS；正常关机后盘占用不
 需要恢复的镜像均在不修改磁盘的情况下失败。只读验收不证明写入、journal 或崩溃恢复。
 
 ## M16.4：受控写入与 POSIX 语义
+
+显式 `ext4-write` 内核已实现有界无日志写入，准入、容量、语义、命令和实测见 [M16.4](../validation/M16.4.md)。
+M16.1 预算/远端 CI 和 M16.5/M16.6 仍独立验收。
 
 - 为声明配置加入有界分配/释放、create/read/write/resize、目录、rename、
   unlink/open 生命周期、executable modes 和 timestamps。按实际负载声明替换、
@@ -141,7 +147,7 @@ scheduler boundary 采样不等于准确峰值 RSS；正常关机后盘占用不
 保留 [DEVELOPMENT](../guides/DEVELOPMENT.md) 既有 gates，包括 runtime/storage/
 persistence、C/C++/Rust/Cargo/network、SDK 和 M14 GUI/GPU。保留五项 M15
 `bootstrap-*-test`/`bootstrap-test` gates、源码拒绝测试及 `bootstrap-metrics`
-feature check。只有可运行实现交付时才引入 M16 命令；基线尚无 M16 xtask 命令。
+feature check。只有可运行实现交付时才引入 M16 命令；`cargo xtask foundation-test` 已实现只读 v1 验收，不代表 M16.4–M16.6 完成；独立的 `foundation-write-test` 仅验证 M16.4 write-v1。
 记录准确输入、feature profiles、commits/worktree hashes、QEMU 配置、日志、产物和
 独立磁盘检查；同步维护翻译和状态。
 
@@ -150,3 +156,9 @@ feature check。只有可运行实现交付时才引入 M16 命令；基线尚�
 [journal/JBD2](https://www.kernel.org/doc/html/latest/filesystems/ext4/journal.html) 及
 [e2fsprogs](https://e2fsprogs.sourceforge.net/)。实际实现输入和测试工具版本仍须锁定；
 参考文档本身不构成兼容性证据。
+
+## 内核容量结项
+
+新增 `cargo xtask foundation-capacity-test` 将既有 guest 内核配方用于新建 JBD2 盘，
+提前声明预算，分开耗尽/构建会话，并记录每次成功修改后的磁盘高水位。
+实际执行与 CI 结果见 [M16 容量](../validation/M16_CAPACITY.md)；实现本身不代表 M16.1 结项。

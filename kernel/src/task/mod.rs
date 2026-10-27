@@ -520,6 +520,9 @@ impl Kernel {
                 }
                 match self.fs.shutdown() {
                     Ok(()) => {
+                        // Final counters include orphan releases performed while stopping writers.
+                        #[cfg(feature = "bootstrap-metrics")]
+                        self.sample_resources();
                         // Drop confirms virtio reset before returning its DMA frame to the allocator.
                         if let Err(error) = self.fs.detach_disk() {
                             serial::emergency(format_args!(
@@ -1133,7 +1136,7 @@ pub fn start() {
         ));
     }
     let init = {
-        let root = Vfs::new(boot::initramfs()).expect("Invalid initramfs");
+        let mut root = Vfs::new(boot::initramfs()).expect("Invalid initramfs");
         root.executable(ROOT, "/bin/init").expect("Missing init")
     };
     checked_run(

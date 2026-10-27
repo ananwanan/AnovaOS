@@ -58,6 +58,71 @@ pub struct Ext2 {
     clock: u32,
 }
 impl Ext2 {
+    pub fn read_only(&self) -> bool {
+        self.device.read_only()
+    }
+    /// Stream validated records without allocating a complete directory inventory.
+    pub fn next_entry(
+        &mut self,
+        number: u32,
+        cursor: u64,
+    ) -> Result<Option<(crate::filesystem::Entry, u64)>, i64> {
+        let inode = self.inode(number)?;
+        if !inode.directory {
+            return Err(NOT_DIRECTORY);
+        }
+        let mut position = usize::try_from(cursor).map_err(|_| INVALID_ARGUMENT)?;
+        if position > inode.size || position % 4 != 0 {
+            return Err(INVALID_ARGUMENT);
+        }
+        let mut bytes = buffer()?;
+        while position < inode.size {
+            let address = self.data_pointer(&inode, position / BLOCK)?;
+            if address == 0 {
+                return Err(INVALID_FILESYSTEM);
+            }
+            self.read_block(address, &mut bytes)?;
+            let mut offset = 0;
+            // A public cursor must name an actual record boundary, not forged record-like bytes.
+            while offset < position % BLOCK {
+                offset += directory_record(&bytes, offset)?.1;
+            }
+            if offset != position % BLOCK {
+                return Err(INVALID_ARGUMENT);
+            }
+            while offset < BLOCK {
+                let (child, length, name_len) = directory_record(&bytes, offset)?;
+                let name = &bytes[offset + 8..offset + 8 + name_len];
+                position += length;
+                offset += length;
+                if child == 0 {
+                    continue;
+                }
+                if child > self.inodes
+                    || name.is_empty()
+                    || name.contains(&0)
+                    || name.contains(&b'/')
+                    || core::str::from_utf8(name).is_err()
+                {
+                    return Err(INVALID_FILESYSTEM);
+                }
+                if name == b"." || name == b".." {
+                    continue;
+                }
+                let mut label = [0; 256];
+                label[..name_len].copy_from_slice(name);
+                return Ok(Some((
+                    crate::filesystem::Entry {
+                        inode: child,
+                        name: label,
+                        length: name_len,
+                    },
+                    position as u64,
+                )));
+            }
+        }
+        Ok(None)
+    }
     pub fn set_clock(&mut self, seconds: u32) {
         self.clock = seconds;
     }

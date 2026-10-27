@@ -466,6 +466,7 @@ pub(super) fn session_network(
             "[SHELL:FAIL]",
             "[FS:FAIL]",
             "[EDIT:FAIL]",
+            "[M16:WRITE:FAIL]",
             "edit: command/save failed; buffer retained",
             "[POWER:FAIL]",
         ]
@@ -518,11 +519,14 @@ pub(super) fn session_network(
         {
             return Err("Flush failure did not reject mount and reset DMA".into());
         }
-    } else if name == "disk-bad-feature" {
+    } else if matches!(
+        name,
+        "disk-bad-feature" | "foundation-replay-required" | "foundation-unknown-feature"
+    ) {
         if !transcript.contains("[DISK:REJECT] mount error=-22")
             || transcript.contains("[DISK:MOUNT]")
         {
-            return Err("Unknown ext2 feature was not rejected".into());
+            return Err("Unsupported or recovery-required filesystem was not rejected".into());
         }
     } else if !transcript.contains("[DISK:MOUNT]") || transcript.contains("[DISK:REJECT]") {
         return Err(format!("{name}: missing valid disk mount").into());

@@ -64,12 +64,16 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `crates/sched/src/lib.rs` | 提供无需硬件或分配的有界 BSP 调度策略及父子生命周期；上下文/资源由内核拥有，本策略不切栈或加锁。 |
 | `crates/storage/Cargo.toml` | 声明 no_std checked sector/ext2 crate 及其原生错误依赖。 |
 | `crates/storage/src/ext2.rs` | 实现声明范围内的 ext2、checked allocation、模式/时间戳保留、有序写入和正常关机。 |
+| `crates/storage/src/ext4.rs` | 读取受控 ext4 extent，并显式接入审计后的无日志可写及有界分配归属。 |
+| `crates/storage/src/filesystem.rs` | 定义持久后端能力、稳定元数据及有界目录游标操作。 |
 | `crates/storage/src/lib.rs` | 定义自有同步扇区设备、只读/flush/stop 契约及 checked ranges。 |
 | `crates/storage/tests/ext2.rs` | 验证盘上 ext2 字节、间接块、稀疏数据、耗尽、重启及 I/O 故障注入。 |
+| `crates/storage/tests/ext4.rs` | 比较 e2fsprogs 镜像并注入 extent、几何、分配及只读设备故障。 |
 | `crates/vfs/Cargo.toml` | 与宿主测试共享有界内存 VFS、归档、打开文件和管道语义。 |
 | `crates/vfs/src/archive.rs` | 以 checked byte ranges 解码项目 ANOVAFS1 归档，不做强制类型转换；条目为父目录优先绝对 UTF-8 路径，负载借用引导 RAM。 |
 | `crates/vfs/src/fd.rs` | 管理可失败共享描述符表、close-on-exec 状态及无需分配的空占位。 |
 | `crates/vfs/src/file_mapping.rs` | 独立于描述符生命周期保留有界共享文件字节，并为成功写入维护版本。 |
+| `crates/vfs/src/foundation_tests.rs` | 压力验证按需查询和 10,001 项遍历、缓存回收、身份、共享偏移与映射。 |
 | `crates/vfs/src/lib.rs` | 管理有界内存/ext2 namespace、显式 ABI 继承、与后端一致的时间戳精度、私有映射快照、共享打开文件、管道及 PTY。 |
 | `crates/vfs/src/tests.rs` | 测试 VFS 路径/挂载边界、描述符所有权、私有快照、持久时间戳一致性、管道关闭和容量回滚。 |
 | `docs/en/ARCHITECTURE.md` | 说明已实现子系统的所有权、隔离、ABI、驱动边界与后续架构（英文）。 |
@@ -132,6 +136,7 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `docs/en/validation/M15.4.md` | 记录 M15.4 的实际本地执行、命令和产物身份、失败/恢复证据、当时限制与未测范围（英文）。 |
 | `docs/en/validation/M15.5.md` | 记录 M15.5 的实际本地执行、命令和产物身份、失败/恢复证据、当时限制与未测范围（英文）。 |
 | `docs/en/validation/M15.6.md` | 记录 M15.6 的实际本地执行、命令和产物身份、失败/恢复证据、当时限制与未测范围（英文）。 |
+| `docs/en/validation/M16.md` | 记录 M16 部分依赖获取、guest 构建实测、后端/缓存和受控 ext4 只读验收。 |
 | `docs/en/validation/M2.md` | 记录 M2 的实际本地执行、命令和产物身份、失败/恢复证据、当时限制与未测范围（英文）。 |
 | `docs/en/validation/M3.md` | 记录 M3 的实际本地执行、命令和产物身份、失败/恢复证据、当时限制与未测范围（英文）。 |
 | `docs/en/validation/M4.md` | 记录 M4 的实际本地执行、命令和产物身份、失败/恢复证据、当时限制与未测范围（英文）。 |
@@ -201,6 +206,7 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `docs/zh-CN/validation/M15.4.md` | 记录 M15.4 的实际本地执行、命令和产物身份、失败/恢复证据、当时限制与未测范围（简体中文，与英文对应）。 |
 | `docs/zh-CN/validation/M15.5.md` | 记录 M15.5 的实际本地执行、命令和产物身份、失败/恢复证据、当时限制与未测范围（简体中文，与英文对应）。 |
 | `docs/zh-CN/validation/M15.6.md` | 记录 M15.6 的实际本地执行、命令和产物身份、失败/恢复证据、当时限制与未测范围（简体中文，与英文对应）。 |
+| `docs/zh-CN/validation/M16.md` | 提供同步的 M16 部分验收中文证据及剩余阶段边界。 |
 | `docs/zh-CN/validation/M2.md` | 记录 M2 的实际本地执行、命令和产物身份、失败/恢复证据、当时限制与未测范围（简体中文，与英文对应）。 |
 | `docs/zh-CN/validation/M3.md` | 记录 M3 的实际本地执行、命令和产物身份、失败/恢复证据、当时限制与未测范围（简体中文，与英文对应）。 |
 | `docs/zh-CN/validation/M4.md` | 记录 M4 的实际本地执行、命令和产物身份、失败/恢复证据、当时限制与未测范围（简体中文，与英文对应）。 |
@@ -284,8 +290,10 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `ports/bootstrap/test_rust_probe.py` | 拒绝变更 Rust sources、危险 archive members 及已变更/重定向源码发布结果。 |
 | `ports/gcc/build.py` | 验证归档，交叉构建 GCC/binutils/make 和 target runtimes，并验证完整已安装文件缓存。 |
 | `ports/gcc/build.sh` | 从仓库根进入源码构建配方，使用严格 shell 错误处理。 |
+| `ports/gcc/fetch.py` | 通过受检传输回退、缓存准入和原子发布获取锁定源码。 |
 | `ports/gcc/inputs.json` | 锁定 compiler bootstrap 和上游 source URLs/hashes；JSON 以显式 purpose 字段代替注释。 |
 | `ports/gcc/package.py` | 选择有界源码构建的 C/C++ sysroot、保留许可证，并为每个打包文件计算哈希。 |
+| `ports/gcc/test_fetch.py` | 验证传输失败、摘要拒绝、缓存/链接准入和临时文件清理。 |
 | `ports/rust/build.py` | 验证归档，隔离 strip 临时输出，发布带清单 guest Rust sysroot。 |
 | `ports/rust/inputs.json` | 锁定官方 Rust musl 二进制归档及 vendor itoa registry 校验和。 |
 | `rust-toolchain.toml` | 锁定编译器、lint/format 工具及 bare-metal 标准库产物。 |
@@ -366,6 +374,7 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `user/editor/src/main.rs` | 打开和编辑有界 ASCII 文本，保存失败时保留缓冲区，成功时执行 fsync。 |
 | `user/fs-test/Cargo.toml` | 使用共享 no_std 运行时构建独立的原生 fs-test 应用。 |
 | `user/fs-test/src/disk.rs` | 执行真实 ext2 描述符、间接块、稀疏文件和 unlink 系统调用，验证持久源码/ELF 数据。 |
+| `user/fs-test/src/foundation.rs` | 在 guest 验证真实 ext4 只读目录/文件 syscall、稀疏零值和修改拒绝。 |
 | `user/fs-test/src/main.rs` | 验证真实 VFS 系统调用、继承的共享偏移、exec/cwd、用户缓冲区和阻塞管道；子进程模式检查 fork/exec 后资源，shell-check 读取脚本生成的文件。 |
 | `user/gui-client/Cargo.toml` | 构建独立原生窗口客户端和用于检验传输边界的对抗夹具。 |
 | `user/gui-client/src/main.rs` | 上传私有红/蓝表面、处理焦点输入，并测试崩溃、队列和所有权边界。 |
@@ -418,6 +427,7 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `xtask/src/bootstrap_rust.rs` | 独立审计 Rust/LLVM/Cargo 源码容量，验证真实 guest 种子、前置条件失败与重启证据，不声称重建组件。 |
 | `xtask/src/debug.rs` | 对照确切 ELF 符号解析捕获的 guest 故障地址，验证真实且有界的 guest 崩溃回溯。 |
 | `xtask/src/disk.rs` | 创建安全的 native/Linux ext2 镜像，并用 watchdog 限时驱动重启、完整性和设备错误场景。 |
+| `xtask/src/foundation.rs` | 创建并保留受控 ext4 镜像，执行带源码/产物哈希的四次 QEMU 只读/重启/拒绝门禁。 |
 | `xtask/src/gpu.rs` | 验收指定设备的真实硬件绘制、完整 scanout 比较、故障/reset 恢复和无头 CPU 回退。 |
 | `xtask/src/graphics.rs` | 验证真实 QMP 像素、有界截图解析，以及有/无 VGA 时的串口恢复和正常关机。 |
 | `xtask/src/gui.rs` | 注入真实 QMP 输入，比较原生窗口、故障恢复及每一个 scanout 像素。 |
@@ -437,3 +447,31 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `xtask/src/terminal.rs` | 驱动普通 UART 编辑/EOF、动态 musl 启动、真实 Ctrl+C 中断及易失数据重启检查。 |
 | `xtask/src/toolchain.rs` | 构建并打包可选开发 ISO，验证 guest 编辑、编译、make、失败场景与重启哈希。 |
 | `xtask/src/transcript.rs` | 捕获有序 guest stdout，保留 UART 证据，独立于文件系统快照或不完整 UTF-8 匹配原始字节。 |
+
+| `crates/storage/src/ext4/audit.rs` | 审计可写位图/计数、全局块归属和根目录/链接关系。 |
+| `crates/storage/src/ext4/directory.rs` | 暂存 ext4 目录增长、重命名替换/移动、父目录链接和孤儿命名空间修改。 |
+| `crates/storage/src/ext4/write.rs` | 暂存有界 ext4 分配/数据/extent 修改，发布错误停止服务，正常关机 flush 清洁标记。 |
+| `crates/storage/tests/ext4_write.rs` | 验证真实 ext4 可写镜像、逐预检分配失败、ENOSPC、元数据和 I/O 边界。 |
+| `user/linux/ext4_write.c` | 通过真实 musl 验证 ext4 写入、目录/cwd 移动、孤儿/映射/fork 生命周期、元数据和满盘复用。 |
+| `xtask/src/foundation_write.rs` | 创建显式启用的 ext4 工作盘，保留六次 QEMU 写入/构建/重启/virtio 故障及宿主检查。 |
+| `docs/en/validation/M16.4.md` | 说明受控 ext4 write-v1 契约、故障与独立检查的本地证据（英文）。 |
+| `docs/zh-CN/validation/M16.4.md` | 提供受控 ext4 write-v1 契约与本地验收边界的中文对照。 |
+| `crates/storage/src/ext4/journal.rs` | Implement bounded checksum-v3 JBD2 commit/replay/revoke and persistent orphan recovery. |
+| `crates/storage/tests/journal.rs` | Verify sector/flush/half-sector power cuts, actual allocation failure and independent e2fsck interoperability. |
+| `scripts/reconstruct_journal_cut.py` | Reconstruct any retained journal fault from an immutable baseline and exact sector event trace. |
+| `xtask/src/foundation_journal.rs` | Create fresh JBD2 images and retain host matrix plus real guest write/power-cut/recovery evidence. |
+| `xtask/src/foundation_migrate.rs` | Copy readonly ext2 sources to new JBD2 disks and verify actual builds, interruption and UART budgets. |
+| `tests/guest/m16/workload.c` | Supervise actual guest make/GCC, parallel storage writes and UART command/save/log/interruption probes. |
+| `docs/en/validation/M16.5.md` | Specify the bounded JBD2 profile, ordering, failure/replay and actual local acceptance. |
+| `docs/zh-CN/validation/M16.5.md` | Translate the JBD2 profile, fault models, evidence and exact recovery limits. |
+| `docs/en/validation/M16.6.md` | Specify fresh-disk migration, real build closure, foreground budgets and exact local evidence. |
+| `docs/zh-CN/validation/M16.6.md` | Translate migration ownership, actual build/UART acceptance and independent remaining work. |
+
+| `xtask/src/foundation_capacity.rs` | Accept separate ext4 kernel-build budgets, pressure recovery and independently checked allocation peaks. |
+| `tests/guest/m16/capacity.c` | Exhaust pinned VFS directory slots twice and verify rejected creation, removal and reuse. |
+| `docs/en/validation/M16_CAPACITY.md` | Record exact ext4 kernel capacity, recovery and remote CI execution evidence. |
+| `docs/zh-CN/validation/M16_CAPACITY.md` | Translate the ext4 kernel capacity and remote CI closeout record with matching boundaries. |
+| `docs/assets/validation/M16_CI.json` | Retain exact remote run/job/step observations, input failures, repairs and artifact identities. |
+| `docs/assets/validation/M16_CORE_CI54.json` | Preserve digest-verified core CI artifact result records, exact source identity and bounded accepted scope. |
+| `docs/assets/validation/M16_CAPACITY_LOCAL.json` | Preserve accepted local ext4 kernel capacity, budgets, complete provenance and digest-verified raw logs. |
+| `docs/assets/validation/M16_CORE_CI57.json` | Retain verified current-code core CI artifact results, source identity and artifact digest. |

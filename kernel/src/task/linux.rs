@@ -129,7 +129,7 @@ impl Kernel {
         }
     }
 
-    pub(super) fn executable_linux(&self, i: usize, name: &str) -> Result<bool, i64> {
+    pub(super) fn executable_linux(&mut self, i: usize, name: &str) -> Result<bool, i64> {
         if name.contains('/') {
             return self.fs.linux_executable(self.process(i).cwd, name);
         }
@@ -499,7 +499,7 @@ impl Kernel {
         }
         let pid = self.policy.entry(i).pid;
         let parent = self.policy.entry(i).parent;
-        let cwd_references: [usize; CAPACITY] = if matches!(f.rax, 84 | 263) {
+        let cwd_references: [usize; CAPACITY] = if matches!(f.rax, 82 | 84 | 263 | 264) {
             core::array::from_fn(|k| self.processes[k].as_ref().map_or(usize::MAX, |p| p.cwd))
         } else {
             [usize::MAX; CAPACITY]
@@ -600,10 +600,11 @@ impl Kernel {
                         let n = string(space, from, &mut a)?;
                         let m = string(space, to, &mut b)?;
                         self.fs
-                            .rename(
+                            .rename_with_cwds(
                                 p.cwd,
                                 core::str::from_utf8(&a[..n]).unwrap(),
                                 core::str::from_utf8(&b[..m]).unwrap(),
+                                &cwd_references,
                             )
                             .map_err(errno)?;
                         0
@@ -1007,7 +1008,8 @@ impl Kernel {
                                 }
                                 let mut bytes = [0; 280];
                                 bytes[..8].copy_from_slice(&entry.inode.to_le_bytes());
-                                bytes[8..16].copy_from_slice(&(entry.inode + 1).to_le_bytes());
+                                bytes[8..16]
+                                    .copy_from_slice(&(entry.next_offset as u64).to_le_bytes());
                                 bytes[16..18].copy_from_slice(&(n as u16).to_le_bytes());
                                 bytes[18] = match entry.kind {
                                     2 => 4,

@@ -3,6 +3,36 @@
 
 **English** | [简体中文](../../zh-CN/guides/STATUS.md)
 
+## M16 foundation progress (2026-10-27)
+
+The fresh-ext4 kernel-capacity gate passed locally at `e2db30f`: real heap/VFS/FD/
+task/disk exhaustion and reuse, clean actual kernel construction on the recovered
+64 MiB disk, exact ELF packaging, syntax-error retention and two new-kernel boots.
+Build peaks were 9,494,480 heap bytes, 142,825 additional frames, 1,564 VFS slots,
+14 tasks, 16 FDs/process and 6,072 disk blocks / 241 inodes.
+[M16 capacity](../validation/M16_CAPACITY.md) retains the complete measurements,
+input identities and raw logs. Run #57 at `1b63f42` passed core, source-toolchain construction and guest C/C++,
+then failed ext4 fixture admission due to copied runner UID/GID 1001. Fresh-fixture
+ownership is fixed locally (54 xtask tests and strict Clippy pass). Full remote
+revalidation is pending: the owner now permits Actions only on `main` pushes,
+with PR/manual and feature-branch triggers disabled.
+
+
+M16 development is consolidated on `feat/m16-foundation`, including the foundation
+and M16.4 write-support commits. All remaining M16 work continues on this branch;
+pull requests target `dev`.
+
+Based on `dev` `616ff47`, the `feat/m16-foundation` delivery implements verified
+source transport fallback/cache admission, a filesystem backend boundary, on-demand
+directories, reclaimable persistent file nodes and the controlled ext4 readonly-v1
+profile. See [M16 validation](../validation/M16.md) for exact scope and checks.
+The default ext2 image, 16 MiB heap, 32 task/fd and 2,048 cache-slot bounds remain.
+Opt-in non-journal ext4 write-v1 is implemented; see [M16.4](../validation/M16.4.md).
+Opt-in [JBD2 recovery](../validation/M16.5.md) and [fresh-disk migration/builds](../validation/M16.6.md)
+are locally accepted for the declared bzip2 profile, including foreground UART budgets.
+The declared ext4 kernel capacity is also locally accepted; full remote CI is pending.
+Ext2 stays the default.
+
 Plan reviewed 2026-10-26 (Asia/Shanghai) on synchronized `dev` at `05a5fb1`,
 which includes M15.6 delivery `16c0ddf`. The acceptance records below describe their
 original executed revisions; the M15.6 gate used implementation base `55e3751`
@@ -27,12 +57,12 @@ Remote CI and publication are separate from local acceptance.
 ## Planned M16–M18 follow-up (2026-10-26)
 
 The owner selected **resources/VFS/ext4 → usable development desktop → conditional
-compiler/image self-hosting**. None of M16–M18 is implemented or accepted by this
-documentation change; existing limits and historical validation remain unchanged.
+compiler/image self-hosting**. That planning-only change had no implementation; the M16 progress above supersedes
+its unimplemented status. M17/M18 and the remaining M16 stages retain their planned scope.
 
 | Plan | Scope | Next prerequisite |
 | --- | --- | --- |
-| [M16 foundation](../milestones/M16_FOUNDATION.md) | CI/budgets, backend isolation and resources, ext4 read-only, writes, JBD2 recovery and new-work-disk adoption | Start M16.1: restore remote toolchain execution and measure the declared workload |
+| [M16 foundation](../milestones/M16_FOUNDATION.md) | CI/budgets, backend isolation and resources, ext4 read-only, writes, JBD2 recovery and new-work-disk adoption | Finish remote CI; JBD2, migration, bzip2/UART and ext4 kernel capacity accepted locally |
 | [M17 desktop](../milestones/M17_DESKTOP.md) | Supervised session, PTY terminal, files/editor, diagnostics and all-GUI C/C++/Rust workflow | Accepted M16 workspace/resources; use inherited guest compilers |
 | [M18 self-hosting](../ROADMAP.md#m18-conditional-self-hosting) | Separate compiler component stages, guest-only image generation and repeated recovery | Per-component tools, source closure, stage0/dependencies and measured capacity after M16/M17 |
 
@@ -540,3 +570,14 @@ window composition remain on the CPU; no shader draws, guest OpenGL/Vulkan API,
 zero-copy scanout, performance speedup, physical GPU passthrough or recovery
 from an unacknowledged reset is established. Exact scope and current regression
 evidence are in [M14 GPU](../milestones/M14_GPU.md) and [validation/M14.5](../validation/M14.5.md).
+
+## Regression checks for this delivery
+
+Local gates passed: `foundation-journal-test`, `foundation-migrate-test`, the
+existing `foundation-write-test`, `foundation-test`, `persistence-test` and all
+13 `verify` boot/fault cases. `test-host` passed 224 tests; the final xtask-only
+rerun passed all 48 tests. Strict host Clippy and the bare-metal
+`ext4-write,bootstrap-metrics` kernel Clippy passed, as did workspace/user
+formatting, Python/workflow parsing, bilingual documentation, 454-file purpose
+coverage and `git diff --check`. Remote CI was configured, not accepted by these
+local results; at that historical delivery the workflow triggered on `dev` pushes/PRs or manual dispatch; current policy is main-push only.

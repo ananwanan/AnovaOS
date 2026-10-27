@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Prepare isolated PCI handoffs for polled storage/network, optional GPU rendering and PS/2.
+//! Prepare polled devices and explicitly opt into audited non-journal ext4 writes by kernel feature.
 #[cfg(feature = "gpu")]
 pub mod gpu;
 #[cfg(feature = "graphics")]
@@ -13,7 +13,7 @@ use crate::{
 };
 use alloc::boxed::Box;
 use anova_platform::acpi::PmTimer;
-use anova_storage::ext2::Ext2;
+use anova_storage::filesystem::{self, Format};
 use anova_vfs::Vfs;
 use core::cell::UnsafeCell;
 
@@ -46,13 +46,25 @@ pub fn attach(fs: &mut Vfs<'_>) -> Result<(), i64> {
         return Ok(());
     };
     let mut device = virtio::Block::new(config, timer)?;
-    let readonly = anova_storage::BlockDevice::read_only(&device);
     device.verify_boundaries()?;
-    let disk = Ext2::mount(Box::new(device))?;
-    fs.mount_disk(disk)?;
+    let disk = filesystem::mount_with_ext4_writes(Box::new(device), cfg!(feature = "ext4-write"))?;
+    let caps = disk.capabilities();
+    fs.mount_backend(disk)?;
     serial::write(format_args!(
-        "[DISK:MOUNT] /persist=ext2:{} profile=4k-single-group native=anova.native.v1\n",
-        if readonly { "ro" } else { "rw" }
+        "[DISK:MOUNT] /persist={}:{} profile={} native=anova.native.v1\n",
+        if caps.format == Format::Ext2 {
+            "ext2"
+        } else {
+            "ext4"
+        },
+        if caps.read_only { "ro" } else { "rw" },
+        if caps.format == Format::Ext2 {
+            "4k-single-group"
+        } else if caps.read_only {
+            "4k-extents-readonly"
+        } else {
+            "4k-extents-write-v1"
+        }
     ));
     Ok(())
 }

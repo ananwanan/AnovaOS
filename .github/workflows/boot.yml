@@ -1,13 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
-# Gate runtimes, SDKs, guest tools and repeated clean reconstruction with exact artifacts and recovery.
+# Run the complete retained runtime, SDK, toolchain and ext4 gates only for main pushes.
 name: Bare-metal boot
 
 on:
-  pull_request:
-    branches: [dev]
   push:
-    branches: [dev]
-  workflow_dispatch:
+    branches: [main]
 
 permissions:
   contents: read
@@ -24,6 +21,11 @@ jobs:
           sudo apt-get install -y --no-install-recommends qemu-system-x86 xorriso curl dpkg-dev gcc g++ binutils make musl-tools qemu-user e2fsprogs openssl python3
       - name: Load the pinned Rust toolchain
         run: rustup show active-toolchain
+      - name: Cache checksum-verified boot inputs
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: build/cache/
+          key: boot-inputs-${{ runner.os }}-${{ hashFiles('boot/dependencies.toml') }}
       - name: Check formatting
         run: |
           cargo fmt --all -- --check
@@ -57,6 +59,7 @@ jobs:
         run: cargo xtask test-host
       - name: Test bootstrap source integrity and archive rejection
         run: |
+          python3 ports/gcc/test_fetch.py
           python3 ports/bootstrap/test_prepare.py
           python3 ports/bootstrap/test_gcc_probe.py
           python3 ports/bootstrap/test_rust_probe.py
@@ -81,6 +84,8 @@ jobs:
         run: cargo xtask gui-test
       - name: Verify persistent sources, binaries, clean shutdown and device failures
         run: cargo xtask persistence-test
+      - name: Verify controlled ext4 readonly, large namespace, reboot and rejection
+        run: cargo xtask foundation-test
       - name: Verify controlled virtio networking, DNS and socket boundaries
         run: cargo xtask network-test
       - name: Verify offline packages, reboot rollback and strict HTTPS
@@ -101,13 +106,14 @@ jobs:
             build/input/
             build/gui/
             build/gpu/
+            build/foundation/
           if-no-files-found: ignore
 
 
   guest-toolchain:
     needs: boot
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Install compiler construction and guest test utilities
@@ -116,14 +122,33 @@ jobs:
           sudo apt-get install -y --no-install-recommends qemu-system-x86 xorriso curl dpkg-dev gcc g++ make musl-tools e2fsprogs openssl python3 m4 bison flex texinfo
       - name: Load the pinned Rust toolchain
         run: rustup show active-toolchain
+      - name: Cache checksum-verified boot inputs
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: build/cache/
+          key: boot-inputs-${{ runner.os }}-${{ hashFiles('boot/dependencies.toml') }}
       - name: Fetch verified boot inputs
         run: cargo xtask fetch
+      - name: Cache checksum-verified compiler source archives
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: |
+            build/toolchain/*.tgz
+            build/toolchain/*.tar.xz
+            build/toolchain/*.tar.gz
+          key: compiler-inputs-${{ runner.os }}-${{ hashFiles('ports/gcc/inputs.json') }}
       - name: Build the locked GCC, sysroot and make from source
         env:
           ANOVA_BUILD_JOBS: 2
         run: cargo xtask toolchain-build
       - name: Verify guest C/C++, incremental make, negative builds and reboot retention
         run: cargo xtask toolchain-test
+      - name: Verify opt-in ext4 writes, guest builds, exhaustion, reboot and real disk failures
+        run: cargo xtask foundation-write-test
+      - name: Verify JBD2 sector cuts, checksum rejection and actual virtio recovery
+        run: cargo xtask foundation-journal-test
+      - name: Verify retained ext2 migration, guest reconstruction and foreground UART budgets
+        run: cargo xtask foundation-migrate-test
       - name: Assess locked GCC source capacity and guest prerequisite blockers
         run: cargo xtask bootstrap-gcc-test
       - name: Prepare locked upstream Rust musl tools and offline vendor
@@ -132,6 +157,10 @@ jobs:
           cargo xtask rust-build
       - name: Assess independent LLVM, rustc and Cargo source-build prerequisites
         run: cargo xtask bootstrap-rust-test
+      - name: Verify fresh ext4 kernel build capacity and exhaustion recovery
+        run: |
+          cargo fetch --locked
+          cargo xtask foundation-capacity-test
       - name: Compare independent clean guest tool/kernel builds and boot recovery
         run: |
           cargo fetch --locked
@@ -172,4 +201,6 @@ jobs:
             build/rust/stage.sha256
             build/rust/archive.sha256
             build/gui-sdk/
+            build/foundation/
+            build/journal-host/
           if-no-files-found: ignore

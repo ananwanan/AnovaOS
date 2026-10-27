@@ -36,7 +36,7 @@ still requires corresponding drivers. See [STATUS](guides/STATUS.md),
 | M13 | Versioned SDK/packages | M4/M11/M12 | SDK/packages/diagnostics accepted |
 | M14 | Rust GUI/C/C++/Rust SDKs | M9/M13 and individual prerequisites | Five stages locally accepted; GPU scope bounded |
 | M15 | Optional source/kernel bootstrap | M11–M13 and measured resources | bzip2/kernel/repeats accepted; compiler assessment complete, reconstruction blocked |
-| M16 | Resources, backend-independent VFS and controlled ext4 | Existing storage/runtime; restored CI and measured budgets | Planned; no ext4 implementation or acceptance |
+| M16 | Resources, backend-independent VFS and controlled ext4 | Existing storage/runtime; restored CI and measured budgets | Partial: backend/cache and controlled ext4 readonly verified locally; opt-in writes, JBD2 and migration/build/UART gates accepted locally; ext4 kernel capacity/recovery accepted locally; complete remote CI pending |
 | M17 | Usable development desktop and GUI-only app workflow | M16 accepted workspace/resources; M9/M14 and inherited tools | Planned; full compiler bootstrap is not required |
 | M18 | Conditional compiler reconstruction and guest-only images | Measured component prerequisites after M16/M17 | Planned; each component accepted independently |
 
@@ -427,7 +427,12 @@ it is not required to develop applications inside AnovaOS.
 
 ## M16: resources, VFS and controlled ext4
 
-Owner-approved plan dated 2026-10-26; every substage below is **planned and unimplemented**.
+Owner-approved sequence dated 2026-10-26, implementation updated 2026-10-27:
+**M16 is partially implemented.** Backend/cache and controlled ext4 readonly pass local
+checks; dependency acquisition and the source toolchain build work locally. Opt-in writes,
+[JBD2](validation/M16.5.md) and [migration/build/UART](validation/M16.6.md) now pass local gates.
+The fresh-ext4 kernel capacity/recovery profile is also locally accepted; complete remote CI is pending.
+See [executed evidence](validation/M16.md).
 The detailed contract is split into [M16 foundation](milestones/M16_FOUNDATION.md).
 Existing ext2 limits describe our implementation subset, not the format's maximum capacity.
 Use ext4 as the medium-term work-volume format; retain ext2 for existing images and recovery.
@@ -438,9 +443,9 @@ A new AnovaFS format is an independent research project outside this sequence.
 | M16.1 | Recover CI and measure a declared build/workspace profile | Verified dependency inputs; actual downstream gates; memory/storage/inode/task/fd and latency budgets |
 | M16.2 | Isolate filesystem backends and expand VFS/resource management | On-demand namespace/cache policy, bounded allocation/reclamation and old ext2 regressions |
 | M16.3 | Controlled ext4 read-only backend | Multigroup/extents and admitted metadata checks; malformed/unsupported/dirty-without-replay images rejected |
-| M16.4 | Controlled ext4 writes and file semantics | Create/read/write/resize/rename/unlink/open lifetime and exhaustion/error recovery; default remains unchanged |
-| M16.5 | JBD2 replay and crash consistency | Recorded transaction/flush contract, write-point crash injection and independent filesystem checks |
-| M16.6 | New work-volume migration and actual development load | Copy/hash/reboot verification, retained ext2 fallback and builds with measured foreground responsiveness |
+| M16.4 | Controlled ext4 writes and file semantics | Opt-in write-v1 implemented: create/read/write/resize/rename/unlink/open lifetime and exhaustion/error recovery; [evidence](validation/M16.4.md); default unchanged |
+| M16.5 | JBD2 replay and crash consistency | Locally accepted opt-in profile: recorded transaction/flush contract, write-point crash injection and independent filesystem checks |
+| M16.6 | New work-volume migration and actual development load | Locally accepted bzip2 profile; default unchanged: copy/hash/reboot verification, retained ext2 fallback and builds with measured foreground responsiveness |
 
 Run M16.1 before capacity choices; complete M16.2–M16.5 before M16.6 promotes a new
 default work-volume profile. Unknown incompatible features are rejected rather than silently
@@ -494,3 +499,9 @@ GUI-enabled kernel reconstruction, SMP, device IRQ/async I/O, USB/NVMe/AHCI, bro
 and physical hardware remain independently scoped; none is a blanket prerequisite for M17.
 Add new commands only with functioning implementations and evidence. Keep both language trees,
 README, status and acceptance boundaries current under [DEV-003/DEV-004](guides/REQUIREMENTS.md).
+
+The additional ext4 kernel-capacity gate and current remote CI execution are tracked
+in [M16 capacity](validation/M16_CAPACITY.md), separately from historical bzip2
+acceptance. Completion requires actual successful runs and retained evidence.
+
+Current Actions policy is main-push only; complete remote acceptance remains pending under that policy.

@@ -241,3 +241,16 @@ The accepted configuration is stripped opt-z with bootstrap metrics and no GUI;
 target libraries remain inherited seeds. Compiler reconstruction and guest-only image generation remain separate. Independent clean
 repeat builds are locally accepted under [M15.6](validation/M15.6.md), with exact final artifacts
 and retained intermediate differences.
+
+## M16.5/M16.6 controlled journal work volume
+
+Explicit `ext4-write` admission accepts the separately audited internal-JBD2
+checksum-v3/data-journal profile, single synchronous pending transaction and
+persistent orphan replay. Ordinary readonly mounts reject recovery-required disks.
+Fresh ext2-to-ext4 copying preserves paths, bytes, modes, second-resolution times
+and ABI policy without changing native syscall v1 or existing disk bytes. Actual
+guest GCC/make reconstruct bzip2 1.0.8 while the dedicated UART supervisor executes,
+saves, reads logs and interrupts under storage pressure. See [M16.5](validation/M16.5.md)
+and [M16.6](validation/M16.6.md) for exact faults/budgets and local evidence. General
+Linux journals, arbitrary projects, desktop workflows and compiler bootstrap need
+independent profiles; ext2 remains the default/recovery route.
