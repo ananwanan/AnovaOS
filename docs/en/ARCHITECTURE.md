@@ -7,7 +7,7 @@ This describes implemented boundaries through the accepted M15.6 reconstruction 
 separately scoped future architecture. Guest toolchains, native SDKs and bounded Rust GUI/GPU
 profiles are implemented; full compiler reconstruction, guest-only image generation, SMP and
 physical hardware remain separate. M16 now implements the backend/cache boundary and a
-controlled ext4 profiles, explicit JBD2 recovery and opt-in migration/build acceptance; M17.1 has bounded local session/input/fault/reboot acceptance; M17.2–M17.5 remain pending. Current evidence is in [STATUS](guides/STATUS.md).
+controlled ext4 profiles, explicit JBD2 recovery and opt-in migration/build acceptance; M17.1 has bounded local session/input/fault/reboot acceptance; M17.2 adds the locally accepted PTY terminal; M17.3–M17.5 remain pending. Current evidence is in [STATUS](guides/STATUS.md).
 
 ## 1. Overall structure
 
@@ -712,3 +712,7 @@ independent measurements. Complete results and raw logs are in the capacity reco
 ## M17.1 accepted session boundary
 
 The separate experimental `0x101` native process-control call validates version and exact direct-child identity before nonblocking wait or signal-15 stop. It shares checked status copying and kernel lifecycle cleanup. Rust userland owns the launcher, fixed executable list and three-replacement policy; init runs COM1 independently. Desktop builds reuse existing host-built C/C++/Rust GUI clients, plus one explicitly admitted Linux nanosleep/exit boundary fixture; no compiler download is needed. GUI/native v1 records and global quotas are unchanged. Drawing-time disconnection follows the same three-replacement policy as poll-time/server loss. `desktop-test` separately verifies actual input/scanout, owned-child cleanup, quota/task/FD reuse, client/compositor faults and persisted work across five clean boots; see [M17.1](validation/M17.1.md). Its loopback-only TCP QMP transport shares the existing bounded transaction validation; ordinary Unix QMP gates remain available. Resource sampling is enabled for the desktop without increasing capacities.
+
+## M17.2 PTY boundary
+
+The native terminal owns experimental `0x102` sessions with private masters. Its admitted Linux shell receives only slave stdio, its own SID/PGID and inherited cwd. An immutable process-family tag survives fork/clone/exec/setsid; owner exit/fault/stop closes/reaps exactly that family. READ/STATUS retain data/status after failed usercopy. `/dev/tty` resolves by controlling session and real WUNTRACED notifications are copied before consumption. A fixed ANSI/history model and immutable raster snapshots feed one asynchronous upload at a time, with bounded PTY and GUI work between acknowledgements. The low-level Rust Canvas is reusable without changing the GUI C ABI. See [contract](milestones/M17_PTY.md) and [acceptance](validation/M17.2.md); resource capacities, main-only Actions, COM1 recovery and later M17 stages retain their boundaries.

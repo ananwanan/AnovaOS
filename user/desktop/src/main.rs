@@ -17,9 +17,20 @@ const RESTARTS: usize = 3;
 struct Session {
     server: u64,
     clients: [Option<u64>; 3],
+    terminal_running: bool,
 }
 
 impl Session {
+    fn terminal(&mut self) -> Result<(), i64> {
+        if self.clients[2].is_some() {
+            self.toggle(2)?;
+        }
+        let pid = rt::spawn("/bin/terminal", "")?;
+        self.clients[2] = Some(pid);
+        self.terminal_running = true;
+        gui::log(format_args!("[DESKTOP:TERMINAL] pid={pid}\n"));
+        Ok(())
+    }
     fn probe(&mut self, index: usize, mode: &str) -> Result<(), i64> {
         if self.clients[index].is_some() {
             self.toggle(index)?;
@@ -33,6 +44,9 @@ impl Session {
     }
 
     fn toggle(&mut self, index: usize) -> Result<(), i64> {
+        if index == 2 {
+            self.terminal_running = false;
+        }
         if let Some(pid) = self.clients[index] {
             stop(pid)?;
             self.clients[index] = None;
@@ -54,6 +68,9 @@ impl Session {
                     status.status.reason, status.status.code
                 ));
                 *slot = None;
+                if index == 2 {
+                    self.terminal_running = false;
+                }
             }
         }
         if let Some(status) = rt::process::poll(self.server)? {
@@ -97,9 +114,20 @@ fn render(window: &mut Window, session: &Session, event: Option<&GuiEvent>) -> R
     window.clear(0x182838)?;
     window.text(12, 24, "ANOVA DESKTOP", 0xffffff)?;
     window.text(12, 44, "1/2/3 launch or stop; r restart", 0xffffff)?;
-    window.text(12, 62, "q exit; saved files are retained", 0xffffff)?;
+    window.text(12, 62, "t terminal; q exit; saved files retained", 0xffffff)?;
     let mut action = 0;
-    for (index, name) in ["C client", "C++ client", "Rust client"].iter().enumerate() {
+    for (index, name) in [
+        "C client",
+        "C++ client",
+        if session.terminal_running {
+            "Terminal"
+        } else {
+            "Rust client"
+        },
+    ]
+    .iter()
+    .enumerate()
+    {
         let y = 88 + index as i32 * 30;
         window.text(12, y + 5, name, 0xffffff)?;
         if window.button(
@@ -137,6 +165,7 @@ fn run(test: bool) -> Result<(), i64> {
         let mut session = Session {
             server: rt::spawn("compositor", if test { "desktop-test" } else { "desktop" })?,
             clients: [None; 3],
+            terminal_running: false,
         };
         let outcome = (|| -> Result<bool, i64> {
             let identity = gui::connect()?;
@@ -170,6 +199,11 @@ fn run(test: bool) -> Result<(), i64> {
                         49..=51 => action = event.codepoint - 48,
                         114 => return Ok(true),
                         113 => return Ok(false),
+                        116 => {
+                            if let Err(error) = session.terminal() {
+                                gui::log(format_args!("[DESKTOP:LAUNCH_ERROR] error={error}\n"));
+                            }
+                        }
                         102 if test => session.probe(2, "red")?,
                         98 if test => session.probe(1, "blue")?,
                         _ => {}

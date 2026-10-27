@@ -3,7 +3,7 @@
 
 **English** | [简体中文](../../zh-CN/milestones/M17_DESKTOP.md)
 
-**Status: M17.1 locally accepted for its bounded five-boot profile. M17.2–M17.5 remain planned.** This proposal follows the
+**Status: M17.1 locally accepted for its bounded five-boot profile. M17.2 is locally accepted within its declared PTY/GCC profile; M17.3–M17.5 remain planned.** This proposal follows the
 [M16 foundation](M16_FOUNDATION.md). The [roadmap](../ROADMAP.md) defines ordering;
 [current status](../guides/STATUS.md) records implemented capabilities and evidence.
 The owner deferred M16 remote closeout on 2026-10-27 and authorized M17 development. See [M17.1 acceptance](../validation/M17.1.md) for `desktop-test`, actual input/fault/reboot evidence, budgets and remaining limits. All stage exits below still apply.
@@ -16,9 +16,9 @@ Use the existing guest GCC/G++/Rust/Cargo seeds. Rebuilding those compilers from
 source is independent work and is not a prerequisite for this desktop.
 
 The current [GUI runtime](M14_RUNTIME.md) proves bounded native GUI clients and an
-echo/pwd terminal. Its terminal accepts only those commands and captures at most
+echo/pwd terminal. That historical terminal accepts only those commands and captures at most
 128 output bytes; it is not an existing graphical shell for running compilers.
-The accepted source/build/run workflow currently uses the serial console.
+M17.2 now provides the separate [real PTY terminal](M17_PTY.md); reliable graphical source editing and the all-GUI workflow remain M17.3/M17.5.
 
 Begin with M16's declared resource, VFS and ext4 work-disk profile and preserve
 the existing ext2 profile. Measure the selected desktop/build workload first.
@@ -143,3 +143,5 @@ and guest-only image generation. Full GCC/Rust/LLVM bootstrap, native libc/std,
 SMP, kernel preemption, general GPU acceleration, USB, NVMe/AHCI and broad Linux
 GUI compatibility remain independent workstreams with their own prerequisites
 and acceptance; they are not implicit requirements for this development desktop.
+
+Implemented M17.2 contract: [M17_PTY](M17_PTY.md); actual two-boot evidence: [M17.2](../validation/M17.2.md). The historical M14 echo/pwd example remains separately scoped.

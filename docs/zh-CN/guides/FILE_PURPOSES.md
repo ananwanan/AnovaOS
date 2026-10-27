@@ -487,3 +487,22 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `user/desktop/src/checks.rs` | 实际耗尽并复用子进程/任务/FD，检查非子进程及 Linux 边界。 |
 | `xtask/src/desktop_test.rs` | 驱动五次桌面启动、物理输入/画面、真实故障、有界恢复和精确持久文件检查。 |
 | `docs/assets/validation/M17_DESKTOP_LOCAL.json` | 保存桌面源码/输入身份、预声明预算、原始 UART/QMP/故障日志及压缩精确截图；JSON 以 purpose 字段替代注释。 |
+| `crates/abi/src/pty.rs` | 定义独立版本化原生 PTY wire 契约、所有权及传输/几何边界。 |
+| `crates/terminal/Cargo.toml` | 打包供原生及宿主测试使用的无分配终端字符/历史模型。 |
+| `crates/terminal/src/lib.rs` | 解析分片有界 ANSI，裁剪/缩放字符并保留固定 256 行历史。 |
+| `crates/terminal/src/tests.rs` | 验证光标/颜色/擦除、分片控制、历史限额、缩放和新输出源恢复。 |
+| `kernel/src/task/pty.rs` | 持有私有 PTY master、准确创建者句柄、准入 Linux 进程族、复制失败保留和回收快照。 |
+| `user/rt/src/pty.rs` | 封装实验性原生 PTY 会话，提供有界非阻塞传输及所有权清理。 |
+| `user/terminal/Cargo.toml` | 构建与 Linux shell/编译器输入分离的原生图形 PTY 客户端。 |
+| `user/terminal/src/main.rs` | 运行有界 GUI/PTY 输入输出轮次、回滚、可见 shell 状态和显式重启/关闭。 |
+| `user/terminal/src/window.rs` | 绘制不变私有帧并推进需确认 GUI 块，不阻塞终端输入。 |
+| `user/terminal/src/checks.rs` | 实际验证 PTY/创建者/过期/复制/状态/任务/全局打开描述边界及重复恢复。 |
+| `tests/guest/terminal/fixture.c` | 生成真实 stdout/stderr、停止子进程、SIGWINCH/输出、中断和脱离会话进程族负载。 |
+| `tests/guest/terminal/hello.c` | 提供经物理图形终端输入编译并再次运行的精确 C 源码。 |
+| `xtask/src/pty_terminal.rs` | 准入原生终端、单独固定的交互 ash 和可选已验证 M11 工具链。 |
+| `xtask/src/pty_terminal_test.rs` | 驱动图形 PTY/GCC 输入、真实画面、中断/缩放/回滚/压力及精确重启转储。 |
+| `docs/en/milestones/M17_PTY.md` | 定义 PTY 准入/所有权、异步帧推进、ANSI 限额和 shell 控制。 |
+| `docs/zh-CN/milestones/M17_PTY.md` | 翻译已实现 PTY 接口、可执行策略、限额和操作。 |
+| `docs/en/validation/M17.2.md` | 记录真实 PTY/GCC/重启验收、固定预算、保留字节和故障修复。 |
+| `docs/zh-CN/validation/M17.2.md` | 翻译 PTY 验收范围、测量、恢复证据和剩余工作。 |
+| `docs/assets/validation/M17_PTY_LOCAL.json` | 保存准确 PTY 源码/工具/输入身份、原始成功/失败日志和压缩真实画面；JSON 以 purpose 字段说明用途。 |

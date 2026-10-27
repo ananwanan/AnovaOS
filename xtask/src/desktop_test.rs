@@ -454,20 +454,64 @@ fn scenario(d: &mut Driver, work: &Path, evidence: &mut String) -> Result<()> {
     Ok(())
 }
 
-struct Driver {
+pub(super) struct Driver {
     guest: Guest,
-    output: transcript::Transcript,
+    pub(super) output: transcript::Transcript,
     uart: ChildStdin,
-    qmp: Qmp,
+    pub(super) qmp: Qmp,
     start: Instant,
     cursor: usize,
     pointer: (u32, u32),
     buttons: u8,
-    faults: Vec<u64>,
+    pub(super) faults: Vec<u64>,
 }
 
 impl Driver {
-    fn poll(&mut self) -> Result<()> {
+    pub(super) fn boot(
+        root: &Path,
+        iso: &Path,
+        disk: &Path,
+        work: &Path,
+        name: &str,
+    ) -> Result<(Self, Temporary)> {
+        let vars = Temporary::new(root, "desktop-pty")?;
+        let port = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))?
+            .local_addr()?
+            .port();
+        let mut cmd = qemu_disk(root, iso, &vars.0, false, Some(disk), false)?;
+        cmd.args(["-m", "3G", "-vga", "std", "-serial", "stdio", "-qmp"])
+            .arg(format!("tcp:127.0.0.1:{port},server=on,wait=off"))
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(File::create(work.join(format!("{name}.qemu.log")))?);
+        fs::write(
+            work.join(format!("{name}.command.txt")),
+            format!("{cmd:?}\n"),
+        )?;
+        let mut guest = Guest(cmd.spawn()?);
+        let output = transcript::Transcript::capture(
+            guest.0.stdout.take().ok_or("Missing PTY UART")?,
+            File::create(work.join(format!("{name}.serial.log")))?,
+        )?;
+        let uart = guest.0.stdin.take().ok_or("Missing PTY input")?;
+        let start = Instant::now();
+        let qmp = Qmp::connect_tcp(port, &work.join(format!("{name}.qmp.log")), start)?;
+        Ok((
+            Self {
+                guest,
+                output,
+                uart,
+                qmp,
+                start,
+                cursor: 0,
+                pointer: (400, 300),
+                buttons: 0,
+                faults: Vec::new(),
+            },
+            vars,
+        ))
+    }
+    pub(super) fn poll(&mut self) -> Result<()> {
         self.output.poll()?;
         check_guest(
             &self.output.text(),
@@ -479,7 +523,7 @@ impl Driver {
         }
         Ok(())
     }
-    fn wait_since(&mut self, from: usize, marker: &str) -> Result<()> {
+    pub(super) fn wait_since(&mut self, from: usize, marker: &str) -> Result<()> {
         loop {
             self.poll()?;
             if let Some(at) = self.output.find_from(from, marker) {
@@ -494,10 +538,10 @@ impl Driver {
             thread::sleep(Duration::from_millis(10));
         }
     }
-    fn wait(&mut self, marker: &str) -> Result<()> {
+    pub(super) fn wait(&mut self, marker: &str) -> Result<()> {
         self.wait_since(self.cursor, marker)
     }
-    fn ready(&mut self, from: usize, generation: usize) -> Result<()> {
+    pub(super) fn ready(&mut self, from: usize, generation: usize) -> Result<()> {
         self.wait_since(from, &format!("[DESKTOP:READY] generation={generation}"))?;
         for language in ["C", "CPP", "RUST"] {
             self.wait_since(from, &format!("[GUI:{language}:READY]"))?;
@@ -511,12 +555,12 @@ impl Driver {
         }
         Ok(())
     }
-    fn serial(&mut self, bytes: &[u8]) -> Result<()> {
+    pub(super) fn serial(&mut self, bytes: &[u8]) -> Result<()> {
         self.uart.write_all(bytes)?;
         self.uart.flush()?;
         Ok(())
     }
-    fn command(&mut self, command: &str, code: u32) -> Result<()> {
+    pub(super) fn command(&mut self, command: &str, code: u32) -> Result<()> {
         let from = self.output.position();
         thread::sleep(Duration::from_millis(30));
         self.serial(format!("{command}\r").as_bytes())?;
@@ -541,14 +585,14 @@ impl Driver {
             thread::sleep(Duration::from_millis(10));
         }
     }
-    fn key(&mut self, key: &str) -> Result<()> {
+    pub(super) fn key(&mut self, key: &str) -> Result<()> {
         for down in [true, false] {
             self.qmp.command("input-send-event",json!({"events":[{"type":"key","data":{"down":down,"key":{"type":"qcode","data":key}}}]}))?;
             thread::sleep(Duration::from_millis(30));
         }
         Ok(())
     }
-    fn move_to(&mut self, x: u32, y: u32) -> Result<()> {
+    pub(super) fn move_to(&mut self, x: u32, y: u32) -> Result<()> {
         while self.pointer != (x, y) {
             let dx = (i64::from(x) - i64::from(self.pointer.0)).clamp(-80, 80);
             let dy = (i64::from(y) - i64::from(self.pointer.1)).clamp(-80, 80);
@@ -569,7 +613,7 @@ impl Driver {
         }
         Ok(())
     }
-    fn button(&mut self, down: bool) -> Result<()> {
+    pub(super) fn button(&mut self, down: bool) -> Result<()> {
         let from = self.output.position();
         self.qmp.command(
             "input-send-event",
@@ -584,19 +628,19 @@ impl Driver {
             ),
         )
     }
-    fn click(&mut self, x: u32, y: u32) -> Result<()> {
+    pub(super) fn click(&mut self, x: u32, y: u32) -> Result<()> {
         self.move_to(x, y)?;
         self.button(true)?;
         self.button(false)
     }
-    fn client_pid(&self, index: usize) -> Result<u64> {
+    pub(super) fn client_pid(&self, index: usize) -> Result<u64> {
         pid_field(
             &self.output.text(),
             &format!("[DESKTOP:LAUNCH] app={index}"),
             true,
         )
     }
-    fn window(&self, pid: u64) -> Result<(u32, u32)> {
+    pub(super) fn window(&self, pid: u64) -> Result<(u32, u32)> {
         let text = self.output.text();
         let line = last_line(&text, &format!("[DESKTOP:WINDOW] client={pid} "))?;
         let x = field(line, "x")?;
@@ -642,7 +686,7 @@ impl Driver {
         ));
         Ok(())
     }
-    fn shutdown(&mut self) -> Result<()> {
+    pub(super) fn shutdown(&mut self) -> Result<()> {
         self.serial(b"shutdown\r")?;
         loop {
             self.output.poll()?;
@@ -715,6 +759,7 @@ fn check_guest(text: &str, timed_out: bool, allowed: &[u64]) -> Result<()> {
         "[POWER:FAIL]",
         "[DESKTOP:FAIL]",
         "[GUI:FAIL]",
+        "[TERMINAL:FAIL]",
         "[USER:RETURNREJECT]",
     ] {
         if text.contains(marker) {

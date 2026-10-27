@@ -482,10 +482,29 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `user/rt/src/process.rs` | Wrap experimental nonblocking child polling and identity-checked stop without changing native v1. |
 | `user/desktop/Cargo.toml` | Build the Rust desktop session supervisor against native process and GUI interfaces. |
 | `user/desktop/src/main.rs` | Own admitted client/compositor lifetimes, bounded session replacement and graphical launcher actions. |
-| `xtask/src/desktop.rs` | Build desktop inputs and an explicit Linux boundary fixture, validate host-built C/C++/Rust clients and package opt-in images. |
+| `xtask/src/desktop.rs` | Build desktop inputs, explicit Linux boundary/PTY shell admissions and host-built C/C++/Rust clients in opt-in images. |
 | `docs/en/validation/M17.1.md` | Record accepted local desktop input/lifecycle/reboot evidence, budgets, original failure and remaining scope. |
 | `docs/zh-CN/validation/M17.1.md` | Translate accepted desktop scope, process boundary, measurements, failure evidence and remaining work. |
 | `tests/guest/desktop/linux-park.S` | Execute real Linux nanosleep/exit to verify native supervision rejects live Linux children. |
 | `user/desktop/src/checks.rs` | Exhaust and reuse real child/task/FD resources while checking nonchild and Linux boundaries. |
 | `xtask/src/desktop_test.rs` | Drive five desktop boots, physical input/scanout, actual faults, bounded recovery and exact persisted bytes. |
 | `docs/assets/validation/M17_DESKTOP_LOCAL.json` | Retain desktop source/input identities, predeclared budgets, raw UART/QMP/failure logs and compressed exact screenshots; JSON uses its purpose field instead of a comment. |
+| `crates/abi/src/pty.rs` | Define the separate versioned native PTY wire contract, ownership and checked transfer/geometry bounds. |
+| `crates/terminal/Cargo.toml` | Package the allocation-free terminal cell/history model for native and host tests. |
+| `crates/terminal/src/lib.rs` | Parse fragmented bounded ANSI, clip/resize cells and retain a fixed 256-line history. |
+| `crates/terminal/src/tests.rs` | Verify cursor/colors/erasure, fragmented controls, history bounds, resize and fresh-producer recovery. |
+| `kernel/src/task/pty.rs` | Own private PTY masters, exact creator handles, admitted Linux families, failed-copy retention and reclamation snapshots. |
+| `user/rt/src/pty.rs` | Wrap the experimental native PTY session with bounded nonblocking transfers and owned cleanup. |
+| `user/terminal/Cargo.toml` | Build the native graphical PTY client separately from its Linux shell and compiler inputs. |
+| `user/terminal/src/main.rs` | Run bounded GUI/PTY input/output turns, history, visible shell status and explicit restart/close. |
+| `user/terminal/src/window.rs` | Rasterize immutable private frames and pump acknowledged GUI chunks without blocking terminal input. |
+| `user/terminal/src/checks.rs` | Exercise real PTY/creator/stale/copy/status/task/global-description boundaries and repeated recovery. |
+| `tests/guest/terminal/fixture.c` | Generate actual stdout/stderr, stopped-child, SIGWINCH/output, interrupt and detached-family workloads. |
+| `tests/guest/terminal/hello.c` | Provide the exact C source compiled and rerun through physical graphical-terminal input. |
+| `xtask/src/pty_terminal.rs` | Admit the native terminal, separately pinned interactive ash and optional verified M11 toolchain. |
+| `xtask/src/pty_terminal_test.rs` | Drive graphical PTY/GCC input, real scanout, interruption/resize/history/pressure and exact reboot dumps. |
+| `docs/en/milestones/M17_PTY.md` | Define PTY admission/ownership, async frame pumping, ANSI bounds and shell controls. |
+| `docs/zh-CN/milestones/M17_PTY.md` | Translate the implemented PTY interface, executable policy, limits and controls. |
+| `docs/en/validation/M17.2.md` | Record actual PTY/GCC/reboot acceptance, fixed budgets, retained bytes and failure corrections. |
+| `docs/zh-CN/validation/M17.2.md` | Translate PTY acceptance scope, measurements, recovery proof and remaining work. |
+| `docs/assets/validation/M17_PTY_LOCAL.json` | Retain exact PTY source/tool/input identities, raw successful/failure logs and compressed genuine scanouts; purpose is a JSON field. |

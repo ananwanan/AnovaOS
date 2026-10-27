@@ -298,7 +298,7 @@ impl Kernel {
         }
         if f.rax == 61 {
             let result = if f.rdi as i64 != -1 && (f.rdi == 0 || f.rdi > i64::MAX as u64)
-                || f.rdx > 1
+                || f.rdx & !3 != 0
                 || f.r10 != 0
             {
                 Some(-22)
@@ -319,7 +319,11 @@ impl Kernel {
                         .any(|k| matches!(self.policy.entry(k).state, State::Zombie(_)));
                     if !any {
                         Some(-10)
-                    } else if f.rdx == 1 && !zombie {
+                    } else if f.rdx & 2 != 0
+                        && let Some(status) = self.linux_wait_stopped(i, pid, UserAddr(f.rsi))
+                    {
+                        Some(errno(status))
+                    } else if f.rdx & 1 != 0 && !zombie {
                         Some(0)
                     } else {
                         self.wait(i, pid, UserAddr(f.rsi)).map(errno)
@@ -666,7 +670,15 @@ impl Kernel {
                             (f.rsi, f.rdx)
                         };
                         let mut bytes = [0; anova_vfs::PATH_BYTES + 1];
-                        let n = string(space, address, &mut bytes)?;
+                        let mut n = string(space, address, &mut bytes)?;
+                        // A PTY family's /dev/tty denotes its controlling slave, never COM1.
+                        // Resolve from the checked session identity rather than ELF/path privilege.
+                        if &bytes[..n] == b"/dev/tty" && p.pty_member.is_some() {
+                            let number = self.terminal.controlling_pty(p.thread.sid).ok_or(-6)?;
+                            bytes[..10].copy_from_slice(b"/dev/pts/0");
+                            bytes[9] += number as u8;
+                            n = 10;
+                        }
                         let nofollow = flags & 0x20000 != 0;
                         let flags = open_flags(flags & !(0x800 | 0x100 | 0x20000))?;
                         let path = core::str::from_utf8(&bytes[..n]).unwrap();

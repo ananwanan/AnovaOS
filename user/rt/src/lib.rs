@@ -5,6 +5,7 @@
 pub use anova_abi as abi;
 mod memory;
 pub mod process;
+pub mod pty;
 pub mod v1;
 #[cfg(not(test))]
 use core::arch::naked_asm;

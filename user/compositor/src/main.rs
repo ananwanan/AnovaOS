@@ -93,7 +93,10 @@ fn request(core: &mut Compositor<'_>, envelope: &t::Envelope, desktop: bool) -> 
     };
     // Desktop placement is user-space policy. Hidden contract windows retain their geometry.
     if desktop && request.opcode == anova_gui::op::CREATE && request.flags == 1 {
-        if request.width == 320 {
+        if request.width == 312 {
+            request.x = 450;
+            request.y = 20;
+        } else if request.width == 320 {
             request.x = 20;
             request.y = 20;
         } else {

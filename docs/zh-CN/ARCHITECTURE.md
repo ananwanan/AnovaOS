@@ -4,7 +4,7 @@
 [English](../en/ARCHITECTURE.md) | **简体中文**
 
 本文覆盖至 M15.6 已验收重建及 M16 后端/缓存、受控 ext4 只读配置的实现边界。
-M16 已增加显式 JBD2 恢复和可选迁移/构建验收；M17.1 会话已完成有界输入/故障/重启本地验收，M17.2–M17.5 待完成。guest 工具链、原生 SDK、
+M16 已增加显式 JBD2 恢复和可选迁移/构建验收；M17.1 会话已完成有界输入/故障/重启本地验收，M17.2 的 PTY 终端已本地验收，M17.3–M17.5 待完成。guest 工具链、原生 SDK、
 有界 Rust GUI/GPU 均已实现；完整编译器重建、guest 独立镜像生成、SMP 和实机另计。
 当前能力与证据见 [STATUS](guides/STATUS.md)。
 
@@ -416,3 +416,7 @@ bootstrap 诊断在设备分离前捕获最终孤儿回收。这不增加原生 
 ## M17.1 已验收会话边界
 
 独立实验原生进程控制调用 `0x101` 在非阻塞等待或信号 15 停止前检查版本和精确直接子进程身份，复用受检状态复制和内核生命周期清理。Rust 用户态管理启动器、固定可执行文件列表和最多三次替换策略；init 独立运行 COM1。桌面构建复用宿主构建的既有 C/C++/Rust GUI 客户端，额外显式准入一个 Linux nanosleep/exit 边界探针，不下载编译器，GUI/native v1 记录及全局配额不变。绘制期间断连与轮询断连/服务死亡遵循同一三次替换策略。`desktop-test` 独立验证实际输入/画面、自有子进程清理、配额/任务/FD 复用、客户端/合成器故障和五次正常启动的文件保留，见 [M17.1](validation/M17.1.md)。仅回环 TCP QMP 复用既有有界事务检查，原 Unix QMP 门禁仍受支持；桌面开启资源采样，没有扩大容量。
+
+## M17.2 PTY 边界
+
+原生终端持有实验性 `0x102` 会话及私有 master。准入的 Linux shell 只获得 slave 标准 I/O、独立 SID/PGID 和继承 cwd。不变的进程族标签跨 fork/clone/exec/setsid 保留；创建者退出/故障/停止时只关闭并回收该进程族。READ/STATUS 用户复制失败保留数据/状态，`/dev/tty` 按控制会话解析，真实 WUNTRACED 通知成功复制后才消费。固定 ANSI/回滚模型和不变像素快照一次异步上传一块，在确认之间处理有界 PTY/GUI 工作。底层 Rust Canvas 可复用，不改变 GUI C ABI。详见[契约](milestones/M17_PTY.md)及[验收](validation/M17.2.md)。资源限额、仅 main Actions、COM1 恢复和后续 M17 阶段边界不变。

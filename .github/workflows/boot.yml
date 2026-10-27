@@ -36,7 +36,7 @@ jobs:
       - name: Check file-purpose explanations
         run: cargo xtask check-files
       - name: Check host tools
-        run: cargo clippy --locked -p xtask -p anova-platform -p anova-memory -p anova-abi -p anova-elf -p anova-sched -p anova-vfs -p anova-storage -p anova-graphics -p anova-input -p anova-gui -p anova-gui-runtime --all-targets -- -D warnings
+        run: cargo clippy --locked -p xtask -p anova-platform -p anova-memory -p anova-abi -p anova-elf -p anova-sched -p anova-vfs -p anova-storage -p anova-graphics -p anova-input -p anova-gui -p anova-gui-runtime -p anova-terminal --all-targets -- -D warnings
       - name: Check and build native Rust/C applications
         run: |
           cargo xtask check-apps
@@ -110,6 +110,9 @@ jobs:
             build/gui/
             build/desktop/
             build/desktop-test/
+            build/terminal/
+            build/compat-terminal/busybox.config
+            build/images/busybox-terminal-1.36.1-source.tar.gz
             build/gpu/
             build/foundation/
           if-no-files-found: ignore
@@ -148,6 +151,8 @@ jobs:
         run: cargo xtask toolchain-build
       - name: Verify guest C/C++, incremental make, negative builds and reboot retention
         run: cargo xtask toolchain-test
+      - name: Verify real graphical PTY compilation, interruption, resize, exhaustion and reboot
+        run: cargo xtask desktop-pty-test
       - name: Verify opt-in ext4 writes, guest builds, exhaustion, reboot and real disk failures
         run: cargo xtask foundation-write-test
       - name: Verify JBD2 sector cuts, checksum rejection and actual virtio recovery
@@ -206,6 +211,10 @@ jobs:
             build/rust/stage.sha256
             build/rust/archive.sha256
             build/gui-sdk/
+            build/terminal/
+            build/desktop-pty-test/
+            build/compat-terminal/busybox.config
+            build/images/busybox-terminal-1.36.1-source.tar.gz
             build/foundation/
             build/journal-host/
           if-no-files-found: ignore

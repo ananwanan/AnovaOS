@@ -168,3 +168,7 @@ A relocated musl toolchain must retain the shared libc linker input as well as
 libc.a and headers. M10's build verifies that both TLS DSOs declare a real libc.so
 DT_NEEDED dependency. Otherwise -shared can silently pull the static TLS accessor
 from libc.a and fail dynamic TLS at runtime; this environment is now rejected.
+
+## M17.2 bounded terminal extension
+
+The separately admitted M17.2 ash adds real WUNTRACED/WNOHANG stopped-child reporting and controlling-session `/dev/tty` resolution for PTY families. Successful copying consumes one stop event; continue clears obsolete stop state. The historical M9 configuration/evidence above remains unchanged. WCONTINUED, wait-by-group and complete background/multithreaded job control remain outside the accepted profile; see [M17 PTY](M17_PTY.md).

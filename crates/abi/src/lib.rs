@@ -5,6 +5,7 @@
 
 pub mod linux;
 pub mod process;
+pub mod pty;
 
 pub const VERSION: u32 = 1;
 /// SDK releases are independent from the frozen native syscall wire version.

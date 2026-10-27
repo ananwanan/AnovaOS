@@ -6,7 +6,23 @@ use sha2::{Digest, Sha256};
 use std::io::Write;
 const COMMIT: &str = "1a64f6a20aaf6ea4dbba68bbfa8cc1ab7e5c57c4";
 pub fn build(root: &Path, apps: &Path) -> Result<()> {
-    let work = directory(root, "compat")?;
+    build_busybox(root, apps, false)
+}
+
+/// Build a separate pinned ash with foreground job control; keep the M8/M9 seed unchanged.
+pub fn build_terminal(root: &Path, apps: &Path) -> Result<()> {
+    build_busybox(root, apps, true)
+}
+
+fn build_busybox(root: &Path, apps: &Path, terminal: bool) -> Result<()> {
+    let work = directory(
+        root,
+        if terminal {
+            "compat-terminal"
+        } else {
+            "compat"
+        },
+    )?;
     let source = work.join("busybox");
     if !source.exists() {
         command(
@@ -50,10 +66,11 @@ pub fn build(root: &Path, apps: &Path) -> Result<()> {
     )?;
     let config_path = source.join(".config");
     let mut config = fs::read_to_string(&config_path)?;
-    for line in fs::read_to_string(root.join("user/linux/busybox.config"))?
-        .lines()
-        .filter(|l| l.starts_with("CONFIG_"))
-    {
+    let mut selected = fs::read_to_string(root.join("user/linux/busybox.config"))?;
+    if terminal {
+        selected.push_str("\nCONFIG_ASH_JOB_CONTROL=y\n");
+    }
+    for line in selected.lines().filter(|l| l.starts_with("CONFIG_")) {
         let key = line.split_once('=').ok_or("Invalid BusyBox profile")?.0;
         let disabled = format!("# {key} is not set");
         if config.contains(&disabled) {
@@ -144,7 +161,11 @@ pub fn build(root: &Path, apps: &Path) -> Result<()> {
         Command::new("gzip")
             .args(["-n", "-c"])
             .arg(archive)
-            .stdout(File::create(images.join("busybox-1.36.1-source.tar.gz"))?),
+            .stdout(File::create(images.join(if terminal {
+                "busybox-terminal-1.36.1-source.tar.gz"
+            } else {
+                "busybox-1.36.1-source.tar.gz"
+            }))?),
     )?;
     Ok(())
 }

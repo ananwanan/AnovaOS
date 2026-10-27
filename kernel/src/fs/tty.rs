@@ -106,6 +106,9 @@ impl Tty {
             serial::bytes(bytes);
         } else {
             for b in bytes {
+                if *b == b'\n' && self.termios[4] & 5 == 5 {
+                    self.output.push(b'\r');
+                }
                 self.output.push(*b);
             }
         }
@@ -211,9 +214,16 @@ impl Terminal {
     }
     pub fn reset_pty(&mut self, n: usize) {
         self.ttys[n + 1] = Tty::new();
+        self.signals[n + 1] = 0;
+        self.masters[n] = false;
     }
     pub fn session(&self, d: Device) -> u64 {
         self.ttys[Self::index(d)].session
+    }
+    pub fn controlling_pty(&self, session: u64) -> Option<usize> {
+        self.ttys[1..]
+            .iter()
+            .position(|tty| session != 0 && tty.session == session)
     }
     pub fn attach(&mut self, d: Device, session: u64, group: u64) {
         let tty = &mut self.ttys[Self::index(d)];

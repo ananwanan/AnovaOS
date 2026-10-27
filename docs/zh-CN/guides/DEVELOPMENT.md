@@ -457,4 +457,10 @@ bzip2、中断/重启保留和宿主测量的前台 UART 预算。见 [M16.5](..
 
 `cargo xtask desktop-build` 构建原生监督器及宿主构建的既有 C/C++/Rust 客户端，并显式准入一个小型 Linux personality 边界探针，不下载编译器种子。`cargo xtask desktop-image` 生成 `build/images/anova-desktop.iso`，`cargo xtask run --desktop [--disk build/disks/work.ext4]` 启动桌面及独立 COM1 shell。先聚焦启动器，使用 `1`/`2`/`3` 启动或停止、`r` 替换会话、`q` 退出。
 
-`cargo xtask desktop-test` 通过仅回环 TCP QMP 执行五次无窗口 QEMU 启动，验证实际物理输入/故障/重启、任务/FD 压力、精确保存内容、普通 ext4 重启、ext2 及缺设备回退。证据位于 `build/desktop-test/`，`desktop-test.result.txt` 报告整体结果，失败不会被掩盖。显式 `desktop test` 会话（专用测试 ISO 自动选择）启用启动器 `f`/`b` 原始客户端探针和 F12 合成器 UD2，不属于普通桌面快捷键。选定的 5 秒操作/UART 预算及原资源限额已本地通过。实测边界和保留记录见 [M17.1](../validation/M17.1.md)。真实图形编译终端尚未实现，下一步为 M17.2。
+`cargo xtask desktop-test` 通过仅回环 TCP QMP 执行五次无窗口 QEMU 启动，验证实际物理输入/故障/重启、任务/FD 压力、精确保存内容、普通 ext4 重启、ext2 及缺设备回退。证据位于 `build/desktop-test/`，`desktop-test.result.txt` 报告整体结果，失败不会被掩盖。显式 `desktop test` 会话（专用测试 ISO 自动选择）启用启动器 `f`/`b` 原始客户端探针和 F12 合成器 UD2，不属于普通桌面快捷键。选定的 5 秒操作/UART 预算及原资源限额已本地通过。实测边界和保留记录见 [M17.1](../validation/M17.1.md)。此项保留 M17.1 配置；另行验收的 M17.2 终端见下文。
+
+## M17.2 真实 PTY 终端
+
+桌面归档现在还构建并准入原生终端及单独固定版本、启用前台作业控制的 ash。分发时保留生成的 `busybox-terminal-1.36.1-source.tar.gz` 源码包。聚焦启动器按 `t`；F4 关闭，F5 重开 shell，Shift-PgUp/PgDn 查看历史。终端替换第三个 GUI 客户端，保持四窗口。`run --desktop` 提供 shell；`terminal-image --toolchain` 或 `run --desktop --toolchain --disk build/disks/pty-work.ext4` 加入已验证的 M11 工具。用 `ext4-journal-image --linux` 显式创建该工作盘；不可变 personality 标记继续决定可执行准入。
+
+`cargo xtask desktop-pty-test` 需要完成源码构建的 M11 安装树，执行实际图形 C 编译及 PTY 故障/重启检查；`--without-toolchain` 仅运行较小终端/运行时门禁，不能代替编译器验收。结果、UART/TCP-QMP、真实 PPM 和停盘精确转储位于 `build/desktop-pty-test/`。原 `terminal-test` 仍为独立 UART 门禁。详见 [PTY 契约](../milestones/M17_PTY.md)及 [M17.2 证据](../validation/M17.2.md)。下一步 M17.3 可靠文件/编辑器；M17.5 仍需完整三语言图形开发流程和编译负载响应验收。

@@ -37,6 +37,7 @@ GitHub Actions 暂时**仅在推送 `main` 时运行**，关闭 PR、手动和�
 | M15.6 | bzip2 和内核各进行两轮独立干净构建，最终产物逐字节一致，归档证据与全部 12 次启动/拒绝/恢复会话通过 |
 | M16（有界本地配置） | 受检输入、后端/缓存解耦、受控 ext4 只读/写入及 JBD2 恢复；新盘 bzip2/串口验收，以及堆/VFS/FD/任务/磁盘耗尽恢复后的真实内核重建；远端 CI 单独记录 |
 | M17.1 | 受监督桌面、C/C++/Rust 同时输入/窗口、真实客户端/合成器故障、有界重启、资源复用及五次持久化/回退启动 |
+| M17.2 | 真实 Linux-musl PTY、有界 ANSI/回滚、Ctrl+C/缩放、实际 GCC 编译、耗尽清理及重启精确字节 |
 
 证据按阶段收录在[验收索引](docs/zh-CN/index.md#验收记录)，各记录明确实际运行的检查。
 已配置 CI、远端 CI 实际结果和本地验收是分别记录的事实。
@@ -55,7 +56,7 @@ ext2 没有日志或断电恢复。通用 Linux/glibc、SMP、USB/实机支持�
 
 项目所有者确定的顺序为 **M16 资源/VFS/ext4 → M17 开发桌面 → M18 有条件的编译器及镜像自举**。
 M16 已实现后端/缓存、受控 ext4 只读/写入、JBD2 恢复和显式启用的迁移/构建验收。
-M17.1 受监督会话、物理输入、真实客户端/合成器故障、资源复用及文件保留已通过本地五启动验收；M17.2–M17.5 和 M18 仍为计划。
+M17.1 受监督会话、物理输入、真实客户端/合成器故障、资源复用及文件保留已通过本地五启动验收；M17.2 的真实 PTY shell/编译/重启配置也已本地验收；M17.3–M17.5 和 M18 仍为计划。
 
 1. [M16 基础能力](docs/zh-CN/milestones/M16_FOUNDATION.md)：远端 CI 按所有者要求暂缓；声明的内核容量配置已本地通过，
    更广负载仍需独立定容。JBD2 与新盘迁移已有独立的 [M16.5](docs/zh-CN/validation/M16.5.md)/
@@ -70,7 +71,7 @@ M17.1 受监督会话、物理输入、真实客户端/合成器故障、资源�
 全新文件系统格式独立推进。[STATUS](docs/zh-CN/guides/STATUS.md) 将已观察到的工具链依赖下载
 失败与本地验收分开记录。
 
-所有者已暂缓 M16 远端收尾，授权在 `feat/m17-desktop` 开始 M17。`cargo xtask desktop-build` 构建启动器及宿主构建的既有 C/C++/Rust 客户端，并包含显式 Linux 边界探针；`cargo xtask run --desktop [--disk build/disks/work.ext4]` 选择显式桌面会话。`cargo xtask desktop-test` 验证已验收的有界配置。见 [M17.1 本地验收](docs/zh-CN/validation/M17.1.md)。下一步是 M17.2 的真实 PTY 终端。
+所有者已暂缓 M16 远端收尾，授权在 `feat/m17-desktop` 开始 M17。`cargo xtask desktop-build` 构建启动器及宿主构建的既有 C/C++/Rust 客户端，并包含显式 Linux 边界探针；`cargo xtask run --desktop [--disk build/disks/work.ext4]` 选择显式桌面会话。`cargo xtask desktop-test` 验证已验收的有界配置。见 [M17.1 本地验收](docs/zh-CN/validation/M17.1.md)。M17.2 已加入真实 PTY 终端：聚焦启动器按 `t`，`F5` 重开 shell，`F4` 关闭。`cargo xtask run --desktop --toolchain --disk build/disks/pty-work.ext4` 将已验证的 M11 工具加入显式 Linux personality 工作盘。详见 [PTY 契约](docs/zh-CN/milestones/M17_PTY.md)及 [M17.2 证据](docs/zh-CN/validation/M17.2.md)。下一步为 M17.3 文件与可靠编辑。
 
 ## 构建与启动
 

@@ -37,6 +37,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "anova-terminal"
+version = "0.1.0"
+
+[[package]]
 name = "compositor"
 version = "0.1.0"
 dependencies = [
@@ -129,4 +133,15 @@ name = "shell"
 version = "0.1.0"
 dependencies = [
  "anova-rt",
+]
+
+[[package]]
+name = "terminal"
+version = "0.1.0"
+dependencies = [
+ "anova-gui",
+ "anova-gui-runtime",
+ "anova-gui-user",
+ "anova-rt",
+ "anova-terminal",
 ]

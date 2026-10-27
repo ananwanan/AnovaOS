@@ -11,6 +11,7 @@ pub(crate) fn network_seed(bytes: &mut [u8]) -> Result<(), i64> {
 }
 mod loader;
 mod process_control;
+mod pty;
 #[cfg(feature = "qemu-test")]
 mod validation;
 use crate::{
@@ -66,6 +67,7 @@ struct Process {
     io: Option<TrapFrame>,
     network_deadline: Option<u64>,
     thread: linux::threads::Thread,
+    pty_member: Option<u64>,
 }
 static CAPTURE: AtomicPtr<user::Context> = AtomicPtr::new(ptr::null_mut());
 static USER_IRQS: AtomicU64 = AtomicU64::new(0);
@@ -123,6 +125,7 @@ struct Kernel {
     fs: Vfs<'static>,
     network: Option<crate::net::Stack>,
     terminal: fs::Terminal,
+    ptys: [Option<pty::Session>; 4],
     #[cfg(feature = "gui")]
     gui: crate::gui::Gui,
     #[cfg(feature = "bootstrap-metrics")]
@@ -142,6 +145,7 @@ impl Kernel {
             fs: Vfs::new(boot::initramfs()).map_err(|_| anova_memory::Error::OutOfMemory)?,
             network: None,
             terminal: fs::Terminal::new().map_err(|_| anova_memory::Error::OutOfMemory)?,
+            ptys: core::array::from_fn(|_| None),
             #[cfg(feature = "gui")]
             gui: crate::gui::Gui::default(),
             #[cfg(feature = "bootstrap-metrics")]
@@ -188,11 +192,21 @@ impl Kernel {
         parent: u64,
         personality: &str,
     ) -> Result<usize, i64> {
+        self.add_environment(bytes, args, parent, personality, &[])
+    }
+    fn add_environment(
+        &mut self,
+        bytes: &[u8],
+        args: &[&str],
+        parent: u64,
+        personality: &str,
+        environment: &[&str],
+    ) -> Result<usize, i64> {
         let i = self.policy.insert(parent)?;
         let result = (|| {
             let stack = mm::user::KernelStack::new(i).map_err(|_| NO_MEMORY)?;
             let image = self
-                .load_image(bytes, personality, args, &[])
+                .load_image(bytes, personality, args, environment)
                 .map_err(|e| match e {
                     loader::LoadError::Memory(_) => NO_MEMORY,
                     _ => INVALID_ARGUMENT,
@@ -220,6 +234,7 @@ impl Kernel {
                 io: None,
                 network_deadline: None,
                 thread: linux::threads::Thread::new(self.policy.entry(i).pid),
+                pty_member: None,
             })
         })();
         match result {
@@ -293,6 +308,7 @@ impl Kernel {
                 io: None,
                 network_deadline: None,
                 thread: linux::threads::Thread::new(self.policy.entry(i).pid),
+                pty_member: self.process(parent).pty_member,
             })
         })();
         match result {
@@ -348,6 +364,8 @@ impl Kernel {
         Ok(())
     }
     fn finish(&mut self, i: usize, outcome: Outcome) {
+        let owner = self.policy.entry(i).pid;
+        self.pty_close_owner(owner);
         self.linux_clear_tid(i);
         let pid = self.policy.entry(i).pid;
         #[cfg(feature = "gui")]
@@ -388,6 +406,12 @@ impl Kernel {
         self.metrics.reaps += 1;
     }
     fn wait(&mut self, i: usize, pid: u64, output: UserAddr) -> Option<i64> {
+        if self.process(i).image.as_ref().unwrap().linux
+            && self.process(i).context.frame.rdx & 2 != 0
+            && let Some(result) = self.linux_wait_stopped(i, pid, output)
+        {
+            return Some(result);
+        }
         let process = self.process(i);
         let result = if process.image.as_ref().unwrap().linux
             && process.thread.tgid != self.policy.entry(i).pid
@@ -475,6 +499,7 @@ impl Kernel {
         let f = self.process(i).context.frame;
         let result = match f.rax {
             anova_abi::process::SYSCALL => self.process_control(i, &f),
+            anova_abi::pty::SYSCALL => self.pty_control(i, &f).unwrap_or_else(|e| e),
             #[cfg(feature = "gui")]
             anova_gui::transport::SYS_GUI => {
                 let pid = self.policy.entry(i).pid;

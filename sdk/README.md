@@ -70,3 +70,7 @@ use `cargo xtask gui-sdk` for the independent companion release. See the
 
 The source export includes both `README.md` and `README.zh-CN.md` in its
 checksum inventory, so language switching is available in the exported SDK.
+
+## Experimental desktop interfaces
+
+`anova-rt::process` (`0x101`) and `anova-rt::pty` (`0x102`) are separate versioned desktop experiments, not changes to the frozen SDK/native-v1 syscall records. PTY handles have exact creator ownership, nonblocking bounded transfers and kernel cleanup of the admitted Linux family. The GUI C/C++/Rust ABI remains 1.0; the reusable low-level Rust Canvas does not grant transport authority. See [PTY contract](../docs/en/milestones/M17_PTY.md).

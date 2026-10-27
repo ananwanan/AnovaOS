@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Build a supervised desktop with unchanged C/C++/Rust GUI reference clients.
+//! Build a supervised desktop with C/C++/Rust clients and an explicitly admitted PTY shell.
 //! Host-built clients establish session inputs, independently of guest compiler acceptance.
 //! A tiny explicitly admitted Linux fixture checks the native supervisor's personality boundary.
 
@@ -173,6 +173,7 @@ pub fn prepare(root: &Path) -> Result<PathBuf> {
         "/etc/motd",
         b"AnovaOS supervised desktop development profile\n",
     );
+    pty_terminal::append(root, &mut archive)?;
     anova_vfs::Vfs::new(&archive).map_err(|error| format!("Desktop archive: {error}"))?;
     let path = work.join("initramfs.anovafs");
     output_path(&path)?;
@@ -190,8 +191,12 @@ pub fn image(root: &Path) -> Result<PathBuf> {
     image_contents(root, &kernel, Some(&archive), "desktop")
 }
 
-pub fn run(root: &Path, disk: Option<&Path>) -> Result<()> {
-    let iso = image(root)?;
+pub fn run(root: &Path, disk: Option<&Path>, compiler: bool) -> Result<()> {
+    let iso = if compiler {
+        pty_terminal::image(root, true)?
+    } else {
+        image(root)?
+    };
     let vars = Temporary::new(root, "desktop-run")?;
     let mut cmd = qemu_disk(root, &iso, &vars.0, false, disk, false)?;
     cmd.args([

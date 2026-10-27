@@ -6,7 +6,7 @@
 本索引覆盖两种语言的阶段设计、开发指南与历史验收证据。当前受测范围覆盖 M0–M13、M14.1–M14.5 与 M15.1–M15.6；M15.3/M15.4 是有阻塞结论的编译器可行性评估，M15.5/M15.6 的内核镜像仍由宿主辅助打包。
 
 后续计划为 M16 资源/VFS/ext4、M17 开发桌面、M18 有条件自举，M16 的后端/缓存和受控 ext4 只读部分已本地验证，
-受控写入、JBD2 恢复、迁移和声明的内核容量已有本地证据，远端 CI 待验。M17.1 的有界五启动配置已完成物理输入、故障重启、资源复用及文件保留本地验收；M17.2–M17.5/M18 仍为计划，详见路线图和各阶段证据。
+受控写入、JBD2 恢复、迁移和声明的内核容量已有本地证据，远端 CI 待验。M17.1 的有界五启动配置已完成物理输入、故障重启、资源复用及文件保留本地验收；M17.2 的真实 PTY/GCC/重启已本地验收，M17.3–M17.5/M18 仍为计划，详见路线图和各阶段证据。
 
 [项目 README](../../README.zh-CN.md) · [开发规范](../../AGENTS.md) · [当前状态](guides/STATUS.md) · [路线图](ROADMAP.md)
 
@@ -48,6 +48,7 @@
 - [M15_RUST.md](milestones/M15_RUST.md)
 - [M16_FOUNDATION.md](milestones/M16_FOUNDATION.md)
 - [M17_DESKTOP.md](milestones/M17_DESKTOP.md)
+- [M17_PTY.md](milestones/M17_PTY.md)
 - [M2_CPU.md](milestones/M2_CPU.md)
 - [M3_MEMORY.md](milestones/M3_MEMORY.md)
 - [M4_USERSPACE.md](milestones/M4_USERSPACE.md)
@@ -82,6 +83,7 @@
 - [M16.6.md](validation/M16.6.md)
 - [M16_CAPACITY.md](validation/M16_CAPACITY.md)
 - [M17.1.md](validation/M17.1.md)
+- [M17.2.md](validation/M17.2.md)
 - [M2.md](validation/M2.md)
 - [M3.md](validation/M3.md)
 - [M4.md](validation/M4.md)

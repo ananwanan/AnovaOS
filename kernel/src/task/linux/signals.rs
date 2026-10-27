@@ -159,6 +159,7 @@ impl Kernel {
     ) {
         if signal == 18 || signal == 9 {
             self.process_mut(i).thread.stopped = false;
+            self.process_mut(i).thread.stop_status = None;
             self.policy.ready(i);
         }
         let p = self.process_mut(i);
@@ -381,7 +382,22 @@ impl Kernel {
         if action.handler == 0 && matches!(signal, 19..=22) {
             self.process_mut(i).image.as_mut().unwrap().pending &= !(1u64 << (signal - 1));
             self.process_mut(i).thread.stopped = true;
+            self.process_mut(i).thread.stop_status = Some(signal);
             self.policy.block(i);
+            let pid = self.policy.entry(i).pid;
+            let parent = self.policy.entry(i).parent;
+            if self.process(i).thread.tgid == pid
+                && let Some(parent) = (0..CAPACITY).find(|&k| {
+                    self.policy.entry(k).pid == parent
+                        && self.processes[k].as_ref().is_some_and(|p| {
+                            p.image
+                                .as_ref()
+                                .is_some_and(|x| x.linux && x.actions.borrow()[16].flags & 1 == 0)
+                        })
+                })
+            {
+                self.queue_signal_info(parent, 17, pid as u32, 5, 0, signal as i32);
+            }
             return Ok(false);
         }
         if action.handler == 0 || signal == 9 {
