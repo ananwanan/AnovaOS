@@ -4,6 +4,8 @@
 //! Supervise a compositor and three admitted GUI clients alongside an independent COM1 shell.
 //! Bound restarts, reap every owned child and retain persisted files across session replacement.
 
+mod checks;
+
 use anova_gui::transport as t;
 use anova_gui_runtime::{Error, GuiEvent, GuiRect, GuiWindowDesc, Window};
 use anova_gui_user as gui;
@@ -18,6 +20,18 @@ struct Session {
 }
 
 impl Session {
+    fn probe(&mut self, index: usize, mode: &str) -> Result<(), i64> {
+        if self.clients[index].is_some() {
+            self.toggle(index)?;
+        }
+        let pid = rt::spawn("gui-client", mode)?;
+        self.clients[index] = Some(pid);
+        gui::log(format_args!(
+            "[DESKTOP:PROBE] app={index} mode={mode} pid={pid}\n"
+        ));
+        Ok(())
+    }
+
     fn toggle(&mut self, index: usize) -> Result<(), i64> {
         if let Some(pid) = self.clients[index] {
             stop(pid)?;
@@ -111,10 +125,17 @@ fn render(window: &mut Window, session: &Session, event: Option<&GuiEvent>) -> R
     }
 }
 
-fn run() -> Result<(), i64> {
+fn gui_error(error: Error) -> i64 {
+    match error {
+        Error::Disconnected => BROKEN_PIPE,
+        _ => IO_ERROR,
+    }
+}
+
+fn run(test: bool) -> Result<(), i64> {
     for generation in 0..=RESTARTS {
         let mut session = Session {
-            server: rt::spawn("compositor", "desktop")?,
+            server: rt::spawn("compositor", if test { "desktop-test" } else { "desktop" })?,
             clients: [None; 3],
         };
         let outcome = (|| -> Result<bool, i64> {
@@ -122,11 +143,11 @@ fn run() -> Result<(), i64> {
             gui::scalar(t::CLOSE)?;
             // Drop the launcher window before replacing its compositor/session.
             let mut window =
-                Window::create(GuiWindowDesc::new(20, 20, 320, 200)).map_err(|_| IO_ERROR)?;
+                Window::create(GuiWindowDesc::new(20, 20, 320, 200)).map_err(gui_error)?;
             for index in 0..3 {
                 session.toggle(index)?;
             }
-            render(&mut window, &session, None).map_err(|_| IO_ERROR)?;
+            render(&mut window, &session, None).map_err(gui_error)?;
             gui::log(format_args!(
                 "[DESKTOP:READY] generation={generation} session={identity} clients=3 quota=4\n"
             ));
@@ -143,13 +164,14 @@ fn run() -> Result<(), i64> {
                     Err(Error::Disconnected) => return Ok(true),
                     Err(_) => return Err(IO_ERROR),
                 };
-                let mut action =
-                    render(&mut window, &session, Some(&event)).map_err(|_| IO_ERROR)?;
+                let mut action = render(&mut window, &session, Some(&event)).map_err(gui_error)?;
                 if event.kind == 2 && event.state == 1 {
                     match event.codepoint {
                         49..=51 => action = event.codepoint - 48,
                         114 => return Ok(true),
                         113 => return Ok(false),
+                        102 if test => session.probe(2, "red")?,
+                        98 if test => session.probe(1, "blue")?,
                         _ => {}
                     }
                 }
@@ -157,17 +179,17 @@ fn run() -> Result<(), i64> {
                     if let Err(error) = session.toggle(action as usize - 1) {
                         gui::log(format_args!("[DESKTOP:LAUNCH_ERROR] error={error}\n"));
                     }
-                    render(&mut window, &session, None).map_err(|_| IO_ERROR)?;
+                    render(&mut window, &session, None).map_err(gui_error)?;
                 }
             }
         })();
         session.cleanup()?;
         match outcome {
             Ok(false) => return Ok(()),
-            Ok(true) if generation < RESTARTS => {
+            Ok(true) | Err(BROKEN_PIPE) if generation < RESTARTS => {
                 rt::write(b"[DESKTOP:RESTART] unsaved_buffers_discarded=true\n");
             }
-            Ok(true) => return Err(BUSY),
+            Ok(true) | Err(BROKEN_PIPE) => return Err(BUSY),
             Err(error) => return Err(error),
         }
     }
@@ -200,6 +222,7 @@ fn control_check() {
     assert_eq!(rt::process::stop(child), Err(NO_CHILD));
     assert!(rt::process::poll(replacement).unwrap().is_none());
     stop(replacement).unwrap();
+    checks::boundaries();
     rt::write(b"[DESKTOP:CONTROL_PASS] copy_failure_retained=true stale_pid_rejected=true\n");
 }
 
@@ -218,7 +241,7 @@ unsafe extern "C" fn anova_main(argc: usize, argv: *const *const u8) -> u32 {
         control_check();
         return 0;
     }
-    match run() {
+    match run(argument == b"test") {
         Ok(()) => 0,
         Err(error) => {
             gui::log(format_args!(

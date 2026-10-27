@@ -650,6 +650,8 @@ blocks at peak; the earlier pressure session separately reached real limits and
 verified reuse. Read the capacity record for frame sampling limits, exact input
 closure and complete retained logs before applying these figures to another recipe.
 
-## Initial M17.1 desktop profile
+## Accepted M17.1 desktop profile
 
-`cargo xtask desktop-build` builds native-only inputs and hashes without Linux toolchain downloads. `cargo xtask desktop-image` creates `build/images/anova-desktop.iso`; `cargo xtask run --desktop [--disk build/disks/work.ext4]` boots it with an independent COM1 shell. Launcher keys: `1`/`2`/`3` launch or stop, `r` replaces the session, `q` exits. Focus the launcher first. Three existing clients are host-built; this profile has not passed QEMU acceptance. See [M17.1](../validation/M17.1.md) for resources, ABI and pending gates.
+`cargo xtask desktop-build` builds the native supervisor and existing host-built C/C++/Rust clients, plus a tiny explicitly Linux-personality boundary fixture, without compiler seed downloads. `cargo xtask desktop-image` creates `build/images/anova-desktop.iso`; `cargo xtask run --desktop [--disk build/disks/work.ext4]` boots it with an independent COM1 shell. Launcher keys: `1`/`2`/`3` launch or stop, `r` replaces the session, `q` exits. Focus the launcher first.
+
+`cargo xtask desktop-test` runs five headless QEMU boots with loopback-only TCP QMP, genuine physical input/fault/restart scenarios, task/FD pressure, exact saved bytes, ordinary ext4 reboot, ext2 and missing-device fallback. Evidence is under `build/desktop-test/`; `desktop-test.result.txt` reports the overall result and failures remain failures. The explicit `desktop test` session (selected automatically by the dedicated test ISO) enables launcher `f`/`b` raw-client probes and F12 compositor UD2; these are not ordinary desktop shortcuts. The selected 5-second gesture/UART budgets and unchanged resource limits passed locally. See [M17.1](../validation/M17.1.md) for measured scope and preserved records. This is not a graphical compiler terminal; M17.2 is next.

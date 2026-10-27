@@ -36,6 +36,7 @@ GitHub Actions 暂时**仅在推送 `main` 时运行**，关闭 PR、手动和�
 | M15.5 | 使用继承工具和目标库在系统内编译真实内核；保留 ELF 后由宿主辅助打包，验证启动身份与恢复 |
 | M15.6 | bzip2 和内核各进行两轮独立干净构建，最终产物逐字节一致，归档证据与全部 12 次启动/拒绝/恢复会话通过 |
 | M16（有界本地配置） | 受检输入、后端/缓存解耦、受控 ext4 只读/写入及 JBD2 恢复；新盘 bzip2/串口验收，以及堆/VFS/FD/任务/磁盘耗尽恢复后的真实内核重建；远端 CI 单独记录 |
+| M17.1 | 受监督桌面、C/C++/Rust 同时输入/窗口、真实客户端/合成器故障、有界重启、资源复用及五次持久化/回退启动 |
 
 证据按阶段收录在[验收索引](docs/zh-CN/index.md#验收记录)，各记录明确实际运行的检查。
 已配置 CI、远端 CI 实际结果和本地验收是分别记录的事实。
@@ -54,7 +55,7 @@ ext2 没有日志或断电恢复。通用 Linux/glibc、SMP、USB/实机支持�
 
 项目所有者确定的顺序为 **M16 资源/VFS/ext4 → M17 开发桌面 → M18 有条件的编译器及镜像自举**。
 M16 已实现后端/缓存、受控 ext4 只读/写入、JBD2 恢复和显式启用的迁移/构建验收。
-M17.1 已有受监督会话初版并通过宿主检查，QEMU 验收待执行；M17.2–M17.5 和 M18 仍为计划。
+M17.1 受监督会话、物理输入、真实客户端/合成器故障、资源复用及文件保留已通过本地五启动验收；M17.2–M17.5 和 M18 仍为计划。
 
 1. [M16 基础能力](docs/zh-CN/milestones/M16_FOUNDATION.md)：远端 CI 按所有者要求暂缓；声明的内核容量配置已本地通过，
    更广负载仍需独立定容。JBD2 与新盘迁移已有独立的 [M16.5](docs/zh-CN/validation/M16.5.md)/
@@ -69,7 +70,7 @@ M17.1 已有受监督会话初版并通过宿主检查，QEMU 验收待执行；
 全新文件系统格式独立推进。[STATUS](docs/zh-CN/guides/STATUS.md) 将已观察到的工具链依赖下载
 失败与本地验收分开记录。
 
-所有者已暂缓 M16 远端收尾，授权在 `feat/m17-desktop` 开始 M17。`cargo xtask desktop-build` 构建纯原生启动器及现有 C/C++/Rust 客户端；`cargo xtask run --desktop [--disk build/disks/work.ext4]` 选择显式桌面会话。见 [M17.1 实现和待执行验收](docs/zh-CN/validation/M17.1.md)。
+所有者已暂缓 M16 远端收尾，授权在 `feat/m17-desktop` 开始 M17。`cargo xtask desktop-build` 构建启动器及宿主构建的既有 C/C++/Rust 客户端，并包含显式 Linux 边界探针；`cargo xtask run --desktop [--disk build/disks/work.ext4]` 选择显式桌面会话。`cargo xtask desktop-test` 验证已验收的有界配置。见 [M17.1 本地验收](docs/zh-CN/validation/M17.1.md)。下一步是 M17.2 的真实 PTY 终端。
 
 ## 构建与启动
 
@@ -132,7 +133,7 @@ UEFI/Limine、四级页表，并分别配置内核/用户态编译参数。
 | [项目大纲](docs/zh-CN/PROJECT_OUTLINE.md)、[路线图](docs/zh-CN/ROADMAP.md) | 目标、依赖、验收与剩余工作 |
 | [架构](docs/zh-CN/ARCHITECTURE.md)、[兼容范围](docs/zh-CN/COMPATIBILITY.md) | 子系统所有权、ABI、限制及受测软件 |
 | [开发指南](docs/zh-CN/index.md#开发指南) | 配置、风格、工具链、许可、需求、状态与文件用途 |
-| [阶段设计](docs/zh-CN/index.md#阶段设计)、[验收记录](docs/zh-CN/index.md#验收记录) | 截至 M15.6 的验收契约/证据、部分 M16 实现及 M17 计划 |
+| [阶段设计](docs/zh-CN/index.md#阶段设计)、[验收记录](docs/zh-CN/index.md#验收记录) | 截至 M15.6 的验收契约/证据、有界本地 M16/M17.1 及后续 M17 计划 |
 | [第三方输入与声明](docs/zh-CN/index.md#第三方输入与声明) | 来源及原样保留的上游许可证正文 |
 | [原生 SDK](sdk/README.zh-CN.md)、[GUI SDK](sdk/gui/README.zh-CN.md)、[重建配方](ports/bootstrap/README.zh-CN.md) | 各组件旁的双语开发入口 |
 

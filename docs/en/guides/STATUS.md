@@ -3,9 +3,11 @@
 
 **English** | [简体中文](../../zh-CN/guides/STATUS.md)
 
-## M17.1 implementation started (2026-10-27)
+## M17.1 supervised desktop locally accepted (2026-10-27)
 
-The owner deferred M16 remote closeout and authorized M17.1 on `feat/m17-desktop`. The Rust session supervisor, independent COM1 init path, bounded restart/child cleanup, desktop placement and host-built existing C/C++/Rust clients are implemented. Host compilation and logic checks passed; QEMU/physical-input, persistence and failure acceptance have not run. See [M17.1](../validation/M17.1.md). M17.2–M17.5 remain unimplemented.
+The owner deferred M16 remote closeout and authorized M17 on `feat/m17-desktop`. `desktop-test` now passes five QEMU boots: three existing host-built C/C++/Rust GUI clients with physical input/focus/movement, close/relaunch, quotas, actual client/compositor UD2 faults, fresh-session reconnection and the shared three-replacement limit. Direct-child/Linux rejection, real task/FD exhaustion/reuse, independent COM1 restart, exact ext4/reboot/ext2 bytes and missing-device recovery pass. A disconnection-during-render restart defect was found and fixed.
+
+Declared 5,000 ms interaction bounds passed: selected C/C++/Rust gestures took 2,360/1,763/2,988 ms through verified scanout; COM1 recovery peaked at 72 ms. Boundary samples peaked at 625,952 heap bytes, 4,533 additional frames, 52 VFS slots and deliberate 32-task/32-FD pressure. No quotas were raised. See [M17.1](../validation/M17.1.md) for complete retained evidence and limits. Remote CI and hardware remain unverified. M17.2–M17.5 remain unimplemented; the explicitly admitted Linux-musl PTY terminal is next.
 
 ## M16 foundation progress (2026-10-27)
 
@@ -62,7 +64,7 @@ Remote CI and publication are separate from local acceptance.
 
 The owner selected **resources/VFS/ext4 → usable development desktop → conditional
 compiler/image self-hosting**. That planning-only change had no implementation; the M16 progress above supersedes
-its unimplemented status. M17.1 has since started as described above; M17.2–M17.5/M18 remain planned and M16 remote CI is pending.
+its unimplemented status. M17.1 has since passed its bounded local acceptance as described above; M17.2–M17.5/M18 remain planned and M16 remote CI is pending.
 
 | Plan | Scope | Next prerequisite |
 | --- | --- | --- |
@@ -317,7 +319,7 @@ bounds recorded here. Native limits remain separate.
 
 ## Next task
 
-The active task is M17.1 QEMU acceptance and measured session recovery; M16 remote CI is paused by owner request. M17.2 follows accepted session foundations.
+The next task is M17.2: an explicitly admitted Linux-musl shell/build-tool profile connected to the native graphical terminal through a real PTY, with ANSI/scrollback bounds, Ctrl+C, resize and exhaustion recovery. M17.1 session foundations passed locally; M16 remote CI remains paused by owner request.
 
 The independently deferred compiler route starts with the measured POSIX build-utility,
 arithmetic dependency and storage/inode/VFS capacity blockers, followed by a

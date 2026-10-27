@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Build a native-only supervised desktop with unchanged C/C++/Rust GUI reference clients.
+//! Build a supervised desktop with unchanged C/C++/Rust GUI reference clients.
 //! Host-built clients establish session inputs, independently of guest compiler acceptance.
+//! A tiny explicitly admitted Linux fixture checks the native supervisor's personality boundary.
 
 use super::*;
 use sha2::{Digest, Sha256};
@@ -31,6 +32,22 @@ pub fn prepare(root: &Path) -> Result<PathBuf> {
     )?;
 
     let mut inventory = String::from("profile=M17.1-development\nclient_build=host\n");
+    let linux = work.join("linux-park.elf");
+    output_path(&linux)?;
+    command(
+        Command::new("gcc")
+            .args(["-nostdlib", "-static", "-no-pie", "-Wl,--build-id=none"])
+            .arg(root.join("tests/guest/desktop/linux-park.S"))
+            .arg("-o")
+            .arg(&linux),
+    )?;
+    let linux_bytes = fs::read(&linux)?;
+    anova_elf::parse_linux(&linux_bytes)
+        .map_err(|error| format!("Desktop Linux boundary fixture: {error:?}"))?;
+    inventory.push_str(&format!(
+        "linux_park_sha256={:x}\n",
+        Sha256::digest(&linux_bytes)
+    ));
     for (name, source) in [("c", "main.c"), ("cpp", "main.cpp"), ("rust", "main.rs")] {
         let object = work.join(format!("{name}.o"));
         let executable = work.join(format!("desktop-{name}.elf"));
@@ -120,9 +137,10 @@ pub fn prepare(root: &Path) -> Result<PathBuf> {
     let mut archive = b"ANOVAFS1".to_vec();
     // See the checked archive encoder: 12-byte header includes the entry count at bytes 8..12.
     archive.extend_from_slice(&0_u32.to_le_bytes());
-    for path in ["/bin", "/etc", "/tmp", "/dev", "/persist"] {
+    for path in ["/bin", "/etc", "/tmp", "/dev", "/persist", "/linux"] {
         toolchain::append(&mut archive, 2, path, &[]);
     }
+    toolchain::append(&mut archive, 5, "/linux/desktop-park", &linux_bytes);
     for name in apps::NAMES {
         toolchain::append(
             &mut archive,

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Run the complete retained runtime, SDK, toolchain and ext4 gates only for main pushes.
+# Run retained runtime, desktop, SDK, toolchain and ext4 gates only for main pushes.
 name: Bare-metal boot
 
 on:
@@ -53,6 +53,7 @@ jobs:
           cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features input-test -- -D warnings
           cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features graphics,gui -- -D warnings
           cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features graphics,gui,gui-test -- -D warnings
+          cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features desktop-test -- -D warnings
           cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features gpu -- -D warnings
           cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features gpu-test -- -D warnings
       - name: Test host logic
@@ -82,6 +83,8 @@ jobs:
         run: cargo xtask input-test
       - name: Verify isolated native windows, physical input, redraw and compositor recovery
         run: cargo xtask gui-test
+      - name: Verify supervised desktop, fault recovery, resource reuse and persisted work
+        run: cargo xtask desktop-test
       - name: Verify persistent sources, binaries, clean shutdown and device failures
         run: cargo xtask persistence-test
       - name: Verify controlled ext4 readonly, large namespace, reboot and rejection
@@ -105,6 +108,8 @@ jobs:
             build/logs/
             build/input/
             build/gui/
+            build/desktop/
+            build/desktop-test/
             build/gpu/
             build/foundation/
           if-no-files-found: ignore

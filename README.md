@@ -40,6 +40,7 @@ claim of a complete desktop OS or complete self-hosting.
 | M15.5 | Actual guest kernel compilation with inherited tools/target libraries, exact retained-ELF host-assisted packaging and verified boot identity/recovery |
 | M15.6 | Two independent clean builds each of bzip2 and kernel, identical final artifacts, archived evidence and all 12 boot/rejection/recovery sessions |
 | M16 (bounded local profile) | Verified inputs, backend/cache isolation, controlled ext4 readonly/writes and JBD2 recovery; fresh-disk bzip2/UART acceptance and actual kernel reconstruction after heap/VFS/fd/task/disk exhaustion; remote CI tracked separately |
+| M17.1 | Supervised desktop, simultaneous C/C++/Rust input/windows, actual client/compositor faults, bounded restart, resource reuse and five persistence/fallback boots |
 
 Evidence is recorded per stage in the [validation index](docs/en/index.md#validation).
 Each record identifies its executed checks. Configured CI, actual remote CI execution
@@ -62,7 +63,7 @@ real resource exhaustion/recovery. The actual kernel build used 9,494,480 heap b
 
 The owner-approved order is **M16 resources/VFS/ext4 → M17 development desktop →
 M18 conditional compiler and image self-hosting**. M16 now has a locally verified backend/cache and
-controlled ext4 readonly/writes, JBD2 recovery and opt-in migration/build acceptance. M17.1 now has an initial supervised-session implementation with host checks; QEMU acceptance is pending. M17.2–M17.5 and M18 remain planned.
+controlled ext4 readonly/writes, JBD2 recovery and opt-in migration/build acceptance. M17.1 now has local five-boot acceptance for supervised sessions, physical input, actual client/compositor faults, resource reuse and persisted work. M17.2–M17.5 and M18 remain planned.
 
 1. [M16 foundation](docs/en/milestones/M16_FOUNDATION.md): remote CI acceptance is paused by owner request; the declared kernel capacity profile passed locally.
    Broader workload sizing remains independent. JBD2 and fresh-image migration now have separate
@@ -81,7 +82,7 @@ SMP, device IRQ/async I/O, physical hardware and a new filesystem format remain
 separate work. [STATUS](docs/en/guides/STATUS.md) records the observed failed
 toolchain dependency download separately from local acceptance.
 
-The owner deferred M16 remote closeout and authorized M17 development on `feat/m17-desktop`. `cargo xtask desktop-build` builds the native-only launcher and existing C/C++/Rust clients; `cargo xtask run --desktop [--disk build/disks/work.ext4]` selects the opt-in session. See [M17.1 implementation and pending acceptance](docs/en/validation/M17.1.md).
+The owner deferred M16 remote closeout and authorized M17 development on `feat/m17-desktop`. `cargo xtask desktop-build` builds the launcher and existing host-built C/C++/Rust clients, plus an explicit Linux boundary fixture; `cargo xtask run --desktop [--disk build/disks/work.ext4]` selects the opt-in session. `cargo xtask desktop-test` verifies the accepted bounded profile. See [M17.1 local acceptance](docs/en/validation/M17.1.md). The real PTY terminal is next in M17.2.
 
 ## Build and boot
 
@@ -149,7 +150,7 @@ and diagrams belong under `docs/assets/` when added.
 | [Project outline](docs/en/PROJECT_OUTLINE.md), [roadmap](docs/en/ROADMAP.md) | Goals, dependencies, acceptance and remaining work |
 | [Architecture](docs/en/ARCHITECTURE.md), [compatibility](docs/en/COMPATIBILITY.md) | Subsystem ownership, ABIs, limits and tested software |
 | [Guides](docs/en/index.md#guides) | Setup, style, toolchains, licensing, requirements, status and file inventory |
-| [Milestones](docs/en/index.md#milestone-designs), [validation](docs/en/index.md#validation) | Accepted contracts/evidence through M15.6, partial M16 implementation and M17 plans |
+| [Milestones](docs/en/index.md#milestone-designs), [validation](docs/en/index.md#validation) | Accepted contracts/evidence through M15.6, bounded local M16/M17.1 and remaining M17 plans |
 | [Third-party inputs](docs/en/index.md#third-party-inputs-and-notices) | Provenance and preserved upstream license texts |
 | [Native SDK](sdk/README.md), [GUI SDK](sdk/gui/README.md), [bootstrap recipes](ports/bootstrap/README.md) | Adjacent development entry points, each with a Chinese companion |
 

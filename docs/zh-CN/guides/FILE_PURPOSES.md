@@ -216,7 +216,7 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `docs/zh-CN/validation/M8.md` | 记录 M8 的实际本地执行、命令和产物身份、失败/恢复证据、当时限制与未测范围（简体中文，与英文对应）。 |
 | `docs/zh-CN/validation/M8_OPTIMIZATION.md` | 记录 M8_OPTIMIZATION 的实际本地执行、命令和产物身份、失败/恢复证据、当时限制与未测范围（简体中文，与英文对应）。 |
 | `docs/zh-CN/validation/M9.md` | 记录 M9 的实际本地执行、命令和产物身份、失败/恢复证据、当时限制与未测范围（简体中文，与英文对应）。 |
-| `kernel/Cargo.toml` | 构建 bare-metal 内核及隔离的 QEMU 故障注入配置。 |
+| `kernel/Cargo.toml` | 构建裸机内核、带资源采样的桌面会话及可选隔离 QEMU 故障测试。 |
 | `kernel/build.rs` | 拒绝宿主 target 内核构建，选择仅用于内核的 linker script。 |
 | `kernel/src/abi/mod.rs` | 适配原生系统查询；进程生命周期归 task，描述符调用归 fs。 |
 | `kernel/src/arch/mod.rs` | 选择已实现的 x86_64 硬件架构边界。 |
@@ -429,7 +429,7 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `xtask/src/disk.rs` | 创建安全的 native/Linux ext2 镜像，并用 watchdog 限时驱动重启、完整性和设备错误场景。 |
 | `xtask/src/foundation.rs` | 创建并保留受控 ext4 镜像，执行带源码/产物哈希的四次 QEMU 只读/重启/拒绝门禁。 |
 | `xtask/src/gpu.rs` | 验收指定设备的真实硬件绘制、完整 scanout 比较、故障/reset 恢复和无头 CPU 回退。 |
-| `xtask/src/graphics.rs` | 验证真实 QMP 像素、有界截图解析，以及有/无 VGA 时的串口恢复和正常关机。 |
+| `xtask/src/graphics.rs` | 验证实际图形/回退，与桌面验收共享有界 Unix/回环 TCP QMP 事务。 |
 | `xtask/src/gui.rs` | 注入真实 QMP 输入，比较原生窗口、故障恢复及每一个 scanout 像素。 |
 | `xtask/src/gui_sdk.rs` | 验证 guest 编辑/构建、物理 GUI 输入、实际画面、故障和重启后保留文件哈希。 |
 | `xtask/src/gui_sdk_build.rs` | 导出含双语指南和校验清单的 GUI 源码 SDK，打包 guest 编译器/显示镜像。 |
@@ -480,6 +480,10 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `user/rt/src/process.rs` | 封装实验非阻塞子进程轮询与身份受检停止，保留 native v1。 |
 | `user/desktop/Cargo.toml` | 通过原生进程与 GUI 接口构建 Rust 桌面会话监督器。 |
 | `user/desktop/src/main.rs` | 管理准入客户端/合成器生命周期、有界会话替换及图形启动器操作。 |
-| `xtask/src/desktop.rs` | 构建纯原生桌面输入，校验宿主构建的现有三语言客户端并打包显式镜像。 |
-| `docs/en/validation/M17.1.md` | 记录桌面初版、已执行宿主检查和未执行 QEMU 验收。 |
-| `docs/zh-CN/validation/M17.1.md` | 提供桌面初版范围、进程边界、检查和待执行验收的中文说明。 |
+| `xtask/src/desktop.rs` | 构建桌面输入及显式 Linux 边界探针，校验宿主构建的三语言客户端并打包显式镜像。 |
+| `docs/en/validation/M17.1.md` | 记录已验收桌面输入/生命周期/重启证据、预算、原始故障与剩余范围。 |
+| `docs/zh-CN/validation/M17.1.md` | 提供已验收桌面范围、进程边界、测量、故障证据与剩余工作的中文说明。 |
+| `tests/guest/desktop/linux-park.S` | 执行真实 Linux nanosleep/exit，验证原生监督拒绝存活 Linux 子进程。 |
+| `user/desktop/src/checks.rs` | 实际耗尽并复用子进程/任务/FD，检查非子进程及 Linux 边界。 |
+| `xtask/src/desktop_test.rs` | 驱动五次桌面启动、物理输入/画面、真实故障、有界恢复和精确持久文件检查。 |
+| `docs/assets/validation/M17_DESKTOP_LOCAL.json` | 保存桌面源码/输入身份、预声明预算、原始 UART/QMP/故障日志及压缩精确截图；JSON 以 purpose 字段替代注释。 |

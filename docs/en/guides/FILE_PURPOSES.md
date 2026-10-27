@@ -218,7 +218,7 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `docs/zh-CN/validation/M8.md` | Provide the complete Simplified Chinese counterpart of `docs/en/validation/M8.md`, preserving technical scope, commands, evidence and original legal texts. |
 | `docs/zh-CN/validation/M8_OPTIMIZATION.md` | Provide the complete Simplified Chinese counterpart of `docs/en/validation/M8_OPTIMIZATION.md`, preserving technical scope, commands, evidence and original legal texts. |
 | `docs/zh-CN/validation/M9.md` | Provide the complete Simplified Chinese counterpart of `docs/en/validation/M9.md`, preserving technical scope, commands, evidence and original legal texts. |
-| `kernel/Cargo.toml` | Builds the bare-metal kernel and isolated QEMU failure-injection configurations. |
+| `kernel/Cargo.toml` | Build the bare-metal kernel, sampled desktop sessions and opt-in isolated QEMU failure tests. |
 | `kernel/build.rs` | Reject host-target kernel builds and select the kernel-only linker script. |
 | `kernel/src/abi/mod.rs` | Adapt native system queries; task owns process lifecycle and fs owns descriptor calls. |
 | `kernel/src/arch/mod.rs` | Select the implemented x86_64 hardware architecture boundary. |
@@ -431,7 +431,7 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `xtask/src/disk.rs` | Create safe native/Linux ext2 profiles and drive watchdog-bounded reboot/integrity/device-error scenarios. |
 | `xtask/src/foundation.rs` | Create/retain controlled ext4 images and run four QEMU readonly/reboot/rejection gates with source/artifact hashes. |
 | `xtask/src/gpu.rs` | Gate exact-device hardware rendering, full scanout comparisons, fault/reset recovery and headless CPU fallback. |
-| `xtask/src/graphics.rs` | Verify actual QMP pixels, bounded capture parsing, serial recovery and clean shutdown with and without VGA. |
+| `xtask/src/graphics.rs` | Verify actual graphics/fallback and share bounded Unix/loopback-TCP QMP transactions with desktop acceptance. |
 | `xtask/src/gui.rs` | Inject actual QMP input and compare native windows, failure recovery and every scanout pixel. |
 | `xtask/src/gui_sdk.rs` | Verify guest edits/builds, physical GUI input, literal scanout, faults and retained reboot hashes. |
 | `xtask/src/gui_sdk_build.rs` | Export a checksummed GUI source SDK with both language guides and package its guest compiler/display image. |
@@ -482,6 +482,10 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `user/rt/src/process.rs` | Wrap experimental nonblocking child polling and identity-checked stop without changing native v1. |
 | `user/desktop/Cargo.toml` | Build the Rust desktop session supervisor against native process and GUI interfaces. |
 | `user/desktop/src/main.rs` | Own admitted client/compositor lifetimes, bounded session replacement and graphical launcher actions. |
-| `xtask/src/desktop.rs` | Build native-only desktop inputs, validate existing host-built C/C++/Rust clients and package opt-in images. |
-| `docs/en/validation/M17.1.md` | Record initial desktop implementation, executed host checks and unexecuted QEMU acceptance. |
-| `docs/zh-CN/validation/M17.1.md` | Translate initial desktop scope, process boundary, checks and pending acceptance. |
+| `xtask/src/desktop.rs` | Build desktop inputs and an explicit Linux boundary fixture, validate host-built C/C++/Rust clients and package opt-in images. |
+| `docs/en/validation/M17.1.md` | Record accepted local desktop input/lifecycle/reboot evidence, budgets, original failure and remaining scope. |
+| `docs/zh-CN/validation/M17.1.md` | Translate accepted desktop scope, process boundary, measurements, failure evidence and remaining work. |
+| `tests/guest/desktop/linux-park.S` | Execute real Linux nanosleep/exit to verify native supervision rejects live Linux children. |
+| `user/desktop/src/checks.rs` | Exhaust and reuse real child/task/FD resources while checking nonchild and Linux boundaries. |
+| `xtask/src/desktop_test.rs` | Drive five desktop boots, physical input/scanout, actual faults, bounded recovery and exact persisted bytes. |
+| `docs/assets/validation/M17_DESKTOP_LOCAL.json` | Retain desktop source/input identities, predeclared budgets, raw UART/QMP/failure logs and compressed exact screenshots; JSON uses its purpose field instead of a comment. |

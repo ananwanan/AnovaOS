@@ -139,6 +139,6 @@ negative cases and limits. Update [STATUS](guides/STATUS.md) only with actual no
 evidence; identify unexecuted checks. Keep both languages and next steps current in the same
 delivery. Milestones describe capabilities, not unverified calendar promises.
 
-## M17 development started
+## M17 session locally accepted
 
-The owner deferred M16 remote closeout and authorized M17.1. The initial supervised session is implemented and host-checked; QEMU acceptance is pending. M17.2–M17.5 and M18 remain planned. See [M17.1](validation/M17.1.md).
+The owner deferred M16 remote closeout and authorized M17.1. The supervised session passed its bounded five-boot local QEMU profile: physical three-language input/windows, resource reuse, actual faults/restarts, serial recovery and persisted work. M17.2–M17.5 and M18 remain planned. See [M17.1](validation/M17.1.md).

@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Compare QEMU's actual standard-VGA scanout with the software reference and prove COM1 recovery.
 //! Bound QMP/PPM input, retain evidence, and require clean ACPI shutdown with or without a display.
+//! Share bounded Unix-socket and loopback-TCP QMP transports with the desktop gate.
 use super::*;
 use anova_graphics::Surface;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
     io::{Read, Write},
+    net::TcpStream,
     os::unix::net::UnixStream,
 };
 
@@ -236,10 +238,30 @@ fn check_exit(text: &str, code: Option<i32>, step: usize) -> Result<()> {
 }
 
 pub(super) struct Qmp {
-    stream: UnixStream,
+    stream: Box<dyn QmpStream>,
     log: File,
     id: u64,
 }
+
+trait QmpStream: Read + Write {
+    fn read_timeout(&self, timeout: Duration) -> std::io::Result<()>;
+    fn write_timeout(&self, timeout: Duration) -> std::io::Result<()>;
+}
+
+macro_rules! qmp_stream {
+    ($socket:ty) => {
+        impl QmpStream for $socket {
+            fn read_timeout(&self, timeout: Duration) -> std::io::Result<()> {
+                self.set_read_timeout(Some(timeout))
+            }
+            fn write_timeout(&self, timeout: Duration) -> std::io::Result<()> {
+                self.set_write_timeout(Some(timeout))
+            }
+        }
+    };
+}
+qmp_stream!(UnixStream);
+qmp_stream!(TcpStream);
 
 impl Qmp {
     pub(super) fn connect(socket: &Path, log: &Path, start: Instant) -> Result<Self> {
@@ -257,7 +279,28 @@ impl Qmp {
                 Err(error) => return Err(format!("Cannot connect QMP: {error}").into()),
             }
         };
-        stream.set_write_timeout(Some(Duration::from_secs(5)))?;
+        Self::handshake(Box::new(stream), log)
+    }
+
+    /// Loopback only: no public bind, remote endpoint or change to QMP reply validation.
+    pub(super) fn connect_tcp(port: u16, log: &Path, start: Instant) -> Result<Self> {
+        let stream = loop {
+            match TcpStream::connect((std::net::Ipv4Addr::LOCALHOST, port)) {
+                Ok(stream) => break stream,
+                Err(error)
+                    if error.kind() == std::io::ErrorKind::ConnectionRefused
+                        && start.elapsed() < Duration::from_secs(5) =>
+                {
+                    thread::sleep(Duration::from_millis(20));
+                }
+                Err(error) => return Err(format!("Cannot connect loopback QMP: {error}").into()),
+            }
+        };
+        Self::handshake(Box::new(stream), log)
+    }
+
+    fn handshake(stream: Box<dyn QmpStream>, log: &Path) -> Result<Self> {
+        stream.write_timeout(Duration::from_secs(5))?;
         let mut qmp = Self {
             stream,
             log: File::create(log)?,
@@ -277,7 +320,7 @@ impl Qmp {
                 .checked_sub(start.elapsed())
                 .filter(|remaining| !remaining.is_zero())
                 .ok_or("QMP reply exceeded five seconds")?;
-            self.stream.set_read_timeout(Some(remaining))?;
+            self.stream.read_timeout(remaining)?;
             let mut byte = [0];
             self.stream.read_exact(&mut byte)?;
             bytes.push(byte[0]);
@@ -459,7 +502,7 @@ mod tests {
             let _ = server.get_mut().write_all(&reply);
         });
         let mut qmp = Qmp {
-            stream: client,
+            stream: Box::new(client),
             log: File::create(temp.0.join("qmp.log"))?,
             id: 0,
         };

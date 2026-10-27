@@ -7,7 +7,7 @@ This describes implemented boundaries through the accepted M15.6 reconstruction 
 separately scoped future architecture. Guest toolchains, native SDKs and bounded Rust GUI/GPU
 profiles are implemented; full compiler reconstruction, guest-only image generation, SMP and
 physical hardware remain separate. M16 now implements the backend/cache boundary and a
-controlled ext4 profiles, explicit JBD2 recovery and opt-in migration/build acceptance; M17.1 has an initial host-checked session implementation; QEMU acceptance and M17.2–M17.5 remain pending. Current evidence is in [STATUS](guides/STATUS.md).
+controlled ext4 profiles, explicit JBD2 recovery and opt-in migration/build acceptance; M17.1 has bounded local session/input/fault/reboot acceptance; M17.2–M17.5 remain pending. Current evidence is in [STATUS](guides/STATUS.md).
 
 ## 1. Overall structure
 
@@ -709,6 +709,6 @@ the same recovered disk completed construction and new-kernel boot recovery.
 These observations size the declared non-GUI recipe; broader workloads require
 independent measurements. Complete results and raw logs are in the capacity record.
 
-## M17.1 initial session boundary
+## M17.1 accepted session boundary
 
-The separate experimental `0x101` native process-control call validates version and exact direct-child identity before nonblocking wait or signal-15 stop. It shares checked status copying and kernel lifecycle cleanup. Rust userland owns the launcher, fixed executable list and three-replacement policy; init runs COM1 independently. Desktop builds reuse existing C/C++/Rust GUI clients through a native-only archive. GUI/native v1 records and global quotas are unchanged. Actual QEMU cleanup, persistence and capacity acceptance remain pending; see [M17.1](validation/M17.1.md).
+The separate experimental `0x101` native process-control call validates version and exact direct-child identity before nonblocking wait or signal-15 stop. It shares checked status copying and kernel lifecycle cleanup. Rust userland owns the launcher, fixed executable list and three-replacement policy; init runs COM1 independently. Desktop builds reuse existing host-built C/C++/Rust GUI clients, plus one explicitly admitted Linux nanosleep/exit boundary fixture; no compiler download is needed. GUI/native v1 records and global quotas are unchanged. Drawing-time disconnection follows the same three-replacement policy as poll-time/server loss. `desktop-test` separately verifies actual input/scanout, owned-child cleanup, quota/task/FD reuse, client/compositor faults and persisted work across five clean boots; see [M17.1](validation/M17.1.md). Its loopback-only TCP QMP transport shares the existing bounded transaction validation; ordinary Unix QMP gates remain available. Resource sampling is enabled for the desktop without increasing capacities.

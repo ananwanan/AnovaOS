@@ -7,7 +7,7 @@ This index covers matching English and Simplified Chinese designs, development g
 
 Planned follow-ups are M16 resources/VFS/ext4, M17 development desktop and conditional M18
 self-hosting. M16 now has a locally verified backend/cache and controlled ext4 readonly slice.
-Controlled writes, JBD2 recovery, migration and the declared kernel capacity have local evidence; remote CI is pending. M17.1 has an initial host-checked implementation with QEMU acceptance pending. M17.2–M17.5/M18 remain planned; see the roadmap and stage evidence.
+Controlled writes, JBD2 recovery, migration and the declared kernel capacity have local evidence; remote CI is pending. M17.1 has bounded local five-boot QEMU acceptance for physical input, fault/restart lifecycle, resource reuse and retained work. M17.2–M17.5/M18 remain planned; see the roadmap and stage evidence.
 
 [Project README](../../README.md) · [Development rules](../../AGENTS.md) · [Current status](guides/STATUS.md) · [Roadmap](ROADMAP.md)
 

@@ -20,8 +20,12 @@ unsafe extern "C" fn anova_main(argc: usize, argv: *const *const u8) -> u32 {
             rt::abi::ExitStatus { reason: 0, code: 0 }
         );
     }
-    if mode == b"desktop" {
-        let desktop = rt::spawn("/bin/desktop", "").unwrap();
+    if mode == b"desktop" || mode == b"desktop-test" {
+        let desktop = rt::spawn(
+            "/bin/desktop",
+            if mode == b"desktop-test" { "test" } else { "" },
+        )
+        .unwrap();
         let mut shell = rt::spawn("/bin/shell", "").unwrap();
         loop {
             let child = rt::wait(0).unwrap();

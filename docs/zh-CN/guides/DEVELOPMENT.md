@@ -453,6 +453,8 @@ bzip2、中断/重启保留和宿主测量的前台 UART 预算。见 [M16.5](..
 会话真实达到上限并验证复用。将这些数字用于其他配方前，应阅读容量记录中的
 物理页采样限制、精确输入闭包与完整保留日志。
 
-## M17.1 初版桌面配置
+## M17.1 已验收桌面配置
 
-`cargo xtask desktop-build` 构建纯原生输入及哈希，不下载 Linux 工具链；`cargo xtask desktop-image` 生成 `build/images/anova-desktop.iso`，`cargo xtask run --desktop [--disk build/disks/work.ext4]` 启动桌面及独立 COM1 shell。先聚焦启动器，使用 `1`/`2`/`3` 启动或停止、`r` 替换会话、`q` 退出。三个已有客户端由宿主构建，本配置尚未通过 QEMU 验收。资源、ABI 和剩余检查见 [M17.1](../validation/M17.1.md)。
+`cargo xtask desktop-build` 构建原生监督器及宿主构建的既有 C/C++/Rust 客户端，并显式准入一个小型 Linux personality 边界探针，不下载编译器种子。`cargo xtask desktop-image` 生成 `build/images/anova-desktop.iso`，`cargo xtask run --desktop [--disk build/disks/work.ext4]` 启动桌面及独立 COM1 shell。先聚焦启动器，使用 `1`/`2`/`3` 启动或停止、`r` 替换会话、`q` 退出。
+
+`cargo xtask desktop-test` 通过仅回环 TCP QMP 执行五次无窗口 QEMU 启动，验证实际物理输入/故障/重启、任务/FD 压力、精确保存内容、普通 ext4 重启、ext2 及缺设备回退。证据位于 `build/desktop-test/`，`desktop-test.result.txt` 报告整体结果，失败不会被掩盖。显式 `desktop test` 会话（专用测试 ISO 自动选择）启用启动器 `f`/`b` 原始客户端探针和 F12 合成器 UD2，不属于普通桌面快捷键。选定的 5 秒操作/UART 预算及原资源限额已本地通过。实测边界和保留记录见 [M17.1](../validation/M17.1.md)。真实图形编译终端尚未实现，下一步为 M17.2。

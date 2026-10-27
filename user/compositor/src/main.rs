@@ -116,7 +116,14 @@ fn request(core: &mut Compositor<'_>, envelope: &t::Envelope, desktop: bool) -> 
     {
         *pixel = u32::from_le_bytes(bytes.try_into().unwrap());
     }
-    core.apply(envelope.client, &request, &pixels[..count])
+    let reply = core.apply(envelope.client, &request, &pixels[..count]);
+    if desktop && request.opcode == anova_gui::op::CREATE && request.flags == 1 && reply.is_ok() {
+        gui::log(format_args!(
+            "[DESKTOP:WINDOW] client={} window={} x={} y={} width={} height={}\n",
+            envelope.client, reply.window, request.x, request.y, request.width, request.height
+        ));
+    }
+    reply
 }
 
 fn run(test: bool, restart: bool, desktop: bool) -> u32 {
@@ -254,7 +261,11 @@ unsafe extern "C" fn anova_main(argc: usize, argv: *const *const u8) -> u32 {
     if mode == b"gpu" || mode == b"gpu-fail" {
         return gpu::run(mode == b"gpu-fail");
     }
-    run(mode == b"test", mode == b"restart", mode == b"desktop")
+    run(
+        mode == b"test" || mode == b"desktop-test",
+        mode == b"restart",
+        mode == b"desktop" || mode == b"desktop-test",
+    )
 }
 
 #[panic_handler]

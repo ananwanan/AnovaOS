@@ -1147,6 +1147,8 @@ pub fn start() {
             "/bin/init",
             if cfg!(feature = "qemu-test") {
                 "test"
+            } else if cfg!(feature = "desktop-test") {
+                "desktop-test"
             } else if cfg!(feature = "desktop") {
                 "desktop"
             } else {
