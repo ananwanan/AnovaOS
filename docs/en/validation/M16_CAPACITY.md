@@ -130,3 +130,20 @@ retains the first failed attempts and their executed/skipped step boundaries.
 The manual #55 attempt 2 reproduced the same OVMF HTTP 503 in boot job
 `122040611027`; dependent guest job `122041884881` was skipped. It does not count
 as a successful baseline. The repaired acquisition must pass a new actual run.
+
+The #54 core artifact (`12712834879`, 16,179,053 bytes) was independently
+downloaded and matched SHA-256 `0f876894f490bfd21784d9b6f6711569cd831fdd10a6af518f31957c9c8af44a`.
+Its 45 [exact result records](../../assets/validation/M16_CORE_CI54.json) are
+retained permanently with the job/source identity. This accepts the core job
+only; its failed guest-toolchain job remains separate.
+
+Run #56 (`40460883750`, `e2db30f`) passed every core gate (230 host tests).
+The logs show the OVMF primary returning HTTP 503, followed by successful locked
+Launchpad acquisition; the firmware fix was exercised, not merely configured.
+The guest job passed boot input verification, then both musl bootstrap origins
+timed out before compiler source construction. No guest gate ran in this attempt.
+The additional community mirror
+`https://joeyparrish.github.io/musl-cc-mirror/x86_64-linux-musl-native.tgz`
+was independently downloaded: 89,080,066 bytes, SHA-256
+`eb1db6f0f3c2bdbdbfb993d7ef7e2eeef82ac1259f6a6e1757c33a97dbcef3ad`.
+This matches the existing seed lock; no compiler version, license or digest changes.

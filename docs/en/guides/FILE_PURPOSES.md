@@ -475,3 +475,5 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `docs/zh-CN/validation/M16_CAPACITY.md` | Translate the ext4 kernel capacity and remote CI closeout record with matching boundaries. |
 
 | `docs/assets/validation/M16_CI.json` | Retain exact remote run/job/step observations and OVMF transport failure excerpts for M16 closeout. |
+
+| `docs/assets/validation/M16_CORE_CI54.json` | Preserve digest-verified core CI artifact result records, exact source identity and bounded accepted scope. |

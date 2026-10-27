@@ -102,3 +102,18 @@ OVMF 回退采用官方保留的 Launchpad 包，实际下载后匹配原有包 
 
 手动 #55 第二次尝试在 boot job `122040611027` 重现同一 OVMF HTTP 503；
 依赖的 guest job `122041884881` 跳过，不计为成功基线。修复后的获取必须通过新实际运行。
+
+#54 核心 artifact（`12712834879`，16,179,053 字节）已独立下载并匹配 SHA-256
+`0f876894f490bfd21784d9b6f6711569cd831fdd10a6af518f31957c9c8af44a`。
+其中 45 项[精确结果记录](../../assets/validation/M16_CORE_CI54.json) 连同 job/源码标识永久保留。
+这仅接受核心 job，其失败的 guest-toolchain job 另计。
+
+第 56 次运行（`40460883750`、`e2db30f`）通过全部核心门禁（230 项宿主测试）。
+日志明确记录 OVMF 主站 HTTP 503 后，从锁定的 Launchpad 镜像成功取得包，
+因此固件修复已实际执行。客体任务通过引导输入校验，随后两个 musl 引导包
+源均连接超时，尚未开始编译器源码构建；本次未执行任何客体门禁。
+新增社区镜像
+`https://joeyparrish.github.io/musl-cc-mirror/x86_64-linux-musl-native.tgz`
+已独立完整下载：89,080,066 字节，SHA-256 为
+`eb1db6f0f3c2bdbdbfb993d7ef7e2eeef82ac1259f6a6e1757c33a97dbcef3ad`。
+其字节符合既有种子锁；编译器版本、许可证及摘要均未改变。
