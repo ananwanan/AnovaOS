@@ -48,6 +48,9 @@ SMP, USB/physical hardware support, native Rust `std`, reconstructed compilers
 and guest-only boot-image generation remain unverified. See
 [status](docs/en/guides/STATUS.md) and [compatibility](docs/en/COMPATIBILITY.md).
 
+The additional `foundation-capacity-test` implements fresh-ext4 kernel reconstruction
+and separate pressure/build accounting; actual capacity and CI results are tracked in [M16 capacity](docs/en/validation/M16_CAPACITY.md).
+
 ## Next development work
 
 The owner-approved order is **M16 resources/VFS/ext4 → M17 development desktop →

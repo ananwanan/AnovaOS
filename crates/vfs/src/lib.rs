@@ -5,6 +5,7 @@
 //! Persistent directories stream from a backend; inactive file nodes are reclaimable under pressure.
 //! Directory/cwd identities, open files, mappings and the ABI policy are pinned within fixed quotas.
 //! One non-preemptible owner serializes all mutations; no hardware, locks or user pointers.
+//! Optional backend allocation accounting is exposed without I/O for diagnostic sampling.
 extern crate alloc;
 pub mod archive;
 pub mod fd;
@@ -2142,5 +2143,9 @@ impl<'a> Vfs<'a> {
     /// This measures the vector's high-water extent, not just currently linked names.
     pub fn node_slots(&self) -> usize {
         self.nodes.len()
+    }
+    /// Backend counters include committed transient allocations, independently of cache slots.
+    pub fn storage_usage(&self) -> Option<anova_storage::filesystem::Usage> {
+        self.disk.as_ref().and_then(|disk| disk.usage())
     }
 }

@@ -493,3 +493,6 @@ M18.3 可使用现有 guest 编译器，不必等待 M18.1/M18.2。仍不可行�
 原生 libc/std、带 GUI 内核重建、SMP、设备 IRQ/异步 I/O、USB/NVMe/AHCI、更广 GPU API
 及实机仍独立界定范围，不整体作为 M17 前置条件。新命令随实际实现和证据加入。
 按 [DEV-003/DEV-004](guides/REQUIREMENTS.md) 同批维护双语文档、README、状态和验收边界。
+
+新增 ext4 内核容量门禁与本轮远端 CI 执行见 [M16 容量](validation/M16_CAPACITY.md)，
+与历史 bzip2 验收分开记录。结项要求实际成功运行与保留证据。

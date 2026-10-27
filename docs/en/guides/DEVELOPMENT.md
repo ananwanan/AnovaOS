@@ -635,3 +635,11 @@ gates retain write/flush/tear faults, independent e2fsck replay, real guest bzip
 interruption/reboot retention and host-measured foreground UART budgets. See
 [M16.5](../validation/M16.5.md) and [M16.6](../validation/M16.6.md). Default ext2,
 existing software quotas, broader M16/remote CI and M17/M18 remain separate.
+
+## M16 kernel capacity closeout
+
+`cargo xtask foundation-capacity-test` uses a fresh 64 MiB JBD2 disk with inherited Rust seeds,
+separates real heap/VFS/fd/task/disk exhaustion from clean guest kernel construction,
+and verifies exact retained-ELF boot/rejection/recovery. Budget, sampling and evidence
+contracts are in [M16 capacity](../validation/M16_CAPACITY.md). Full CI also runs on
+pushes to `feat/m16-foundation`; manual dispatch remains available.

@@ -342,3 +342,8 @@ Fresh work disks and readonly-source ext2 migration remain explicit. Preserve
 UART latency budgets, interruption, failed-build retention and ext2 fallback; read
 [M16.6](docs/en/validation/M16.6.md). Keep existing non-journal/ext2 gates. Default
 storage, full M16/remote CI acceptance, larger quotas and M17/M18 remain independent.
+
+The M16 kernel-capacity follow-up adds `cargo xtask foundation-capacity-test`. Preserve
+its separate pressure/build sessions, predeclared budgets, successful-mutation ext4
+allocation peaks and exact guest-built kernel boot/recovery. Read
+[M16 capacity](docs/en/validation/M16_CAPACITY.md); implementation alone is not acceptance.

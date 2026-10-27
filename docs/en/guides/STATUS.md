@@ -5,6 +5,11 @@
 
 ## M16 foundation progress (2026-10-27)
 
+The additional ext4 kernel-capacity gate is implemented; execution and remote CI
+closeout are in [M16 capacity](../validation/M16_CAPACITY.md). Acceptance remains
+pending until actual results are recorded.
+
+
 M16 development is consolidated on `feat/m16-foundation`, including the foundation
 and M16.4 write-support commits. All remaining M16 work continues on this branch;
 pull requests target `dev`.

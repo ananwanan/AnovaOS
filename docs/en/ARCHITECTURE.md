@@ -690,3 +690,13 @@ fsync/rename saves, reads compiler logs and interrupts a process group. Host UAR
 wall times are separate from scheduler-boundary resource samples. See
 [M16.5](validation/M16.5.md) and [M16.6](validation/M16.6.md). Default ext2, fixed
 heap/task/cache bounds, M17 desktop and M18 compiler/image reconstruction remain separate.
+
+## M16 allocation observations
+
+The optional filesystem `usage` snapshot performs no allocation or device I/O. Ext4
+updates current/peak block and inode counts only after successful mutations and
+initializes them from the post-replay superblock on mount. The VFS forwards these
+observations; bootstrap diagnostics capture final orphan cleanup before detaching
+the device. This adds no native ABI or scheduling policy. The capacity gate compares
+final counters with the stopped disk and keeps pressure/build sessions independent.
+See [M16 capacity](validation/M16_CAPACITY.md).

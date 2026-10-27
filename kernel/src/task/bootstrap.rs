@@ -3,6 +3,7 @@
 //! Each scheduler instance starts afresh; only successful shutdown emits its cumulative summary.
 //! These observations omit temporary allocations within syscalls and do not establish peak RSS.
 //! Elapsed time uses the coarse IRQ-derived clock, which does not charge all kernel execution.
+//! Ext4 allocation peaks are counted at successful mutations, including short-lived disk files.
 use super::{CAPACITY, Kernel, State, apic, mm, serial};
 
 pub(super) struct Samples {
@@ -15,6 +16,7 @@ pub(super) struct Samples {
     fd_per_process_peak: usize,
     vfs_node_slots_peak: usize,
     count: u64,
+    storage: Option<anova_storage::filesystem::Usage>,
 }
 
 impl Samples {
@@ -30,6 +32,7 @@ impl Samples {
             fd_per_process_peak: 0,
             vfs_node_slots_peak: 0,
             count: 0,
+            storage: None,
         }
     }
 
@@ -48,6 +51,15 @@ impl Samples {
             self.vfs_node_slots_peak,
             apic::monotonic_ns().saturating_sub(self.started_ns),
         ));
+        if let Some(usage) = self.storage {
+            serial::write(format_args!(
+                "[M16:STORAGE] scope=mount sampling=successful-mutations block_bytes=4096 allocated_blocks={} allocated_inodes={} peak_blocks={} peak_inodes={}\n",
+                usage.allocated_blocks,
+                usage.allocated_inodes,
+                usage.peak_blocks,
+                usage.peak_inodes,
+            ));
+        }
     }
 }
 
@@ -75,5 +87,6 @@ impl Kernel {
         r.occupied_slots_peak = r.occupied_slots_peak.max(occupied);
         r.fd_per_process_peak = r.fd_per_process_peak.max(descriptors);
         r.vfs_node_slots_peak = r.vfs_node_slots_peak.max(self.fs.node_slots());
+        r.storage = self.fs.storage_usage();
     }
 }

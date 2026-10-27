@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Verify real writable e2fsprogs images, sparse/namespace semantics, exhaustion and commit failure boundaries.
 //! A thread-local failing allocator exercises every preflight allocation without affecting parallel tests.
+//! Allocation observations are checked against stopped counters and rejected transactions.
 use anova_abi::*;
 use anova_storage::{
     BlockDevice, SECTOR, check_range,
@@ -214,6 +215,40 @@ fn bytes(fs: &mut Ext4, n: u32) -> Vec<u8> {
     let mut output = vec![0; fs.inode(n).unwrap().size];
     assert_eq!(fs.read(n, 0, &mut output).unwrap(), output.len());
     output
+}
+
+#[test]
+fn allocation_peaks_include_freed_files_and_exclude_rejected_changes() {
+    let fixture = Fixture::new();
+    let mut disk = fixture.mount();
+    let baseline = disk.usage().unwrap();
+    let node = disk.create(2, "temporary", false).unwrap();
+    disk.write(node, 0, &[42; BLOCK * 3]).unwrap();
+    let high = disk.usage().unwrap();
+    assert!(high.allocated_blocks >= baseline.allocated_blocks + 3);
+    assert_eq!(high.allocated_inodes, baseline.allocated_inodes + 1);
+    FAIL_ALLOC.with(|f| f.set(Some(0)));
+    let rejected = disk.create(2, "rejected", false);
+    FAIL_ALLOC.with(|f| f.set(None));
+    assert_eq!(rejected, Err(NO_MEMORY));
+    assert_eq!(disk.usage(), Some(high));
+    let removed = disk.unlink(2, "temporary").unwrap();
+    disk.release_unlinked(removed).unwrap();
+    let released = disk.usage().unwrap();
+    assert_eq!(released.allocated_blocks, baseline.allocated_blocks);
+    assert_eq!(released.allocated_inodes, baseline.allocated_inodes);
+    assert_eq!(released.peak_blocks, high.peak_blocks);
+    assert_eq!(released.peak_inodes, high.peak_inodes);
+    disk.shutdown().unwrap();
+    let bytes = fs::read(&fixture.path).unwrap();
+    let counter = |at| u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap());
+    assert_eq!(released.allocated_blocks, counter(1028) - counter(1036));
+    assert_eq!(released.allocated_inodes, counter(1024) - counter(1040));
+    drop(disk);
+    fixture.clean();
+    let remounted = fixture.mount().usage().unwrap();
+    assert_eq!(remounted.peak_blocks, remounted.allocated_blocks);
+    assert_eq!(remounted.peak_inodes, remounted.allocated_inodes);
 }
 
 #[test]

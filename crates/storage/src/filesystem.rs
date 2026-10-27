@@ -57,6 +57,16 @@ pub struct Metadata {
     pub changed: u32,
 }
 
+/// Allocation counters after successful backend mutations, including filesystem metadata.
+/// Peaks last for one mount; rejected or failed commits never publish new observations.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Usage {
+    pub allocated_blocks: u32,
+    pub allocated_inodes: u32,
+    pub peak_blocks: u32,
+    pub peak_inodes: u32,
+}
+
 pub struct Entry {
     pub inode: u32,
     pub name: [u8; 256],
@@ -66,6 +76,10 @@ pub struct Entry {
 /// Cursors are backend byte positions, independent of the VFS node cache and native wire ABI.
 pub trait Filesystem {
     fn capabilities(&self) -> Capabilities;
+    /// In-memory accounting only; sampling must not allocate or perform device I/O.
+    fn usage(&self) -> Option<Usage> {
+        None
+    }
     fn directory_moves(&self) -> bool {
         false
     }

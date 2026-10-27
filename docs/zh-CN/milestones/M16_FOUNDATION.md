@@ -156,3 +156,9 @@ feature check。只有可运行实现交付时才引入 M16 命令；`cargo xtas
 [journal/JBD2](https://www.kernel.org/doc/html/latest/filesystems/ext4/journal.html) 及
 [e2fsprogs](https://e2fsprogs.sourceforge.net/)。实际实现输入和测试工具版本仍须锁定；
 参考文档本身不构成兼容性证据。
+
+## 内核容量结项
+
+新增 `cargo xtask foundation-capacity-test` 将既有 guest 内核配方用于新建 JBD2 盘，
+提前声明预算，分开耗尽/构建会话，并记录每次成功修改后的磁盘高水位。
+实际执行与 CI 结果见 [M16 容量](../validation/M16_CAPACITY.md)；实现本身不代表 M16.1 结项。

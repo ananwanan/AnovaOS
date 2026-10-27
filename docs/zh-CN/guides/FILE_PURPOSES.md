@@ -466,3 +466,8 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `docs/zh-CN/validation/M16.5.md` | Translate the JBD2 profile, fault models, evidence and exact recovery limits. |
 | `docs/en/validation/M16.6.md` | Specify fresh-disk migration, real build closure, foreground budgets and exact local evidence. |
 | `docs/zh-CN/validation/M16.6.md` | Translate migration ownership, actual build/UART acceptance and independent remaining work. |
+
+| `xtask/src/foundation_capacity.rs` | Accept separate ext4 kernel-build budgets, pressure recovery and independently checked allocation peaks. |
+| `tests/guest/m16/capacity.c` | Exhaust pinned VFS directory slots twice and verify rejected creation, removal and reuse. |
+| `docs/en/validation/M16_CAPACITY.md` | Record exact ext4 kernel capacity, recovery and remote CI execution evidence. |
+| `docs/zh-CN/validation/M16_CAPACITY.md` | Translate the ext4 kernel capacity and remote CI closeout record with matching boundaries. |

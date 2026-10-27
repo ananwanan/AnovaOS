@@ -42,6 +42,9 @@ ext2 没有日志或断电恢复。通用 Linux/glibc、SMP、USB/实机支持�
 编译器源码重建及完全由 guest 生成启动镜像仍未验证。详见
 [当前状态](docs/zh-CN/guides/STATUS.md)和[兼容范围](docs/zh-CN/COMPATIBILITY.md)。
 
+新增 `foundation-capacity-test` 实现新 ext4 盘内核重建及分离的压力/构建计量；实际容量与 CI 结果见
+[M16 容量](docs/zh-CN/validation/M16_CAPACITY.md)。
+
 ## 下一步开发
 
 项目所有者确定的顺序为 **M16 资源/VFS/ext4 → M17 开发桌面 → M18 有条件的编译器及镜像自举**。

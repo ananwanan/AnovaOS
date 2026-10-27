@@ -74,3 +74,8 @@ failure while retaining the prior kernel. `cargo xtask bootstrap-kernel-test`
 packages the retained ELF without rebuilding it on the host, compares extracted
 ISO bytes and verifies actual boot identity plus recovery. See
 [M15 kernel](../../docs/en/milestones/M15_KERNEL.md) for exact seed/source roles and bounds.
+
+`cargo xtask foundation-capacity-test` reuses this kernel recipe on a fresh JBD2
+ext4 work disk, separately measures deliberate exhaustion and clean construction,
+and preserves exact kernel boot/failure recovery. See
+[M16 capacity](../../docs/en/validation/M16_CAPACITY.md) for budgets and actual results.

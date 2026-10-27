@@ -55,3 +55,7 @@ registry 图并准备继承的官方裸机目标库。`--verify` 为只读，拒
 受检内核 ELF；捕获真实语法失败并保留旧内核。`cargo xtask bootstrap-kernel-test` 将保留
 ELF 打包，宿主不重编内核；比较提取 ISO 字节，再验证真实启动身份和恢复。
 种子/源码职责及限制见 [M15 内核](../../docs/zh-CN/milestones/M15_KERNEL.md)。
+
+`cargo xtask foundation-capacity-test` 在新建 JBD2 ext4 工作盘上复用内核配方，
+分开测量主动耗尽与干净构建，并保留精确内核的启动/失败恢复证据。预算和实际结果见
+[M16 容量](../../docs/zh-CN/validation/M16_CAPACITY.md)。

@@ -81,6 +81,7 @@ These records retain their original dates, hashes and historical bounds. Documen
 - [M16.4.md](validation/M16.4.md)
 - [M16.5.md](validation/M16.5.md)
 - [M16.6.md](validation/M16.6.md)
+- [M16_CAPACITY.md](validation/M16_CAPACITY.md)
 - [M2.md](validation/M2.md)
 - [M3.md](validation/M3.md)
 - [M4.md](validation/M4.md)

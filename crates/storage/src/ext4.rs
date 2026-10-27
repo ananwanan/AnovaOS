@@ -7,7 +7,7 @@ mod journal;
 mod write;
 use crate::{
     BlockDevice, SECTOR, check_range,
-    filesystem::{Capabilities, Entry, Filesystem, Format, Metadata},
+    filesystem::{Capabilities, Entry, Filesystem, Format, Metadata, Usage},
 };
 use alloc::{boxed::Box, vec::Vec};
 use anova_abi::*;
@@ -98,6 +98,7 @@ pub struct Ext4 {
     orphans: Vec<u32>,
     transaction: Option<write::Transaction>,
     journal: Option<journal::Journal>,
+    usage: Usage,
 }
 
 impl Ext4 {
@@ -233,6 +234,7 @@ impl Ext4 {
             orphans: Vec::new(),
             transaction: None,
             journal: None,
+            usage: Usage::default(),
         };
         if journaled {
             fs.journal = Some(fs.open_journal(uuid, needs_recovery)?);
@@ -258,7 +260,25 @@ impl Ext4 {
         if !fs.load(2)?.directory {
             return Err(INVALID_FILESYSTEM);
         }
+        // Replay may have replaced counters read before descriptor validation.
+        fs.read_block(0, &mut bytes)?;
+        fs.record_usage(u32_at(&bytes[..], 1036), u32_at(&bytes[..], 1040))?;
         Ok(fs)
+    }
+    fn record_usage(&mut self, free_blocks: u32, free_inodes: u32) -> Result<(), i64> {
+        let allocated_blocks = self
+            .blocks
+            .checked_sub(free_blocks)
+            .ok_or(INVALID_FILESYSTEM)?;
+        let allocated_inodes = self
+            .inodes
+            .checked_sub(free_inodes)
+            .ok_or(INVALID_FILESYSTEM)?;
+        self.usage.allocated_blocks = allocated_blocks;
+        self.usage.allocated_inodes = allocated_inodes;
+        self.usage.peak_blocks = self.usage.peak_blocks.max(allocated_blocks);
+        self.usage.peak_inodes = self.usage.peak_inodes.max(allocated_inodes);
+        Ok(())
     }
     fn read_block(&mut self, n: u32, output: &mut [u8; BLOCK]) -> Result<(), i64> {
         if self.failed {
@@ -517,6 +537,9 @@ impl Ext4 {
     }
 }
 impl Filesystem for Ext4 {
+    fn usage(&self) -> Option<Usage> {
+        Some(self.usage)
+    }
     fn directory_moves(&self) -> bool {
         self.writable
     }

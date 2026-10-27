@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Run isolated guest kernel builds and publish a checked ELF only after successful compilation.
 // This host-built driver is a recipe/diagnostic; Cargo, rustc and rust-lld construct the kernel.
+// ANOVA_EXT4 selects the separately accepted writable filesystem feature for M16 work disks.
 #include <errno.h>
 #include <fcntl.h>
 #include <stdint.h>
@@ -19,6 +20,11 @@
 #define TARGET WORK "/target/x86_64-unknown-none/release/anova-kernel"
 #define FILE_LIMIT (4 * 1024 * 1024)
 #define LOG_LIMIT (512 * 1024)
+#ifdef ANOVA_EXT4
+#define GUEST_FEATURES "--features=ext4-write,bootstrap-metrics"
+#else
+#define GUEST_FEATURES "--features=bootstrap-metrics"
+#endif
 
 static int fail(const char *operation) {
     fprintf(stderr, "[M15:KERNEL:FAIL] operation=%s errno=%d\n", operation, errno);
@@ -283,7 +289,7 @@ static int publish(void) {
 
 static int build(const char *identity) {
     char *arguments[] = {"/bin/cargo", "build", "--offline", "--locked", "--release",
-        "--target=x86_64-unknown-none", "--features=bootstrap-metrics",
+        "--target=x86_64-unknown-none", GUEST_FEATURES,
         "--manifest-path=/ks/source/Cargo.toml",
         "-p", "anova-kernel", "--target-dir=" WORK "/target", NULL};
     printf("[M15:KERNEL:BUILD] id=%s target=x86_64-unknown-none seed=1.90.0\n", identity);

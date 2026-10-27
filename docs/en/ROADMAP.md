@@ -499,3 +499,7 @@ GUI-enabled kernel reconstruction, SMP, device IRQ/async I/O, USB/NVMe/AHCI, bro
 and physical hardware remain independently scoped; none is a blanket prerequisite for M17.
 Add new commands only with functioning implementations and evidence. Keep both language trees,
 README, status and acceptance boundaries current under [DEV-003/DEV-004](guides/REQUIREMENTS.md).
+
+The additional ext4 kernel-capacity gate and current remote CI execution are tracked
+in [M16 capacity](validation/M16_CAPACITY.md), separately from historical bzip2
+acceptance. Completion requires actual successful runs and retained evidence.

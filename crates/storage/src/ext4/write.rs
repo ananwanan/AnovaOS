@@ -74,7 +74,13 @@ impl Ext4 {
         let transaction = self.transaction.take().unwrap();
         match result {
             Ok(value) => {
+                let counters = transaction
+                    .find(0)
+                    .map(|c| (u32_at(&c.bytes[..], 1036), u32_at(&c.bytes[..], 1040)));
                 self.commit(transaction)?;
+                if let Some((free_blocks, free_inodes)) = counters {
+                    self.record_usage(free_blocks, free_inodes)?;
+                }
                 Ok(value)
             }
             Err(error) => Err(error),

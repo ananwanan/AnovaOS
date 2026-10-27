@@ -187,3 +187,11 @@ Format references: Linux kernel [ext4 overview](https://www.kernel.org/doc/html/
 [journal/JBD2](https://www.kernel.org/doc/html/latest/filesystems/ext4/journal.html),
 and [e2fsprogs](https://e2fsprogs.sourceforge.net/). Pin the actual implementation
 inputs and fixture tool versions; reference documentation is not compatibility evidence.
+
+## Kernel capacity closeout
+
+The additional `cargo xtask foundation-capacity-test` extends the existing guest
+kernel recipe to a fresh JBD2 disk, with predeclared budgets, separate exhaustion/
+construction sessions and successful-mutation disk high-water accounting. See
+[M16 capacity](../validation/M16_CAPACITY.md) for the actual execution and CI result;
+implementation does not itself close M16.1.

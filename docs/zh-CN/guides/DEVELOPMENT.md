@@ -440,3 +440,10 @@ cargo xtask foundation-migrate-test
 审计后重放及持久孤儿回收。新门禁保留 write/flush/tear 故障、独立 e2fsck 重放、真实 guest
 bzip2、中断/重启保留和宿主测量的前台 UART 预算。见 [M16.5](../validation/M16.5.md)、
 [M16.6](../validation/M16.6.md)。默认 ext2、现有软件限额、更广 M16/远端 CI 和 M17/M18 分别处理。
+
+## M16 内核容量结项
+
+`cargo xtask foundation-capacity-test` 使用新建 64 MiB JBD2 盘与继承 Rust 种子，
+将真实堆/VFS/FD/任务/磁盘耗尽与干净 guest 内核构建分开，并验证精确保留 ELF 的
+启动/拒绝/恢复。预算、采样和证据契约见 [M16 容量](../validation/M16_CAPACITY.md)。
+完整 CI 也在推送 `feat/m16-foundation` 时运行，并保留手动触发。
