@@ -354,3 +354,7 @@ The owner now limits GitHub Actions to pushes to `main`. Keep PR, manual-dispatc
 and all other branch triggers disabled until the owner changes this policy.
 Preserve the complete job/gate definitions. Feature-branch remote reruns are paused;
 record actual failures and local fixes without claiming complete remote acceptance.
+
+## M17 development authorization (2026-10-27)
+
+The owner explicitly defers M16 remote CI closeout and authorizes starting M17. Work on `feat/m17-desktop` from `dev`; retain main-push-only Actions and the pending M16 result. The initial native session implementation is not QEMU acceptance. Read [M17.1](docs/en/validation/M17.1.md), preserve existing GUI/native v1 interfaces and require actual physical-input, lifecycle, persistence and resource evidence before accepting M17.1. M17.2–M17.5 remain separate.

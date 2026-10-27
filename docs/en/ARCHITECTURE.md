@@ -7,7 +7,7 @@ This describes implemented boundaries through the accepted M15.6 reconstruction 
 separately scoped future architecture. Guest toolchains, native SDKs and bounded Rust GUI/GPU
 profiles are implemented; full compiler reconstruction, guest-only image generation, SMP and
 physical hardware remain separate. M16 now implements the backend/cache boundary and a
-controlled ext4 profiles, explicit JBD2 recovery and opt-in migration/build acceptance; M17 desktop remains future work. Current evidence is in [STATUS](guides/STATUS.md).
+controlled ext4 profiles, explicit JBD2 recovery and opt-in migration/build acceptance; M17.1 has an initial host-checked session implementation; QEMU acceptance and M17.2–M17.5 remain pending. Current evidence is in [STATUS](guides/STATUS.md).
 
 ## 1. Overall structure
 
@@ -708,3 +708,7 @@ Separate pressure reached the heap, all VFS/task/FD slots and disk ENOSPC, then
 the same recovered disk completed construction and new-kernel boot recovery.
 These observations size the declared non-GUI recipe; broader workloads require
 independent measurements. Complete results and raw logs are in the capacity record.
+
+## M17.1 initial session boundary
+
+The separate experimental `0x101` native process-control call validates version and exact direct-child identity before nonblocking wait or signal-15 stop. It shares checked status copying and kernel lifecycle cleanup. Rust userland owns the launcher, fixed executable list and three-replacement policy; init runs COM1 independently. Desktop builds reuse existing C/C++/Rust GUI clients through a native-only archive. GUI/native v1 records and global quotas are unchanged. Actual QEMU cleanup, persistence and capacity acceptance remain pending; see [M17.1](validation/M17.1.md).

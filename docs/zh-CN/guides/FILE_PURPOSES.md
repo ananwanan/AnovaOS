@@ -475,3 +475,11 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `docs/assets/validation/M16_CORE_CI54.json` | Preserve digest-verified core CI artifact result records, exact source identity and bounded accepted scope. |
 | `docs/assets/validation/M16_CAPACITY_LOCAL.json` | Preserve accepted local ext4 kernel capacity, budgets, complete provenance and digest-verified raw logs. |
 | `docs/assets/validation/M16_CORE_CI57.json` | Retain verified current-code core CI artifact results, source identity and artifact digest. |
+| `crates/abi/src/process.rs` | 定义独立版本化直接子进程监督契约并拒绝非法版本。 |
+| `kernel/src/task/process_control.rs` | 授权直接子进程轮询/停止，复制失败保留状态并复用内核清理。 |
+| `user/rt/src/process.rs` | 封装实验非阻塞子进程轮询与身份受检停止，保留 native v1。 |
+| `user/desktop/Cargo.toml` | 通过原生进程与 GUI 接口构建 Rust 桌面会话监督器。 |
+| `user/desktop/src/main.rs` | 管理准入客户端/合成器生命周期、有界会话替换及图形启动器操作。 |
+| `xtask/src/desktop.rs` | 构建纯原生桌面输入，校验宿主构建的现有三语言客户端并打包显式镜像。 |
+| `docs/en/validation/M17.1.md` | 记录桌面初版、已执行宿主检查和未执行 QEMU 验收。 |
+| `docs/zh-CN/validation/M17.1.md` | 提供桌面初版范围、进程边界、检查和待执行验收的中文说明。 |

@@ -48,6 +48,21 @@ impl Scheduler {
         self.entries[index]
     }
 
+    /// Resolve an exact immediate child without blocking or changing scheduling state.
+    pub fn child(&self, parent: usize, pid: u64) -> Result<usize, i64> {
+        if pid == 0 {
+            return Err(anova_abi::INVALID_ARGUMENT);
+        }
+        self.entries
+            .iter()
+            .position(|entry| {
+                entry.state != State::Empty
+                    && entry.parent == self.entries[parent].pid
+                    && entry.pid == pid
+            })
+            .ok_or(NO_CHILD)
+    }
+
     pub fn insert(&mut self, parent: u64) -> Result<usize, i64> {
         let index = self
             .entries
@@ -163,6 +178,26 @@ impl Scheduler {
 mod tests {
     use super::*;
     const OK: ExitStatus = ExitStatus { reason: 0, code: 7 };
+
+    #[test]
+    fn child_control_rejects_peers_descendants_and_recycled_identifiers() {
+        let mut s = Scheduler::new(10);
+        let parent = s.insert(0).unwrap();
+        let child = s.insert(10).unwrap();
+        let grandchild = s.insert(11).unwrap();
+        assert_eq!(s.child(parent, 0), Err(anova_abi::INVALID_ARGUMENT));
+        assert_eq!(s.child(parent, 10), Err(NO_CHILD));
+        assert_eq!(s.child(parent, 12), Err(NO_CHILD));
+        assert_eq!(s.child(grandchild, 11), Err(NO_CHILD));
+        assert_eq!(s.child(parent, 11), Ok(child));
+        assert_eq!(s.entry(parent).state, State::Ready);
+        s.exit(child, OK);
+        assert_eq!(s.child(parent, 11), Ok(child));
+        s.remove(child);
+        assert_eq!(s.insert(10), Ok(child));
+        assert_eq!(s.child(parent, 11), Err(NO_CHILD));
+        assert_eq!(s.child(parent, 13), Ok(child));
+    }
 
     #[test]
     fn round_robin_bounds_starvation_and_sleep_uses_deadlines() {

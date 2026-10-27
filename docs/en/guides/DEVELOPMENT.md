@@ -649,3 +649,7 @@ used 9,494,480 heap bytes, 1,564 VFS slots, 14 tasks, 16 FDs/process and 6,072 d
 blocks at peak; the earlier pressure session separately reached real limits and
 verified reuse. Read the capacity record for frame sampling limits, exact input
 closure and complete retained logs before applying these figures to another recipe.
+
+## Initial M17.1 desktop profile
+
+`cargo xtask desktop-build` builds native-only inputs and hashes without Linux toolchain downloads. `cargo xtask desktop-image` creates `build/images/anova-desktop.iso`; `cargo xtask run --desktop [--disk build/disks/work.ext4]` boots it with an independent COM1 shell. Launcher keys: `1`/`2`/`3` launch or stop, `r` replaces the session, `q` exits. Focus the launcher first. Three existing clients are host-built; this profile has not passed QEMU acceptance. See [M17.1](../validation/M17.1.md) for resources, ABI and pending gates.

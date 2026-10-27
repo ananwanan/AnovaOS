@@ -10,6 +10,7 @@ pub(crate) fn network_seed(bytes: &mut [u8]) -> Result<(), i64> {
     linux::random(bytes)
 }
 mod loader;
+mod process_control;
 #[cfg(feature = "qemu-test")]
 mod validation;
 use crate::{
@@ -473,6 +474,7 @@ impl Kernel {
         }
         let f = self.process(i).context.frame;
         let result = match f.rax {
+            anova_abi::process::SYSCALL => self.process_control(i, &f),
             #[cfg(feature = "gui")]
             anova_gui::transport::SYS_GUI => {
                 let pid = self.policy.entry(i).pid;
@@ -1145,6 +1147,8 @@ pub fn start() {
             "/bin/init",
             if cfg!(feature = "qemu-test") {
                 "test"
+            } else if cfg!(feature = "desktop") {
+                "desktop"
             } else {
                 ""
             },

@@ -54,9 +54,9 @@ ext2 没有日志或断电恢复。通用 Linux/glibc、SMP、USB/实机支持�
 
 项目所有者确定的顺序为 **M16 资源/VFS/ext4 → M17 开发桌面 → M18 有条件的编译器及镜像自举**。
 M16 已实现后端/缓存、受控 ext4 只读/写入、JBD2 恢复和显式启用的迁移/构建验收。
-M17/M18 仍为计划。
+M17.1 已有受监督会话初版并通过宿主检查，QEMU 验收待执行；M17.2–M17.5 和 M18 仍为计划。
 
-1. [M16 基础能力](docs/zh-CN/milestones/M16_FOUNDATION.md)：完成远端 CI；声明的内核容量配置已本地通过，
+1. [M16 基础能力](docs/zh-CN/milestones/M16_FOUNDATION.md)：远端 CI 按所有者要求暂缓；声明的内核容量配置已本地通过，
    更广负载仍需独立定容。JBD2 与新盘迁移已有独立的 [M16.5](docs/zh-CN/validation/M16.5.md)/
    [M16.6](docs/zh-CN/validation/M16.6.md) 本地门禁。后端解耦、按需目录、可回收文件节点和受控
    ext4 只读访问已实现，可写范围见 [M16.4](docs/zh-CN/validation/M16.4.md)，既有证据见 [M16](docs/zh-CN/validation/M16.md)。
@@ -68,6 +68,8 @@ M17/M18 仍为计划。
 保留既有运行时、存储、GUI 和 M15 重建门禁。原生 `std`、SMP、设备 IRQ/异步 I/O、实机和
 全新文件系统格式独立推进。[STATUS](docs/zh-CN/guides/STATUS.md) 将已观察到的工具链依赖下载
 失败与本地验收分开记录。
+
+所有者已暂缓 M16 远端收尾，授权在 `feat/m17-desktop` 开始 M17。`cargo xtask desktop-build` 构建纯原生启动器及现有 C/C++/Rust 客户端；`cargo xtask run --desktop [--disk build/disks/work.ext4]` 选择显式桌面会话。见 [M17.1 实现和待执行验收](docs/zh-CN/validation/M17.1.md)。
 
 ## 构建与启动
 

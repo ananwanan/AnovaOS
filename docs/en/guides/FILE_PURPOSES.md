@@ -477,3 +477,11 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `docs/assets/validation/M16_CORE_CI54.json` | Preserve digest-verified core CI artifact result records, exact source identity and bounded accepted scope. |
 | `docs/assets/validation/M16_CAPACITY_LOCAL.json` | Preserve accepted local ext4 kernel capacity, budgets, complete provenance and digest-verified raw logs. |
 | `docs/assets/validation/M16_CORE_CI57.json` | Retain verified current-code core CI artifact results, source identity and artifact digest. |
+| `crates/abi/src/process.rs` | Define the separate versioned direct-child supervision contract and reject invalid versions. |
+| `kernel/src/task/process_control.rs` | Authorize direct-child polling and stopping, preserve status on copy failure and reuse kernel cleanup. |
+| `user/rt/src/process.rs` | Wrap experimental nonblocking child polling and identity-checked stop without changing native v1. |
+| `user/desktop/Cargo.toml` | Build the Rust desktop session supervisor against native process and GUI interfaces. |
+| `user/desktop/src/main.rs` | Own admitted client/compositor lifetimes, bounded session replacement and graphical launcher actions. |
+| `xtask/src/desktop.rs` | Build native-only desktop inputs, validate existing host-built C/C++/Rust clients and package opt-in images. |
+| `docs/en/validation/M17.1.md` | Record initial desktop implementation, executed host checks and unexecuted QEMU acceptance. |
+| `docs/zh-CN/validation/M17.1.md` | Translate initial desktop scope, process boundary, checks and pending acceptance. |

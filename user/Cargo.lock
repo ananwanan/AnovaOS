@@ -18,6 +18,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "anova-gui-runtime"
+version = "0.1.0"
+
+[[package]]
 name = "anova-gui-user"
 version = "0.1.0"
 dependencies = [
@@ -37,6 +41,16 @@ name = "compositor"
 version = "0.1.0"
 dependencies = [
  "anova-gui",
+ "anova-gui-user",
+ "anova-rt",
+]
+
+[[package]]
+name = "desktop"
+version = "0.1.0"
+dependencies = [
+ "anova-gui",
+ "anova-gui-runtime",
  "anova-gui-user",
  "anova-rt",
 ]

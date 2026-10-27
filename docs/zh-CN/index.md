@@ -6,7 +6,7 @@
 本索引覆盖两种语言的阶段设计、开发指南与历史验收证据。当前受测范围覆盖 M0–M13、M14.1–M14.5 与 M15.1–M15.6；M15.3/M15.4 是有阻塞结论的编译器可行性评估，M15.5/M15.6 的内核镜像仍由宿主辅助打包。
 
 后续计划为 M16 资源/VFS/ext4、M17 开发桌面、M18 有条件自举，M16 的后端/缓存和受控 ext4 只读部分已本地验证，
-显式启用的无日志写入已实现，日志恢复/采用仍待完成，M17/M18 仍为计划。详见路线图和 M16 证据。
+受控写入、JBD2 恢复、迁移和声明的内核容量已有本地证据，远端 CI 待验。M17.1 初版已通过宿主检查、QEMU 验收待执行；M17.2–M17.5/M18 仍为计划，详见路线图和各阶段证据。
 
 [项目 README](../../README.zh-CN.md) · [开发规范](../../AGENTS.md) · [当前状态](guides/STATUS.md) · [路线图](ROADMAP.md)
 
@@ -81,6 +81,7 @@
 - [M16.5.md](validation/M16.5.md)
 - [M16.6.md](validation/M16.6.md)
 - [M16_CAPACITY.md](validation/M16_CAPACITY.md)
+- [M17.1.md](validation/M17.1.md)
 - [M2.md](validation/M2.md)
 - [M3.md](validation/M3.md)
 - [M4.md](validation/M4.md)

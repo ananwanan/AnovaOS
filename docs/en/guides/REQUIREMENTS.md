@@ -74,3 +74,7 @@ Added 2026-10-26 by project-owner request. This records planned work, not implem
   the developer desktop. Retain COM1/QEMU/host recovery for kernel, boot or display failures.
 - Keep every new stage planned until its actual positive, pressure, failure and recovery
   checks pass; preserve prior gates and distinguish local acceptance from remote CI.
+
+## DEV-004 scheduling update (2026-10-27)
+
+The owner explicitly defers M16 remote CI closeout and authorizes starting M17. Retain M16 pending status and main-push-only Actions. M17 may proceed on the locally accepted foundation; every M17 acceptance requirement remains applicable.

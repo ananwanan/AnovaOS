@@ -452,3 +452,7 @@ bzip2、中断/重启保留和宿主测量的前台 UART 预算。见 [M16.5](..
 1,564 个 VFS 槽、14 个任务、每进程 16 个 FD 和 6,072 个磁盘块；此前独立压力
 会话真实达到上限并验证复用。将这些数字用于其他配方前，应阅读容量记录中的
 物理页采样限制、精确输入闭包与完整保留日志。
+
+## M17.1 初版桌面配置
+
+`cargo xtask desktop-build` 构建纯原生输入及哈希，不下载 Linux 工具链；`cargo xtask desktop-image` 生成 `build/images/anova-desktop.iso`，`cargo xtask run --desktop [--disk build/disks/work.ext4]` 启动桌面及独立 COM1 shell。先聚焦启动器，使用 `1`/`2`/`3` 启动或停止、`r` 替换会话、`q` 退出。三个已有客户端由宿主构建，本配置尚未通过 QEMU 验收。资源、ABI 和剩余检查见 [M17.1](../validation/M17.1.md)。

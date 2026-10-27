@@ -62,9 +62,9 @@ real resource exhaustion/recovery. The actual kernel build used 9,494,480 heap b
 
 The owner-approved order is **M16 resources/VFS/ext4 → M17 development desktop →
 M18 conditional compiler and image self-hosting**. M16 now has a locally verified backend/cache and
-controlled ext4 readonly/writes, JBD2 recovery and opt-in migration/build acceptance. M17/M18 remain planned.
+controlled ext4 readonly/writes, JBD2 recovery and opt-in migration/build acceptance. M17.1 now has an initial supervised-session implementation with host checks; QEMU acceptance is pending. M17.2–M17.5 and M18 remain planned.
 
-1. [M16 foundation](docs/en/milestones/M16_FOUNDATION.md): finish remote CI acceptance; the declared kernel capacity profile passed locally.
+1. [M16 foundation](docs/en/milestones/M16_FOUNDATION.md): remote CI acceptance is paused by owner request; the declared kernel capacity profile passed locally.
    Broader workload sizing remains independent. JBD2 and fresh-image migration now have separate
    [M16.5](docs/en/validation/M16.5.md)/[M16.6](docs/en/validation/M16.6.md) local gates. Backend
    isolation, on-demand directories, reclaimable file nodes and controlled ext4 readonly
@@ -80,6 +80,8 @@ Preserve prior runtime, storage, GUI and M15 reconstruction gates. Native `std`,
 SMP, device IRQ/async I/O, physical hardware and a new filesystem format remain
 separate work. [STATUS](docs/en/guides/STATUS.md) records the observed failed
 toolchain dependency download separately from local acceptance.
+
+The owner deferred M16 remote closeout and authorized M17 development on `feat/m17-desktop`. `cargo xtask desktop-build` builds the native-only launcher and existing C/C++/Rust clients; `cargo xtask run --desktop [--disk build/disks/work.ext4]` selects the opt-in session. See [M17.1 implementation and pending acceptance](docs/en/validation/M17.1.md).
 
 ## Build and boot
 

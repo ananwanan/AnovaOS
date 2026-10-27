@@ -82,15 +82,32 @@ fn reset_old_focus(core: &mut Compositor<'_>, previous: Option<u64>, window: Opt
     }
 }
 
-fn request(core: &mut Compositor<'_>, envelope: &t::Envelope) -> Reply {
+fn request(core: &mut Compositor<'_>, envelope: &t::Envelope, desktop: bool) -> Reply {
     let length = envelope.length as usize;
     if !(64..=t::PACKET_BYTES).contains(&length) || !(length - 64).is_multiple_of(4) {
         return Reply::failure(0, core.session(), Error::BufferLength);
     }
-    let request = match Request::from_bytes(&envelope.payload[..64]) {
+    let mut request = match Request::from_bytes(&envelope.payload[..64]) {
         Ok(request) => request,
         Err(error) => return Reply::failure(0, core.session(), error),
     };
+    // Desktop placement is user-space policy. Hidden contract windows retain their geometry.
+    if desktop && request.opcode == anova_gui::op::CREATE && request.flags == 1 {
+        if request.width == 320 {
+            request.x = 20;
+            request.y = 20;
+        } else {
+            request.x = [15, 270, 525]
+                .into_iter()
+                .find(|x| {
+                    !core
+                        .visible_rectangles()
+                        .any(|rect| rect.x == *x && rect.y == 250)
+                })
+                .unwrap_or(15);
+            request.y = 250;
+        }
+    }
     let mut pixels = [0; 1008];
     let count = (length - 64) / 4;
     for (pixel, bytes) in pixels
@@ -102,7 +119,7 @@ fn request(core: &mut Compositor<'_>, envelope: &t::Envelope) -> Reply {
     core.apply(envelope.client, &request, &pixels[..count])
 }
 
-fn run(test: bool, restart: bool) -> u32 {
+fn run(test: bool, restart: bool, desktop: bool) -> u32 {
     let session = match gui::scalar(t::BIND) {
         Ok(session) => session,
         Err(UNSUPPORTED) => return 2,
@@ -156,7 +173,7 @@ fn run(test: bool, restart: bool) -> u32 {
                 t::REQUEST => {
                     let previous = core.focused_client();
                     let window = core.focused_window();
-                    let reply = request(&mut core, &envelope);
+                    let reply = request(&mut core, &envelope, desktop);
                     reset_old_focus(&mut core, previous, window);
                     // A successful PRESENT reply follows actual CPU scanout completion.
                     present(&mut core, &mut storage.frame, display.width);
@@ -214,6 +231,9 @@ fn run(test: bool, restart: bool) -> u32 {
             }
         }
         present(&mut core, &mut storage.frame, display.width);
+        if no_input && desktop {
+            return 74;
+        }
         if no_input && test && core.window_count() == 2 {
             let ticks = rt::info().unwrap().ticks;
             let deadline = *no_input_deadline.get_or_insert(ticks + 500);
@@ -234,7 +254,7 @@ unsafe extern "C" fn anova_main(argc: usize, argv: *const *const u8) -> u32 {
     if mode == b"gpu" || mode == b"gpu-fail" {
         return gpu::run(mode == b"gpu-fail");
     }
-    run(mode == b"test", mode == b"restart")
+    run(mode == b"test", mode == b"restart", mode == b"desktop")
 }
 
 #[panic_handler]

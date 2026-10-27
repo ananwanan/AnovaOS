@@ -37,7 +37,7 @@ still requires corresponding drivers. See [STATUS](guides/STATUS.md),
 | M14 | Rust GUI/C/C++/Rust SDKs | M9/M13 and individual prerequisites | Five stages locally accepted; GPU scope bounded |
 | M15 | Optional source/kernel bootstrap | M11–M13 and measured resources | bzip2/kernel/repeats accepted; compiler assessment complete, reconstruction blocked |
 | M16 | Resources, backend-independent VFS and controlled ext4 | Existing storage/runtime; restored CI and measured budgets | Partial: backend/cache and controlled ext4 readonly verified locally; opt-in writes, JBD2 and migration/build/UART gates accepted locally; ext4 kernel capacity/recovery accepted locally; complete remote CI pending |
-| M17 | Usable development desktop and GUI-only app workflow | M16 accepted workspace/resources; M9/M14 and inherited tools | Planned; full compiler bootstrap is not required |
+| M17 | Usable development desktop and GUI-only app workflow | M16 accepted workspace/resources; M9/M14 and inherited tools | M17.1 implementation started; QEMU pending; full compiler bootstrap is not required |
 | M18 | Conditional compiler reconstruction and guest-only images | Measured component prerequisites after M16/M17 | Planned; each component accepted independently |
 
 Independent work may proceed in parallel, without skipping actual prerequisites.
@@ -455,7 +455,7 @@ data survives a crash. Record local acceptance and remote CI separately.
 
 ## M17: development desktop
 
-All substages are **planned and unimplemented**; see [M17 desktop](milestones/M17_DESKTOP.md).
+M17.1 has an initial implementation with host checks; QEMU acceptance is pending. M17.2–M17.5 remain planned. See [M17 desktop](milestones/M17_DESKTOP.md) and [M17.1 evidence](validation/M17.1.md).
 Implement after the M16 workspace/resource contract, using the accepted guest GCC/G++ and
 Rust/Cargo seeds. Compiler source reconstruction is not a prerequisite.
 
@@ -493,7 +493,7 @@ See [M15 GCC](milestones/M15_GCC.md), [M15 Rust](milestones/M15_RUST.md),
 
 ## Current follow-up order
 
-Start with M16.1, then complete resource/storage acceptance before M17's developer desktop.
+Owner update 2026-10-27: defer M16 remote CI closeout and start M17.1 development using the locally accepted bounded M16 foundation. M16 remote acceptance remains open; M17 acceptance still requires its own measured gates.
 Advance M18's deeper self-hosting when its component prerequisites permit. Native libc/std,
 GUI-enabled kernel reconstruction, SMP, device IRQ/async I/O, USB/NVMe/AHCI, broader GPU APIs
 and physical hardware remain independently scoped; none is a blanket prerequisite for M17.

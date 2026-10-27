@@ -7,7 +7,7 @@ This index covers matching English and Simplified Chinese designs, development g
 
 Planned follow-ups are M16 resources/VFS/ext4, M17 development desktop and conditional M18
 self-hosting. M16 now has a locally verified backend/cache and controlled ext4 readonly slice.
-Opt-in non-journal writes are implemented; journal recovery/adoption remain open. M17/M18 remain planned; see the roadmap and M16 evidence.
+Controlled writes, JBD2 recovery, migration and the declared kernel capacity have local evidence; remote CI is pending. M17.1 has an initial host-checked implementation with QEMU acceptance pending. M17.2–M17.5/M18 remain planned; see the roadmap and stage evidence.
 
 [Project README](../../README.md) · [Development rules](../../AGENTS.md) · [Current status](guides/STATUS.md) · [Roadmap](ROADMAP.md)
 
@@ -82,6 +82,7 @@ These records retain their original dates, hashes and historical bounds. Documen
 - [M16.5.md](validation/M16.5.md)
 - [M16.6.md](validation/M16.6.md)
 - [M16_CAPACITY.md](validation/M16_CAPACITY.md)
+- [M17.1.md](validation/M17.1.md)
 - [M2.md](validation/M2.md)
 - [M3.md](validation/M3.md)
 - [M4.md](validation/M4.md)

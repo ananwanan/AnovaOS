@@ -67,6 +67,29 @@ fn fill(server: &mut Compositor<'_>, client: u64, handle: u64, color: u32) {
 }
 
 #[test]
+fn placement_observation_ignores_hidden_and_destroyed_contract_windows() {
+    let mut backing = storage();
+    let mut server = Compositor::new(800, 600, SESSION, &mut backing).unwrap();
+    server.connect(1).unwrap();
+    server.connect(2).unwrap();
+    let rect = Rect::new(15, 250, 240, 160);
+    let first = create(&mut server, 1, rect);
+    let mut hidden = request(op::CREATE, 0);
+    hidden.x = 270;
+    hidden.y = 250;
+    hidden.width = 240;
+    hidden.height = 160;
+    assert!(server.apply(2, &hidden, &[]).is_ok());
+    assert_eq!(server.window_count(), 2);
+    assert_eq!(server.visible_rectangles().collect::<Vec<_>>(), vec![rect]);
+    assert!(server.apply(1, &request(op::DESTROY, first), &[]).is_ok());
+    assert_eq!(server.visible_rectangles().count(), 0);
+    let replacement = create(&mut server, 1, rect);
+    assert_ne!(first, replacement);
+    assert_eq!(server.visible_rectangles().collect::<Vec<_>>(), vec![rect]);
+}
+
+#[test]
 fn wire_is_fixed_width_little_endian_and_round_trips_every_field() {
     assert_eq!(core::mem::size_of::<Request>(), 64);
     assert_eq!(core::mem::size_of::<Reply>(), 64);

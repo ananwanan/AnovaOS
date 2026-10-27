@@ -4,6 +4,7 @@
 //! Built with the x86_64 user ABI and SSE2, without libc, allocation or Linux calls.
 pub use anova_abi as abi;
 mod memory;
+pub mod process;
 pub mod v1;
 #[cfg(not(test))]
 use core::arch::naked_asm;

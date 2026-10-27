@@ -3,10 +3,10 @@
 
 **English** | [简体中文](../../zh-CN/milestones/M17_DESKTOP.md)
 
-**Status: planned; not implemented or accepted.** This proposal follows the
+**Status: M17.1 initial implementation, host-checked; QEMU acceptance pending. M17.2–M17.5 remain planned.** This proposal follows the
 [M16 foundation](M16_FOUNDATION.md). The [roadmap](../ROADMAP.md) defines ordering;
 [current status](../guides/STATUS.md) records implemented capabilities and evidence.
-There are no new M17 commands or validation results in this document.
+The owner deferred M16 remote closeout on 2026-10-27 and authorized M17 development. See [M17.1 implementation](../validation/M17.1.md) for actual checks, `desktop-build`/`desktop-image`/`run --desktop`, limits and unexecuted acceptance. All stage exits below still apply.
 
 ## Objective and prerequisites
 
