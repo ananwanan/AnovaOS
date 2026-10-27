@@ -2,6 +2,7 @@
 //! Reconstruct the actual kernel in guest processes and boot its retained ELF without rebuilding it.
 //! Host-assisted image packaging and inherited compiler/target libraries are recorded separately.
 //! The opt-in M16 profile uses fresh JBD2 storage and separate pressure/build measurements.
+//! Release packaged input buffers before QEMU so host RAM retention does not compete with guest RAM.
 use super::*;
 use bootstrap::{checked, hash, hashes, mount, session};
 use serde_json::{Value, json};
@@ -220,6 +221,9 @@ pub(super) fn verify_profile(root: &Path, ext4: bool) -> Result<()> {
         source_work
     };
     let input_hashes = hashes(&files);
+    let input_file_count = files.len();
+    let input_bytes = files.values().map(Vec::len).sum::<usize>();
+    let largest_input_bytes = files.values().map(Vec::len).max();
     let mut declared = BTreeMap::new();
     for (key, prefix) in [
         ("source_files_sha256", "/ks/source/"),
@@ -269,6 +273,7 @@ pub(super) fn verify_profile(root: &Path, ext4: bool) -> Result<()> {
     }))?);
     let mut archive = fs::read(rust::pack(root, false)?)?;
     append_inputs(&mut archive, &files)?;
+    drop(files);
     let diagnostic = work.join("kernel-build.elf");
     output_path(&diagnostic)?;
     let mut compiler = Command::new("musl-gcc");
@@ -336,6 +341,8 @@ pub(super) fn verify_profile(root: &Path, ext4: bool) -> Result<()> {
     let packed = work.join("initramfs.anovafs");
     output_path(&packed)?;
     fs::write(&packed, &archive)?;
+    let initramfs_hash = hash(&archive);
+    drop(archive);
     let initial = image_archive(
         root,
         if ext4 {
@@ -394,13 +401,13 @@ pub(super) fn verify_profile(root: &Path, ext4: bool) -> Result<()> {
         "seed_kernel_sha256": seed_kernel_hash, "seed_iso": seed_iso,
         "seed_iso_sha256": hash(&fs::read(&seed_iso)?),
         "rust_seed_inventory_sha256": hash(&fs::read(root.join("build/rust/stage.sha256"))?),
-        "initramfs_sha256": hash(&archive), "work_disk": disk_path,
+        "initramfs_sha256": initramfs_hash, "work_disk": disk_path,
         "build_host": "AnovaOS x86_64 Linux-musl compatibility personality",
         "target": TARGET, "profile": profile, "ext4_work_disk": ext4,
         "implementation_sha256": implementation_identity,
-        "input_file_count": files.len(),
-        "input_bytes": files.values().map(Vec::len).sum::<usize>(),
-        "largest_input_bytes": files.values().map(Vec::len).max(),
+        "input_file_count": input_file_count,
+        "input_bytes": input_bytes,
+        "largest_input_bytes": largest_input_bytes,
         "seed": "Inherited official Rust/Cargo/rust-lld 1.90.0, precompiled core/alloc/compiler_builtins",
         "host_participation": "Lock and prepare sources/seeds, compile driver/initial kernel/apps, create disk, package and independently inspect exact guest ELF; no guest kernel compilation on host",
         "image_generation_in_guest": false,

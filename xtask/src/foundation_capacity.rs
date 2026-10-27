@@ -82,7 +82,9 @@ pub(super) fn session(
             .ok_or_else(|| format!("Missing ext4 metric: {key}"))?
             .parse()?)
     };
-    let stopped = bootstrap::disk_capacity(path)?;
+    let mut stopped = bootstrap::disk_capacity(path)?;
+    // The shared M15 geometry reader retains its ext2 file ceiling; this disk uses ext4 admission.
+    stopped["writable_file_limit_bytes"] = json!(anova_storage::ext4::MAX_FILE);
     let blocks = number("allocated_blocks")?;
     let inodes = number("allocated_inodes")?;
     if stopped["allocated_blocks"] != blocks

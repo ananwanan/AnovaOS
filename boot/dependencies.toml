@@ -29,6 +29,8 @@ sha256 = "45a0d60afc1cdef1d531d788cd53680261cff75fc14e7d96f44dba68a2f56b8d"
 [firmware]
 version = "2024.02-2ubuntu0.9"
 url = "https://snapshot.ubuntu.com/ubuntu/20260828T000000Z/pool/main/e/edk2/ovmf_2024.02-2ubuntu0.9_all.deb"
+# Official retained package; fallback is accepted only with the identical package digest.
+mirrors = ["https://launchpad.net/ubuntu/+archive/primary/+files/ovmf_2024.02-2ubuntu0.9_all.deb"]
 package_sha256 = "a094c13d06f2740691ff57d108dff32aa087179363ddb0de42d463b4f7f9bc13"
 code_sha256 = "949bfa5389c4c48582737481e7d24f46b3a16b276ef44c4089a56858c6a0a446"
 vars_sha256 = "5d2ac383371b408398accee7ec27c8c09ea5b74a0de0ceea6513388b15be5d1e"

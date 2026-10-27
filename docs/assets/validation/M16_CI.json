@@ -1,0 +1,1020 @@
+{
+  "purpose": "Retain observed M16 remote workflow attempts, exact job/step outcomes and firmware acquisition failures.",
+  "repository": "ananwanan/AnovaOS",
+  "branch": "feat/m16-foundation",
+  "attempts": [
+    {
+      "run_id": 40457781527,
+      "run_attempt": 1,
+      "jobs": [
+        {
+          "id": 122035032548,
+          "name": "boot",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-27T05:52:29Z",
+          "completed_at": "2026-10-27T06:03:30Z",
+          "html_url": "https://github.com/ananwanan/AnovaOS/actions/runs/40457781527/job/122035032548",
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1,
+              "started_at": "2026-10-27T05:52:30Z",
+              "completed_at": "2026-10-27T05:52:30Z"
+            },
+            {
+              "name": "Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2,
+              "started_at": "2026-10-27T05:52:30Z",
+              "completed_at": "2026-10-27T05:52:31Z"
+            },
+            {
+              "name": "Install host utilities",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3,
+              "started_at": "2026-10-27T05:52:31Z",
+              "completed_at": "2026-10-27T05:52:45Z"
+            },
+            {
+              "name": "Load the pinned Rust toolchain",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 4,
+              "started_at": "2026-10-27T05:52:45Z",
+              "completed_at": "2026-10-27T05:52:54Z"
+            },
+            {
+              "name": "Check formatting",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 5,
+              "started_at": "2026-10-27T05:52:54Z",
+              "completed_at": "2026-10-27T05:52:55Z"
+            },
+            {
+              "name": "Check bilingual documentation",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 6,
+              "started_at": "2026-10-27T05:52:55Z",
+              "completed_at": "2026-10-27T05:52:55Z"
+            },
+            {
+              "name": "Check file-purpose explanations",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 7,
+              "started_at": "2026-10-27T05:52:55Z",
+              "completed_at": "2026-10-27T05:53:15Z"
+            },
+            {
+              "name": "Check host tools",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 8,
+              "started_at": "2026-10-27T05:53:15Z",
+              "completed_at": "2026-10-27T05:53:22Z"
+            },
+            {
+              "name": "Check and build native Rust/C applications",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 9,
+              "started_at": "2026-10-27T05:53:22Z",
+              "completed_at": "2026-10-27T05:53:43Z"
+            },
+            {
+              "name": "Trace pinned Linux applications on the host",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 10,
+              "started_at": "2026-10-27T05:53:43Z",
+              "completed_at": "2026-10-27T05:53:52Z"
+            },
+            {
+              "name": "Check the bare-metal kernel",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 11,
+              "started_at": "2026-10-27T05:53:52Z",
+              "completed_at": "2026-10-27T05:54:02Z"
+            },
+            {
+              "name": "Test host logic",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 12,
+              "started_at": "2026-10-27T05:54:02Z",
+              "completed_at": "2026-10-27T05:56:18Z"
+            },
+            {
+              "name": "Test bootstrap source integrity and archive rejection",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 13,
+              "started_at": "2026-10-27T05:56:18Z",
+              "completed_at": "2026-10-27T05:56:18Z"
+            },
+            {
+              "name": "Build the kernel",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 14,
+              "started_at": "2026-10-27T05:56:18Z",
+              "completed_at": "2026-10-27T05:56:23Z"
+            },
+            {
+              "name": "Fetch verified boot inputs",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 15,
+              "started_at": "2026-10-27T05:56:23Z",
+              "completed_at": "2026-10-27T05:56:26Z"
+            },
+            {
+              "name": "Check prerequisites",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 16,
+              "started_at": "2026-10-27T05:56:26Z",
+              "completed_at": "2026-10-27T05:56:26Z"
+            },
+            {
+              "name": "Verify M9 pthread/signals/dynamic musl, VFS, isolation, memory and traps",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 17,
+              "started_at": "2026-10-27T05:56:26Z",
+              "completed_at": "2026-10-27T05:58:07Z"
+            },
+            {
+              "name": "Verify real serial input and volatile tmpfs across boots",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 18,
+              "started_at": "2026-10-27T05:58:07Z",
+              "completed_at": "2026-10-27T05:58:23Z"
+            },
+            {
+              "name": "Verify software graphics, QMP screenshot and serial fallback",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 19,
+              "started_at": "2026-10-27T05:58:23Z",
+              "completed_at": "2026-10-27T05:58:39Z"
+            },
+            {
+              "name": "Verify bounded GPU admission and headless CPU fallback",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 20,
+              "started_at": "2026-10-27T05:58:39Z",
+              "completed_at": "2026-10-27T05:58:56Z"
+            },
+            {
+              "name": "Verify polled PS2 keyboard, pointer, cursor pixels and device fallback",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 21,
+              "started_at": "2026-10-27T05:58:56Z",
+              "completed_at": "2026-10-27T05:59:17Z"
+            },
+            {
+              "name": "Verify isolated native windows, physical input, redraw and compositor recovery",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 22,
+              "started_at": "2026-10-27T05:59:17Z",
+              "completed_at": "2026-10-27T05:59:47Z"
+            },
+            {
+              "name": "Verify persistent sources, binaries, clean shutdown and device failures",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 23,
+              "started_at": "2026-10-27T05:59:47Z",
+              "completed_at": "2026-10-27T06:00:15Z"
+            },
+            {
+              "name": "Verify controlled ext4 readonly, large namespace, reboot and rejection",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 24,
+              "started_at": "2026-10-27T06:00:15Z",
+              "completed_at": "2026-10-27T06:01:57Z"
+            },
+            {
+              "name": "Verify controlled virtio networking, DNS and socket boundaries",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 25,
+              "started_at": "2026-10-27T06:01:57Z",
+              "completed_at": "2026-10-27T06:02:11Z"
+            },
+            {
+              "name": "Verify offline packages, reboot rollback and strict HTTPS",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 26,
+              "started_at": "2026-10-27T06:02:11Z",
+              "completed_at": "2026-10-27T06:02:30Z"
+            },
+            {
+              "name": "Verify versioned SDK templates, package policy and crash symbols",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 27,
+              "started_at": "2026-10-27T06:02:30Z",
+              "completed_at": "2026-10-27T06:03:22Z"
+            },
+            {
+              "name": "Upload boot evidence",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 28,
+              "started_at": "2026-10-27T06:03:22Z",
+              "completed_at": "2026-10-27T06:03:28Z"
+            },
+            {
+              "name": "Post Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 56,
+              "started_at": "2026-10-27T06:03:28Z",
+              "completed_at": "2026-10-27T06:03:28Z"
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 57,
+              "started_at": "2026-10-27T06:03:28Z",
+              "completed_at": "2026-10-27T06:03:28Z"
+            }
+          ]
+        },
+        {
+          "id": 122038387516,
+          "name": "guest-toolchain",
+          "status": "completed",
+          "conclusion": "failure",
+          "started_at": "2026-10-27T06:03:33Z",
+          "completed_at": "2026-10-27T06:04:30Z",
+          "html_url": "https://github.com/ananwanan/AnovaOS/actions/runs/40457781527/job/122038387516",
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1,
+              "started_at": "2026-10-27T06:03:34Z",
+              "completed_at": "2026-10-27T06:03:34Z"
+            },
+            {
+              "name": "Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2,
+              "started_at": "2026-10-27T06:03:34Z",
+              "completed_at": "2026-10-27T06:03:35Z"
+            },
+            {
+              "name": "Install compiler construction and guest test utilities",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3,
+              "started_at": "2026-10-27T06:03:35Z",
+              "completed_at": "2026-10-27T06:03:48Z"
+            },
+            {
+              "name": "Load the pinned Rust toolchain",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 4,
+              "started_at": "2026-10-27T06:03:48Z",
+              "completed_at": "2026-10-27T06:03:58Z"
+            },
+            {
+              "name": "Fetch verified boot inputs",
+              "status": "completed",
+              "conclusion": "failure",
+              "number": 5,
+              "started_at": "2026-10-27T06:03:58Z",
+              "completed_at": "2026-10-27T06:04:28Z"
+            },
+            {
+              "name": "Cache checksum-verified compiler source archives",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 6,
+              "started_at": "2026-10-27T06:04:28Z",
+              "completed_at": "2026-10-27T06:04:28Z"
+            },
+            {
+              "name": "Build the locked GCC, sysroot and make from source",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 7,
+              "started_at": "2026-10-27T06:04:28Z",
+              "completed_at": "2026-10-27T06:04:28Z"
+            },
+            {
+              "name": "Verify guest C/C++, incremental make, negative builds and reboot retention",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 8,
+              "started_at": "2026-10-27T06:04:28Z",
+              "completed_at": "2026-10-27T06:04:28Z"
+            },
+            {
+              "name": "Verify opt-in ext4 writes, guest builds, exhaustion, reboot and real disk failures",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 9,
+              "started_at": "2026-10-27T06:04:28Z",
+              "completed_at": "2026-10-27T06:04:28Z"
+            },
+            {
+              "name": "Verify JBD2 sector cuts, checksum rejection and actual virtio recovery",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 10,
+              "started_at": "2026-10-27T06:04:28Z",
+              "completed_at": "2026-10-27T06:04:28Z"
+            },
+            {
+              "name": "Verify retained ext2 migration, guest reconstruction and foreground UART budgets",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 11,
+              "started_at": "2026-10-27T06:04:28Z",
+              "completed_at": "2026-10-27T06:04:28Z"
+            },
+            {
+              "name": "Assess locked GCC source capacity and guest prerequisite blockers",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 12,
+              "started_at": "2026-10-27T06:04:28Z",
+              "completed_at": "2026-10-27T06:04:28Z"
+            },
+            {
+              "name": "Prepare locked upstream Rust musl tools and offline vendor",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 13,
+              "started_at": "2026-10-27T06:04:28Z",
+              "completed_at": "2026-10-27T06:04:28Z"
+            },
+            {
+              "name": "Assess independent LLVM, rustc and Cargo source-build prerequisites",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 14,
+              "started_at": "2026-10-27T06:04:28Z",
+              "completed_at": "2026-10-27T06:04:28Z"
+            },
+            {
+              "name": "Verify fresh ext4 kernel build capacity and exhaustion recovery",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 15,
+              "started_at": "2026-10-27T06:04:28Z",
+              "completed_at": "2026-10-27T06:04:28Z"
+            },
+            {
+              "name": "Compare independent clean guest tool/kernel builds and boot recovery",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 16,
+              "started_at": "2026-10-27T06:04:28Z",
+              "completed_at": "2026-10-27T06:04:28Z"
+            },
+            {
+              "name": "Verify Rust std, detached threads and real compiler startup",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 17,
+              "started_at": "2026-10-27T06:04:28Z",
+              "completed_at": "2026-10-27T06:04:28Z"
+            },
+            {
+              "name": "Verify guest Rust, offline Cargo, build scripts, C FFI, macros and reboot",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 18,
+              "started_at": "2026-10-27T06:04:28Z",
+              "completed_at": "2026-10-27T06:04:28Z"
+            },
+            {
+              "name": "Verify guest-built native GUI SDK clients, scanout, input and reboot",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 19,
+              "started_at": "2026-10-27T06:04:28Z",
+              "completed_at": "2026-10-27T06:04:28Z"
+            },
+            {
+              "name": "Verify online Cargo, strict TLS, transport failures and offline rebuild",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 20,
+              "started_at": "2026-10-27T06:04:28Z",
+              "completed_at": "2026-10-27T06:04:28Z"
+            },
+            {
+              "name": "Upload compiler build and guest evidence",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 21,
+              "started_at": "2026-10-27T06:04:28Z",
+              "completed_at": "2026-10-27T06:04:28Z"
+            },
+            {
+              "name": "Post Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 42,
+              "started_at": "2026-10-27T06:04:28Z",
+              "completed_at": "2026-10-27T06:04:28Z"
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 43,
+              "started_at": "2026-10-27T06:04:28Z",
+              "completed_at": "2026-10-27T06:04:28Z"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": 40458309803,
+      "run_attempt": 1,
+      "jobs": [
+        {
+          "id": 122036711956,
+          "name": "boot",
+          "status": "completed",
+          "conclusion": "failure",
+          "started_at": "2026-10-27T05:58:03Z",
+          "completed_at": "2026-10-27T06:02:17Z",
+          "html_url": "https://github.com/ananwanan/AnovaOS/actions/runs/40458309803/job/122036711956",
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1,
+              "started_at": "2026-10-27T05:58:04Z",
+              "completed_at": "2026-10-27T05:58:05Z"
+            },
+            {
+              "name": "Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2,
+              "started_at": "2026-10-27T05:58:05Z",
+              "completed_at": "2026-10-27T05:58:06Z"
+            },
+            {
+              "name": "Install host utilities",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3,
+              "started_at": "2026-10-27T05:58:06Z",
+              "completed_at": "2026-10-27T05:58:31Z"
+            },
+            {
+              "name": "Load the pinned Rust toolchain",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 4,
+              "started_at": "2026-10-27T05:58:31Z",
+              "completed_at": "2026-10-27T05:58:39Z"
+            },
+            {
+              "name": "Check formatting",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 5,
+              "started_at": "2026-10-27T05:58:39Z",
+              "completed_at": "2026-10-27T05:58:40Z"
+            },
+            {
+              "name": "Check bilingual documentation",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 6,
+              "started_at": "2026-10-27T05:58:40Z",
+              "completed_at": "2026-10-27T05:58:40Z"
+            },
+            {
+              "name": "Check file-purpose explanations",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 7,
+              "started_at": "2026-10-27T05:58:40Z",
+              "completed_at": "2026-10-27T05:58:58Z"
+            },
+            {
+              "name": "Check host tools",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 8,
+              "started_at": "2026-10-27T05:58:58Z",
+              "completed_at": "2026-10-27T05:59:05Z"
+            },
+            {
+              "name": "Check and build native Rust/C applications",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 9,
+              "started_at": "2026-10-27T05:59:05Z",
+              "completed_at": "2026-10-27T05:59:33Z"
+            },
+            {
+              "name": "Trace pinned Linux applications on the host",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 10,
+              "started_at": "2026-10-27T05:59:33Z",
+              "completed_at": "2026-10-27T05:59:42Z"
+            },
+            {
+              "name": "Check the bare-metal kernel",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 11,
+              "started_at": "2026-10-27T05:59:42Z",
+              "completed_at": "2026-10-27T05:59:53Z"
+            },
+            {
+              "name": "Test host logic",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 12,
+              "started_at": "2026-10-27T05:59:53Z",
+              "completed_at": "2026-10-27T06:02:04Z"
+            },
+            {
+              "name": "Test bootstrap source integrity and archive rejection",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 13,
+              "started_at": "2026-10-27T06:02:04Z",
+              "completed_at": "2026-10-27T06:02:05Z"
+            },
+            {
+              "name": "Build the kernel",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 14,
+              "started_at": "2026-10-27T06:02:05Z",
+              "completed_at": "2026-10-27T06:02:10Z"
+            },
+            {
+              "name": "Fetch verified boot inputs",
+              "status": "completed",
+              "conclusion": "failure",
+              "number": 15,
+              "started_at": "2026-10-27T06:02:10Z",
+              "completed_at": "2026-10-27T06:02:14Z"
+            },
+            {
+              "name": "Check prerequisites",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 16,
+              "started_at": "2026-10-27T06:02:14Z",
+              "completed_at": "2026-10-27T06:02:14Z"
+            },
+            {
+              "name": "Verify M9 pthread/signals/dynamic musl, VFS, isolation, memory and traps",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 17,
+              "started_at": "2026-10-27T06:02:14Z",
+              "completed_at": "2026-10-27T06:02:14Z"
+            },
+            {
+              "name": "Verify real serial input and volatile tmpfs across boots",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 18,
+              "started_at": "2026-10-27T06:02:14Z",
+              "completed_at": "2026-10-27T06:02:14Z"
+            },
+            {
+              "name": "Verify software graphics, QMP screenshot and serial fallback",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 19,
+              "started_at": "2026-10-27T06:02:14Z",
+              "completed_at": "2026-10-27T06:02:14Z"
+            },
+            {
+              "name": "Verify bounded GPU admission and headless CPU fallback",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 20,
+              "started_at": "2026-10-27T06:02:14Z",
+              "completed_at": "2026-10-27T06:02:14Z"
+            },
+            {
+              "name": "Verify polled PS2 keyboard, pointer, cursor pixels and device fallback",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 21,
+              "started_at": "2026-10-27T06:02:14Z",
+              "completed_at": "2026-10-27T06:02:14Z"
+            },
+            {
+              "name": "Verify isolated native windows, physical input, redraw and compositor recovery",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 22,
+              "started_at": "2026-10-27T06:02:14Z",
+              "completed_at": "2026-10-27T06:02:14Z"
+            },
+            {
+              "name": "Verify persistent sources, binaries, clean shutdown and device failures",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 23,
+              "started_at": "2026-10-27T06:02:14Z",
+              "completed_at": "2026-10-27T06:02:14Z"
+            },
+            {
+              "name": "Verify controlled ext4 readonly, large namespace, reboot and rejection",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 24,
+              "started_at": "2026-10-27T06:02:14Z",
+              "completed_at": "2026-10-27T06:02:14Z"
+            },
+            {
+              "name": "Verify controlled virtio networking, DNS and socket boundaries",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 25,
+              "started_at": "2026-10-27T06:02:14Z",
+              "completed_at": "2026-10-27T06:02:14Z"
+            },
+            {
+              "name": "Verify offline packages, reboot rollback and strict HTTPS",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 26,
+              "started_at": "2026-10-27T06:02:14Z",
+              "completed_at": "2026-10-27T06:02:14Z"
+            },
+            {
+              "name": "Verify versioned SDK templates, package policy and crash symbols",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 27,
+              "started_at": "2026-10-27T06:02:14Z",
+              "completed_at": "2026-10-27T06:02:14Z"
+            },
+            {
+              "name": "Upload boot evidence",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 28,
+              "started_at": "2026-10-27T06:02:14Z",
+              "completed_at": "2026-10-27T06:02:15Z"
+            },
+            {
+              "name": "Post Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 56,
+              "started_at": "2026-10-27T06:02:15Z",
+              "completed_at": "2026-10-27T06:02:15Z"
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 57,
+              "started_at": "2026-10-27T06:02:15Z",
+              "completed_at": "2026-10-27T06:02:15Z"
+            }
+          ]
+        },
+        {
+          "id": 122038013404,
+          "name": "guest-toolchain",
+          "status": "completed",
+          "conclusion": "skipped",
+          "started_at": "2026-10-27T06:02:18Z",
+          "completed_at": "2026-10-27T06:02:17Z",
+          "html_url": "https://github.com/ananwanan/AnovaOS/actions/runs/40458309803/job/122038013404",
+          "steps": []
+        }
+      ]
+    },
+    {
+      "run_id": 40458309803,
+      "run_attempt": 2,
+      "jobs": [
+        {
+          "id": 122040611027,
+          "name": "boot",
+          "status": "completed",
+          "conclusion": "failure",
+          "started_at": "2026-10-27T06:10:40Z",
+          "completed_at": "2026-10-27T06:14:43Z",
+          "html_url": "https://github.com/ananwanan/AnovaOS/actions/runs/40458309803/job/122040611027",
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1,
+              "started_at": "2026-10-27T06:10:41Z",
+              "completed_at": "2026-10-27T06:10:42Z"
+            },
+            {
+              "name": "Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2,
+              "started_at": "2026-10-27T06:10:42Z",
+              "completed_at": "2026-10-27T06:10:42Z"
+            },
+            {
+              "name": "Install host utilities",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3,
+              "started_at": "2026-10-27T06:10:42Z",
+              "completed_at": "2026-10-27T06:11:01Z"
+            },
+            {
+              "name": "Load the pinned Rust toolchain",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 4,
+              "started_at": "2026-10-27T06:11:01Z",
+              "completed_at": "2026-10-27T06:11:11Z"
+            },
+            {
+              "name": "Check formatting",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 5,
+              "started_at": "2026-10-27T06:11:11Z",
+              "completed_at": "2026-10-27T06:11:12Z"
+            },
+            {
+              "name": "Check bilingual documentation",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 6,
+              "started_at": "2026-10-27T06:11:12Z",
+              "completed_at": "2026-10-27T06:11:12Z"
+            },
+            {
+              "name": "Check file-purpose explanations",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 7,
+              "started_at": "2026-10-27T06:11:12Z",
+              "completed_at": "2026-10-27T06:11:39Z"
+            },
+            {
+              "name": "Check host tools",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 8,
+              "started_at": "2026-10-27T06:11:39Z",
+              "completed_at": "2026-10-27T06:11:50Z"
+            },
+            {
+              "name": "Check and build native Rust/C applications",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 9,
+              "started_at": "2026-10-27T06:11:50Z",
+              "completed_at": "2026-10-27T06:12:21Z"
+            },
+            {
+              "name": "Trace pinned Linux applications on the host",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 10,
+              "started_at": "2026-10-27T06:12:21Z",
+              "completed_at": "2026-10-27T06:12:33Z"
+            },
+            {
+              "name": "Check the bare-metal kernel",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 11,
+              "started_at": "2026-10-27T06:12:33Z",
+              "completed_at": "2026-10-27T06:12:49Z"
+            },
+            {
+              "name": "Test host logic",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 12,
+              "started_at": "2026-10-27T06:12:49Z",
+              "completed_at": "2026-10-27T06:14:29Z"
+            },
+            {
+              "name": "Test bootstrap source integrity and archive rejection",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 13,
+              "started_at": "2026-10-27T06:14:29Z",
+              "completed_at": "2026-10-27T06:14:30Z"
+            },
+            {
+              "name": "Build the kernel",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 14,
+              "started_at": "2026-10-27T06:14:30Z",
+              "completed_at": "2026-10-27T06:14:37Z"
+            },
+            {
+              "name": "Fetch verified boot inputs",
+              "status": "completed",
+              "conclusion": "failure",
+              "number": 15,
+              "started_at": "2026-10-27T06:14:37Z",
+              "completed_at": "2026-10-27T06:14:41Z"
+            },
+            {
+              "name": "Check prerequisites",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 16,
+              "started_at": "2026-10-27T06:14:41Z",
+              "completed_at": "2026-10-27T06:14:41Z"
+            },
+            {
+              "name": "Verify M9 pthread/signals/dynamic musl, VFS, isolation, memory and traps",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 17,
+              "started_at": "2026-10-27T06:14:41Z",
+              "completed_at": "2026-10-27T06:14:41Z"
+            },
+            {
+              "name": "Verify real serial input and volatile tmpfs across boots",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 18,
+              "started_at": "2026-10-27T06:14:41Z",
+              "completed_at": "2026-10-27T06:14:41Z"
+            },
+            {
+              "name": "Verify software graphics, QMP screenshot and serial fallback",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 19,
+              "started_at": "2026-10-27T06:14:41Z",
+              "completed_at": "2026-10-27T06:14:41Z"
+            },
+            {
+              "name": "Verify bounded GPU admission and headless CPU fallback",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 20,
+              "started_at": "2026-10-27T06:14:41Z",
+              "completed_at": "2026-10-27T06:14:41Z"
+            },
+            {
+              "name": "Verify polled PS2 keyboard, pointer, cursor pixels and device fallback",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 21,
+              "started_at": "2026-10-27T06:14:41Z",
+              "completed_at": "2026-10-27T06:14:41Z"
+            },
+            {
+              "name": "Verify isolated native windows, physical input, redraw and compositor recovery",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 22,
+              "started_at": "2026-10-27T06:14:41Z",
+              "completed_at": "2026-10-27T06:14:41Z"
+            },
+            {
+              "name": "Verify persistent sources, binaries, clean shutdown and device failures",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 23,
+              "started_at": "2026-10-27T06:14:41Z",
+              "completed_at": "2026-10-27T06:14:41Z"
+            },
+            {
+              "name": "Verify controlled ext4 readonly, large namespace, reboot and rejection",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 24,
+              "started_at": "2026-10-27T06:14:41Z",
+              "completed_at": "2026-10-27T06:14:41Z"
+            },
+            {
+              "name": "Verify controlled virtio networking, DNS and socket boundaries",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 25,
+              "started_at": "2026-10-27T06:14:41Z",
+              "completed_at": "2026-10-27T06:14:41Z"
+            },
+            {
+              "name": "Verify offline packages, reboot rollback and strict HTTPS",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 26,
+              "started_at": "2026-10-27T06:14:41Z",
+              "completed_at": "2026-10-27T06:14:41Z"
+            },
+            {
+              "name": "Verify versioned SDK templates, package policy and crash symbols",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 27,
+              "started_at": "2026-10-27T06:14:41Z",
+              "completed_at": "2026-10-27T06:14:41Z"
+            },
+            {
+              "name": "Upload boot evidence",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 28,
+              "started_at": "2026-10-27T06:14:41Z",
+              "completed_at": "2026-10-27T06:14:42Z"
+            },
+            {
+              "name": "Post Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 56,
+              "started_at": "2026-10-27T06:14:42Z",
+              "completed_at": "2026-10-27T06:14:42Z"
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 57,
+              "started_at": "2026-10-27T06:14:42Z",
+              "completed_at": "2026-10-27T06:14:42Z"
+            }
+          ]
+        },
+        {
+          "id": 122041884881,
+          "name": "guest-toolchain",
+          "status": "completed",
+          "conclusion": "skipped",
+          "started_at": "2026-10-27T06:14:44Z",
+          "completed_at": "2026-10-27T06:14:43Z",
+          "html_url": "https://github.com/ananwanan/AnovaOS/actions/runs/40458309803/job/122041884881",
+          "steps": []
+        }
+      ]
+    }
+  ],
+  "failures": [
+    {
+      "job_id": 122038387516,
+      "classification": "Pinned OVMF snapshot transport returned HTTP 503; downstream steps were not accepted",
+      "excerpt": "2026-10-27T06:04:24.9423317Z Running \"curl\" \"--fail\" \"--location\" \"--proto\" \"=https\" \"--tlsv1.2\" \"--retry\" \"2\" \"--max-time\" \"120\" \"--output\" \"/home/runner/work/AnovaOS/AnovaOS/build/cache/ovmf.part\" \"https://snapshot.ubuntu.com/ubuntu/20260828T000000Z/pool/main/e/edk2/ovmf_2024.02-2ubuntu0.9_all.deb\"\n2026-10-27T06:04:24.9472902Z   % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current\n2026-10-27T06:04:24.9474107Z                                  Dload  Upload   Total   Spent    Left  Speed\n2026-10-27T06:04:24.9493418Z \n2026-10-27T06:04:25.0119493Z   0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0\n2026-10-27T06:04:25.3155140Z   0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0\n2026-10-27T06:04:25.3155837Z   0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0\n2026-10-27T06:04:25.3156636Z curl: (22) The requested URL returned error: 503\n2026-10-27T06:04:25.3157955Z Warning: Problem : HTTP error. Will retry in 1 seconds. 2 retries left.\n2026-10-27T06:04:26.3167071Z \n2026-10-27T06:04:26.3994221Z   0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0\n2026-10-27T06:04:26.3995021Z   0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0\n2026-10-27T06:04:26.3995701Z curl: (22) The requested URL returned error: 503\n2026-10-27T06:04:26.3996353Z Warning: Problem : HTTP error. Will retry in 2 seconds. 1 retries left.\n2026-10-27T06:04:28.4015825Z \n2026-10-27T06:04:28.4910789Z   0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0\n2026-10-27T06:04:28.4911693Z   0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0\n2026-10-27T06:04:28.4912408Z curl: (22) The requested URL returned error: 503\n2026-10-27T06:04:28.4937259Z error: Command failed (exit status: 22): \"curl\" \"--fail\" \"--location\" \"--proto\" \"=https\" \"--tlsv1.2\" \"--retry\" \"2\" \"--max-time\" \"120\" \"--output\" \"/home/runner/work/AnovaOS/AnovaOS/build/cache/ovmf.part\" \"https://snapshot.ubuntu.com/ubuntu/20260828T000000Z/pool/main/e/edk2/ovmf_2024.02-2ubuntu0.9_all.deb\"\n2026-10-27T06:04:28.4954271Z ##[error]Process completed with exit code 1."
+    },
+    {
+      "job_id": 122036711956,
+      "classification": "Pinned OVMF snapshot transport returned HTTP 503; downstream steps were not accepted",
+      "excerpt": "2026-10-27T06:02:10.8031348Z Running \"curl\" \"--fail\" \"--location\" \"--proto\" \"=https\" \"--tlsv1.2\" \"--retry\" \"2\" \"--max-time\" \"120\" \"--output\" \"/home/runner/work/AnovaOS/AnovaOS/build/cache/ovmf.part\" \"https://snapshot.ubuntu.com/ubuntu/20260828T000000Z/pool/main/e/edk2/ovmf_2024.02-2ubuntu0.9_all.deb\"\n2026-10-27T06:02:10.8076877Z   % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current\n2026-10-27T06:02:10.8077245Z                                  Dload  Upload   Total   Spent    Left  Speed\n2026-10-27T06:02:10.8077445Z \n2026-10-27T06:02:11.2585622Z   0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0\n2026-10-27T06:02:11.2585972Z   0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0\n2026-10-27T06:02:11.2586165Z curl: (22) The requested URL returned error: 503\n2026-10-27T06:02:11.2586382Z Warning: Problem : HTTP error. Will retry in 1 seconds. 2 retries left.\n2026-10-27T06:02:12.2596981Z \n2026-10-27T06:02:12.3714805Z   0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0\n2026-10-27T06:02:12.3715161Z   0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0\n2026-10-27T06:02:12.3715862Z curl: (22) The requested URL returned error: 503\n2026-10-27T06:02:12.3716077Z Warning: Problem : HTTP error. Will retry in 2 seconds. 1 retries left.\n2026-10-27T06:02:14.3736197Z \n2026-10-27T06:02:14.4808068Z   0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0\n2026-10-27T06:02:14.4808448Z   0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0\n2026-10-27T06:02:14.4808713Z curl: (22) The requested URL returned error: 503\n2026-10-27T06:02:14.4834354Z error: Command failed (exit status: 22): \"curl\" \"--fail\" \"--location\" \"--proto\" \"=https\" \"--tlsv1.2\" \"--retry\" \"2\" \"--max-time\" \"120\" \"--output\" \"/home/runner/work/AnovaOS/AnovaOS/build/cache/ovmf.part\" \"https://snapshot.ubuntu.com/ubuntu/20260828T000000Z/pool/main/e/edk2/ovmf_2024.02-2ubuntu0.9_all.deb\"\n2026-10-27T06:02:14.4862817Z ##[error]Process completed with exit code 1."
+    },
+    {
+      "job_id": 122040611027,
+      "classification": "Manual retry reproduced HTTP 503 from the pinned OVMF snapshot URL",
+      "excerpt": "2026-10-27T06:14:37.7696015Z Running \"curl\" \"--fail\" \"--location\" \"--proto\" \"=https\" \"--tlsv1.2\" \"--retry\" \"2\" \"--max-time\" \"120\" \"--output\" \"/home/runner/work/AnovaOS/AnovaOS/build/cache/ovmf.part\" \"https://snapshot.ubuntu.com/ubuntu/20260828T000000Z/pool/main/e/edk2/ovmf_2024.02-2ubuntu0.9_all.deb\"\n2026-10-27T06:14:37.7746795Z   % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current\n2026-10-27T06:14:37.7747905Z                                  Dload  Upload   Total   Spent    Left  Speed\n2026-10-27T06:14:37.7748426Z \n2026-10-27T06:14:38.1203707Z   0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0\n2026-10-27T06:14:38.1204310Z   0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0\n2026-10-27T06:14:38.1204757Z curl: (22) The requested URL returned error: 503\n2026-10-27T06:14:38.1205230Z Warning: Problem : HTTP error. Will retry in 1 seconds. 2 retries left.\n2026-10-27T06:14:39.1216064Z \n2026-10-27T06:14:39.2095291Z   0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0\n2026-10-27T06:14:39.2095982Z   0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0\n2026-10-27T06:14:39.2096522Z curl: (22) The requested URL returned error: 503\n2026-10-27T06:14:39.2097898Z Warning: Problem : HTTP error. Will retry in 2 seconds. 1 retries left.\n2026-10-27T06:14:41.2117470Z \n2026-10-27T06:14:41.3232225Z   0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0\n2026-10-27T06:14:41.3233124Z   0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0\n2026-10-27T06:14:41.3233844Z curl: (22) The requested URL returned error: 503\n2026-10-27T06:14:41.3258621Z error: Command failed (exit status: 22): \"curl\" \"--fail\" \"--location\" \"--proto\" \"=https\" \"--tlsv1.2\" \"--retry\" \"2\" \"--max-time\" \"120\" \"--output\" \"/home/runner/work/AnovaOS/AnovaOS/build/cache/ovmf.part\" \"https://snapshot.ubuntu.com/ubuntu/20260828T000000Z/pool/main/e/edk2/ovmf_2024.02-2ubuntu0.9_all.deb\"\n2026-10-27T06:14:41.3275895Z ##[error]Process completed with exit code 1."
+    }
+  ],
+  "manual_retry": {
+    "run_id": 40458309803,
+    "from_job_id": 122036711956,
+    "requested_with": "GitHub rerun_workflow_job",
+    "observed_run_attempt": 2,
+    "event": "push",
+    "status_at_capture": "completed",
+    "conclusion": "failure"
+  },
+  "final_acceptance": false
+}

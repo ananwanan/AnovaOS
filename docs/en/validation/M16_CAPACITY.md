@@ -81,7 +81,14 @@ page and subsequent browser operations timed out. A branch push therefore suppli
 an independent executable trigger; its actual event must be recorded as `push`,
 not `workflow_dispatch`. No manual-dispatch success is claimed without a run.
 
-Actual run/commit/job/artifact identities and final results are pending execution.
+Actual first attempts: run #54 (`40457781527`, `92b8a38`) completed `boot=success`,
+`guest-toolchain=failure`; run #55 attempt 1 (`40458309803`, `8eee351`) completed
+`boot=failure`, `guest-toolchain=skipped`. Both failures were the pinned OVMF
+package URL returning HTTP 503 after retries, not a guest assertion. Raw job
+identities are `122038387516` and `122036711956`. The GitHub plugin successfully
+started run #55 attempt 2 by manually rerunning the failed boot job; its event
+remains `push`, so this is a manual rerun, not a new `workflow_dispatch`.
+Final execution evidence follows after the repaired run completes.
 
 ## Initial execution corrections
 
@@ -90,3 +97,36 @@ new VFS probe requested mkdir mode 0700, outside the declared Linux mkdir profil
 (0755/0775/0777). The guest correctly returned EOPNOTSUPP. The probe now uses
 0755 without changing kernel permissions or the quota/recovery assertions. No
 acceptance is claimed for that interrupted session.
+
+## Initial pressure observation
+
+The local corrected pressure session passed on a fresh JBD2 image, wall time
+563,747 ms including boot/shutdown. It sampled 16,774,240 heap bytes, 8,764
+4 KiB frame delta, 32 live/occupied tasks, 32 FDs/process and all 2,048 VFS slots.
+Two independent directory cycles each reached 711 additional pinned directories
+before ENOSPC. Disk allocation reached all 16,384 blocks, then returned to
+2,318 blocks / 12 inodes after truncation/removal; read-only e2fsck passed.
+This pressure result alone does not establish successful kernel construction.
+
+## Host retention and firmware acquisition corrections
+
+A local exploratory construction boot stopped during Limine module loading while
+the host repeatedly reached its separate 8 GiB cgroup ceiling. No construction
+acceptance is claimed for that boot. The driver now explicitly drops the packaged
+archive and source-byte buffers before launching QEMU; hashes and inventories are
+retained. This reduces host retention without raising guest/kernel quotas.
+
+The OVMF fallback is the official retained Launchpad package. It was downloaded
+and matched the existing package SHA-256 `a094c13d06f2740691ff57d108dff32aa087179363ddb0de42d463b4f7f9bc13`.
+The firmware version and extracted code/vars digests remain unchanged. Only
+transport errors try the locked mirror; checksum failures and redirected/corrupt
+cache entries are fatal. Unique partials are cleaned and cache publication never
+overwrites a concurrent entry. Both CI jobs share cached verified boot inputs and
+recheck all bytes. Five isolated acquisition tests cover these failure boundaries.
+
+The permanent [CI observation snapshot](../../assets/validation/M16_CI.json)
+retains the first failed attempts and their executed/skipped step boundaries.
+
+The manual #55 attempt 2 reproduced the same OVMF HTTP 503 in boot job
+`122040611027`; dependent guest job `122041884881` was skipped. It does not count
+as a successful baseline. The repaired acquisition must pass a new actual run.
