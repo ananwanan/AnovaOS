@@ -5,6 +5,10 @@
 
 ## M16 foundation progress (2026-10-27)
 
+M16 development is consolidated on `feat/m16-foundation`, including the foundation
+and M16.4 write-support commits. All remaining M16 work continues on this branch;
+pull requests target `dev`.
+
 Based on `dev` `616ff47`, the `feat/m16-foundation` delivery implements verified
 source transport fallback/cache admission, a filesystem backend boundary, on-demand
 directories, reclaimable persistent file nodes and the controlled ext4 readonly-v1

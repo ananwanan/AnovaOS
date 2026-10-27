@@ -6,8 +6,10 @@
 用 Rust 从零开发的 x86_64 操作系统，目标是在系统内编辑、编译、调试、运行应用，
 并逐步支持经过验证的现有 Linux 软件。
 
-日常开发与 Pull Request 目标为 **`dev`**；`main` 保留阶段验收后的稳定快照。
+日常开发以 **`dev`** 为基线，Pull Request 也以其为目标；`main` 保留阶段验收后的稳定快照。
 项目仓库：[ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS)。
+
+后续所有 M16 开发统一在 **`feat/m16-foundation`** 分支进行，Pull Request 目标为 `dev`。
 
 ## 当前状态
 

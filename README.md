@@ -7,8 +7,11 @@ An x86_64 operating system built from scratch in Rust. Its goal is to edit,
 compile, debug and run applications inside AnovaOS, while gradually supporting
 selected existing Linux software.
 
-Daily development and pull requests target **`dev`**; `main` holds accepted stable
+Daily development is based on **`dev`**, and pull requests target it; `main` holds accepted stable
 snapshots. Repository: [ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS).
+
+All remaining M16 development continues on **`feat/m16-foundation`**, with pull
+requests targeting `dev`.
 
 ## Current status
 

@@ -128,6 +128,10 @@ recovery independent of the desktop and retain all accepted regression gates.
 
 日常开发基线与 Pull Request 默认目标为 `dev`。除用户明确指定外，不直接在 `main` 开发；`main` 用于接收阶段验收后的稳定快照。开始工作前检查并切换到实际的 `dev` 或由其创建的任务分支，不仅依赖 GitHub 页面当前选中的分支。
 
+The owner-selected M16 working branch is `feat/m16-foundation`. Continue all remaining
+M16 development on this branch, including subsequent substages, with pull requests
+targeting `dev`.
+
 本项目原创代码、文档与示例采用 `Apache-2.0`；保留根目录 `LICENSE`、`NOTICE` 和已有归属声明。第三方代码保持原许可证，具体边界见 [docs/en/guides/LICENSING.md](docs/en/guides/LICENSING.md)。
 
 ## Development language and formatting (mandatory)
