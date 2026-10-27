@@ -78,6 +78,8 @@
 - [M15.6.md](validation/M15.6.md)
 - [M16.md](validation/M16.md)
 - [M16.4.md](validation/M16.4.md)
+- [M16.5.md](validation/M16.5.md)
+- [M16.6.md](validation/M16.6.md)
 - [M2.md](validation/M2.md)
 - [M3.md](validation/M3.md)
 - [M4.md](validation/M4.md)

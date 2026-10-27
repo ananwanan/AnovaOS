@@ -7,7 +7,7 @@ This describes implemented boundaries through the accepted M15.6 reconstruction 
 separately scoped future architecture. Guest toolchains, native SDKs and bounded Rust GUI/GPU
 profiles are implemented; full compiler reconstruction, guest-only image generation, SMP and
 physical hardware remain separate. M16 now implements the backend/cache boundary and a
-controlled readonly ext4 profile plus explicit non-journal write-v1; journal recovery/adoption and M17 desktop remain future work. Current evidence is in [STATUS](guides/STATUS.md).
+controlled ext4 profiles, explicit JBD2 recovery and opt-in migration/build acceptance; M17 desktop remains future work. Current evidence is in [STATUS](guides/STATUS.md).
 
 ## 1. Overall structure
 
@@ -632,7 +632,7 @@ separate. See [M15 repeat](milestones/M15_REPEAT.md) and
 ## M16 storage/resources and planned M17 desktop
 
 The backend/cache boundary and controlled ext4 readonly-v1 below are implemented.
-Opt-in write-v1 is implemented; recovery, resource expansion and the desktop retain their independently scoped exits.
+Opt-in write-v1, JBD2 and migration have bounded acceptance below; resource expansion and the desktop retain their independent exits.
 See [M16 evidence](validation/M16.md).
 [M16 foundation](milestones/M16_FOUNDATION.md) precedes
 [M17 desktop](milestones/M17_DESKTOP.md); see [ROADMAP](ROADMAP.md) for stages.
@@ -654,7 +654,7 @@ See [M16 evidence](validation/M16.md).
   dirty/recovery-required images, checksummed/64bit/flex/indexed layouts and unsupported
   inode types fail closed. Sparse/unwritten regions read as zeros. No sector write or
   flush is issued by this readonly backend. Ext2 remains the default writable recovery
-  profile; JBD2 fault recovery and verified copy migration are still pending.
+  profile; JBD2 recovery and verified copy migration use the separate opt-in contracts below.
 - Explicit `ext4-write` kernels admit [write-v1](validation/M16.4.md) only after auditing
   global block ownership, namespace links and allocation counters. Bounded unpublished overlays
   protect old bytes/names on preflight ENOSPC/OOM/read failures; data/flush/metadata publication
@@ -672,3 +672,21 @@ See [M16 evidence](validation/M16.md).
 M18 compiler reconstruction and guest-only image generation continue independently after
 the developer desktop. Native std, SMP, device IRQ/async I/O and physical drivers remain
 separate architecture changes. A new filesystem format is outside the M16/M17 critical path.
+
+## M16.5/M16.6 journal and development-volume ownership
+
+`ext4/journal.rs` owns the immutable internal journal map, checksum-v3 records,
+fallible descriptor staging and a single synchronous data-plus-metadata transaction.
+It flushes recovery admission, journal head, log, commit, home checkpoint and head
+retirement in order. Replay validates checksums, immutable geometry, allocation,
+namespace and orphan ownership in an overlay before writing home blocks. The
+classic superblock/inode orphan chain shares each unlink/reclaim transaction.
+No VFS/native ABI change or new scheduler/device policy is required.
+
+`foundation_migrate.rs` opens ext2 sources readonly and copies to create-new ext4
+images, compares inventories and retains the source. Its guest supervisor runs
+real make/GCC/bzip2 and an independent storage writer, executes foreground commands,
+fsync/rename saves, reads compiler logs and interrupts a process group. Host UART
+wall times are separate from scheduler-boundary resource samples. See
+[M16.5](validation/M16.5.md) and [M16.6](validation/M16.6.md). Default ext2, fixed
+heap/task/cache bounds, M17 desktop and M18 compiler/image reconstruction remain separate.

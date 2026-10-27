@@ -615,4 +615,23 @@ ordinary runs still mount ext4 readonly and retain the default ext2 recovery pat
 The separate six-boot write gate verifies file/directory semantics, real guest
 GCC/make, native OOM, ENOSPC, reboot, host e2fsck/hashes and actual virtio read/write/
 flush failures. Its complete contract and retained evidence are in
-[M16.4](../validation/M16.4.md). No journal replay or default migration is accepted.
+[M16.4](../validation/M16.4.md). This historical gate covers non-journal write-v1; the separate commands below accept JBD2 and opt-in migration.
+
+## M16.5/M16.6 journal and new work disks
+
+```sh
+cargo xtask ext4-journal-image --linux build/disks/new-work.ext4
+cargo xtask run --ext4-write --toolchain --disk build/disks/new-work.ext4
+cargo xtask ext4-migrate build/disks/old.ext2 build/disks/migrated.ext4
+cargo xtask foundation-journal-test
+cargo xtask foundation-migrate-test
+```
+
+The new 64 MiB/8 MiB-journal profile remains opt-in; both image commands require
+new destinations. Migration reads a stopped/clean ext2 source readonly and saves
+an exact inventory alongside the new image. JBD2 uses one synchronous checksum-v3
+data/metadata transaction, audited replay and persistent orphan recovery. The new
+gates retain write/flush/tear faults, independent e2fsck replay, real guest bzip2,
+interruption/reboot retention and host-measured foreground UART budgets. See
+[M16.5](../validation/M16.5.md) and [M16.6](../validation/M16.6.md). Default ext2,
+existing software quotas, broader M16/remote CI and M17/M18 remain separate.

@@ -4,7 +4,7 @@
 [English](../en/ARCHITECTURE.md) | **简体中文**
 
 本文覆盖至 M15.6 已验收重建及 M16 后端/缓存、受控 ext4 只读配置的实现边界。
-M16 已增加显式启用的无日志可写；日志恢复/采用和 M17 桌面仍是后续工作。guest 工具链、原生 SDK、
+M16 已增加显式 JBD2 恢复和可选迁移/构建验收；M17 桌面仍是后续工作。guest 工具链、原生 SDK、
 有界 Rust GUI/GPU 均已实现；完整编译器重建、guest 独立镜像生成、SMP 和实机另计。
 当前能力与证据见 [STATUS](guides/STATUS.md)。
 
@@ -356,7 +356,7 @@ input/seed/recipe和完整bzip2/内核ELF bytes相同。失败保诊断、不出
 
 ## M16 存储/资源与计划中的 M17 桌面
 
-后端/缓存边界、受控 ext4 只读 v1 与显式启用的无日志 write-v1 已实现；恢复、资源扩展和桌面仍需各自验收。
+后端/缓存边界、受控 ext4 只读 v1 与显式启用的无日志 write-v1 已实现；JBD2/迁移有独立有界验收，资源扩展和桌面仍需各自验收。
 见 [M16 证据](validation/M16.md)。[M16 基础能力](milestones/M16_FOUNDATION.md)
 先于 [M17 桌面](milestones/M17_DESKTOP.md)，阶段划分见[路线图](ROADMAP.md)。
 
@@ -371,7 +371,8 @@ input/seed/recipe和完整bzip2/内核ELF bytes相同。失败保诊断、不出
 - `crates/storage/src/ext4.rs` 读取严格的无日志 4 KiB/256-byte-inode extent 配置，检查多组
   元数据保留/分配、extent 深度/访问记录/顺序/重叠和文件上限。拒绝未知特性、脏盘/需恢复
   镜像、checksum/64bit/flex/indexed 布局和不支持的 inode 类型；稀疏/未初始化区域返回零。
-  只读配置不会发出扇区写入或 flush。ext2 仍是默认可写/恢复配置，JBD2 故障恢复和受检复制迁移仍待完成。
+  只读配置不会发出扇区写入或 flush；需要恢复的盘只允许显式可写挂载重放。ext2 仍是默认可写/恢复配置；
+  新的日志/复制迁移配置见下文。
 - 显式 `ext4-write` 内核完成全局块归属、目录链接和分配计数审计后，才启用
   [write-v1](validation/M16.4.md)。有界未发布暂存层在预检 ENOSPC/OOM/读失败时保留原字节/
   命名空间；数据/flush/元数据发布错误使挂载停止服务并保留脏状态。分配/回收、extent 重建、
@@ -384,3 +385,17 @@ input/seed/recipe和完整bzip2/内核ELF bytes相同。失败保诊断、不出
 
 M18 编译器重建和 guest 独立镜像生成在开发桌面之后独立推进。原生 std、SMP、设备 IRQ/
 异步 I/O 与实机驱动属于单独架构改动。全新文件系统格式不进入 M16/M17 关键路径。
+
+## M16.5/M16.6 日志与开发盘所有权
+
+`ext4/journal.rs` 持有不可变内置日志映射、checksum-v3 记录、可失败的描述符暂存层，
+每次只运行一个同步的数据加元数据事务。按顺序刷入恢复标记、日志头、日志体、commit、
+home checkpoint 和日志退役。重放先在 overlay 校验校验和、不可变几何、分配、命名空间和
+孤儿归属，再发布 home blocks。经典 superblock/inode orphan 链与 unlink/回收共用事务。
+不改变 VFS/native ABI，也不引入新的调度器或设备策略。
+
+`foundation_migrate.rs` 只读打开 ext2 源盘，复制至 create-new ext4 镜像，核对清单并保留源盘。
+guest 监督程序运行真实 make/GCC/bzip2 与独立存储写入进程，同时执行前台命令、fsync/rename
+保存、读取编译日志及中断进程组。宿主 UART wall time 与调度边界资源采样分别记录。详见
+[M16.5](validation/M16.5.md)、[M16.6](validation/M16.6.md)。默认 ext2、固定堆/任务/缓存限制、
+M17 桌面和 M18 编译器/镜像重建仍分别处理。

@@ -6,8 +6,9 @@
 Planned 2026-10-26 (Asia/Shanghai) against `dev` baseline `05a5fb1`.
 **Updated 2026-10-27 against `616ff47`: backend/cache isolation and a controlled ext4
 readonly profile are implemented and locally verified.** Dependency acquisition is repaired;
-remote CI, complete workload/latency acceptance, JBD2 recovery and migration
-remain open. See [M16 evidence](../validation/M16.md). The stage contracts below retain their full exits.
+JBD2 recovery and fresh-disk migration/build responsiveness now have separate local
+acceptance in [M16.5](../validation/M16.5.md)/[M16.6](../validation/M16.6.md).
+Remote CI and full capacity acceptance remain separate. See [M16 evidence](../validation/M16.md). The stage contracts below retain their full exits.
 See the [roadmap](../ROADMAP.md), [current status](../guides/STATUS.md) and
 [architecture](../ARCHITECTURE.md) for implemented boundaries.
 
@@ -52,8 +53,8 @@ new requirements. Every stage needs its own evidence and failure boundaries.
 | M16.2 | Filesystem backend boundary and bounded, scalable resource management | Backend/cache locally verified; quotas unchanged |
 | M16.3 | Controlled ext4 readonly mount and data access | Readonly-v1 locally verified; see evidence |
 | M16.4 | Controlled ext4 writes and declared POSIX semantics | Implemented opt-in write-v1; [profile/evidence](../validation/M16.4.md) |
-| M16.5 | JBD2 recovery and verified durability | Planned; unimplemented |
-| M16.6 | Fresh-disk migration, real builds and responsive foreground use | Planned; unimplemented |
+| M16.5 | JBD2 recovery and verified durability | Opt-in checksum-v3/data-journal profile locally accepted; [evidence](../validation/M16.5.md) |
+| M16.6 | Fresh-disk migration, real builds and responsive foreground use | Retained ext2 copy, guest bzip2 and UART budgets locally accepted; [evidence](../validation/M16.6.md); default unchanged |
 
 ## M16.1: CI baseline and measured workload
 

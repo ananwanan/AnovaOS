@@ -66,7 +66,7 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `crates/sched/src/lib.rs` | Bounded BSP scheduling policy and parent/child lifecycle without hardware or allocation. The kernel owns contexts/resources; this policy never switches stacks or takes locks. |
 | `crates/storage/Cargo.toml` | Declare the no_std checked sector/ext2 crate and its native error dependency. |
 | `crates/storage/src/ext2.rs` | Implement the declared ext2 profile, checked allocation, retained modes/timestamps, ordered writes and clean shutdown. |
-| `crates/storage/src/ext4.rs` | Read controlled ext4 extents and dispatch explicit audited non-journal writes with bounded allocation ownership. |
+| `crates/storage/src/ext4.rs` | Read controlled ext4 extents and dispatch explicit audited non-journal/JBD2 writes with bounded allocation ownership. |
 | `crates/storage/src/filesystem.rs` | Define persistent backend capabilities, stable metadata and bounded directory cursor operations. |
 | `crates/storage/src/lib.rs` | Define owned synchronous sector devices, read-only/flush/stop contracts and checked ranges. |
 | `crates/storage/tests/ext2.rs` | Verify on-disk ext2 bytes, indirection, sparse data, exhaustion, reboot and injected I/O failures. |
@@ -458,3 +458,13 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `xtask/src/foundation_write.rs` | Create opt-in ext4 work images and retain six QEMU write/build/reboot/virtio-failure sessions and host checks. |
 | `docs/en/validation/M16.4.md` | Specify the controlled ext4 write-v1 contract, failures and independently checked local evidence. |
 | `docs/zh-CN/validation/M16.4.md` | Translate the controlled ext4 write-v1 contract and exact local acceptance boundaries. |
+| `crates/storage/src/ext4/journal.rs` | Implement bounded checksum-v3 JBD2 commit/replay/revoke and persistent orphan recovery. |
+| `crates/storage/tests/journal.rs` | Verify sector/flush/half-sector power cuts, actual allocation failure and independent e2fsck interoperability. |
+| `scripts/reconstruct_journal_cut.py` | Reconstruct any retained journal fault from an immutable baseline and exact sector event trace. |
+| `xtask/src/foundation_journal.rs` | Create fresh JBD2 images and retain host matrix plus real guest write/power-cut/recovery evidence. |
+| `xtask/src/foundation_migrate.rs` | Copy readonly ext2 sources to new JBD2 disks and verify actual builds, interruption and UART budgets. |
+| `tests/guest/m16/workload.c` | Supervise actual guest make/GCC, parallel storage writes and UART command/save/log/interruption probes. |
+| `docs/en/validation/M16.5.md` | Specify the bounded JBD2 profile, ordering, failure/replay and actual local acceptance. |
+| `docs/zh-CN/validation/M16.5.md` | Translate the JBD2 profile, fault models, evidence and exact recovery limits. |
+| `docs/en/validation/M16.6.md` | Specify fresh-disk migration, real build closure, foreground budgets and exact local evidence. |
+| `docs/zh-CN/validation/M16.6.md` | Translate migration ownership, actual build/UART acceptance and independent remaining work. |

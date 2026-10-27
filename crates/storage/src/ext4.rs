@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Read checked ext4 extents and optionally stage bounded, non-journal mutations before disk I/O.
+//! Read checked ext4 extents and stage bounded mutations with optional synchronous JBD2 recovery.
 //! Default mounts remain readonly; writable admission additionally audits allocation and namespace ownership.
 mod audit;
 mod directory;
+mod journal;
 mod write;
 use crate::{
     BlockDevice, SECTOR, check_range,
@@ -96,15 +97,20 @@ pub struct Ext4 {
     clock: u32,
     orphans: Vec<u32>,
     transaction: Option<write::Transaction>,
+    journal: Option<journal::Journal>,
 }
 
 impl Ext4 {
-    pub fn mount(mut device: Box<dyn BlockDevice>) -> Result<Self, i64> {
+    pub fn mount(device: Box<dyn BlockDevice>) -> Result<Self, i64> {
+        Self::mount_inner(device, false)
+    }
+    fn mount_inner(mut device: Box<dyn BlockDevice>, recover: bool) -> Result<Self, i64> {
         let mut bytes = buffer()?;
         read_block(&mut *device, 0, &mut bytes)?;
         let s = &bytes[1024..2048];
-        // No flex/64bit, indexed directories, xattrs, checksums, bigalloc or journal recovery.
-        // Journal-bearing images also remain outside this deliberately non-journal profile.
+        let journaled = u32_at(s, 92) == 4;
+        let needs_recovery = u32_at(s, 96) & 4 != 0;
+        // Only the internal journal feature extends the original ext4-write-v1 geometry.
         if u16_at(s, 56) != 0xef53
             || u16_at(s, 58) != 1
             || u32_at(s, 20) != 0
@@ -114,10 +120,18 @@ impl Ext4 {
             || u32_at(s, 76) != 1
             || u32_at(s, 84) != 11
             || u16_at(s, 88) != 256
-            || u32_at(s, 92) != 0
-            || u32_at(s, 96) != 0x42
+            || !matches!(u32_at(s, 92), 0 | 4)
+            || u32_at(s, 96)
+                != (0x42
+                    | if journaled && recover {
+                        4 & u32_at(s, 96)
+                    } else {
+                        0
+                    })
             || u32_at(s, 100) & !3 != 0
-            || u32_at(s, 232) != 0
+            || !journaled && u32_at(s, 232) != 0
+            || journaled && (u32_at(s, 224) != 8 || u32_at(s, 228) != 0)
+            || journaled && s[208..224].iter().any(|v| *v != 0)
             || !matches!(u16_at(s, 254), 0 | 32)
             || u32_at(s, 336) != 0
             || u32_at(s, 340) != 0
@@ -149,6 +163,7 @@ impl Ext4 {
         let descriptors = (count * 32).div_ceil(BLOCK as u32);
         let table_blocks = ipg / (BLOCK / 256) as u32;
         let sparse = u32_at(s, 100) & 1 != 0;
+        let uuid: [u8; 16] = s[104..120].try_into().unwrap();
         let mut groups = Vec::new();
         groups
             .try_reserve_exact(count as usize)
@@ -217,7 +232,18 @@ impl Ext4 {
             clock: 0,
             orphans: Vec::new(),
             transaction: None,
+            journal: None,
         };
+        if journaled {
+            fs.journal = Some(fs.open_journal(uuid, needs_recovery)?);
+            if needs_recovery {
+                fs.recover_journal()?;
+            }
+            fs.load_orphans()?;
+            if !recover && !fs.orphans.is_empty() {
+                return Err(INVALID_FILESYSTEM);
+            }
+        }
         for i in 0..fs.groups.len() {
             let g = fs.groups[i];
             for block in (g.start..g.prefix)
@@ -280,6 +306,10 @@ impl Ext4 {
             || block == g.blocks
             || block == g.inodes
             || (g.table..g.table_end).contains(&block)
+            || self
+                .journal
+                .as_ref()
+                .is_some_and(|j| j.blocks.contains(&block))
             || !self.allocated_block(block)?
         {
             return Err(INVALID_FILESYSTEM);
@@ -314,7 +344,7 @@ impl Ext4 {
         if (!directory && mode & 0xf000 != 0x8000)
             || links == 0 && !self.is_orphan(number)
             || !directory && links > 1
-            || u32_at(raw, 20) != 0
+            || u32_at(raw, 20) != 0 && !(self.journal.is_some() && self.is_orphan(number))
             || u32_at(raw, 32) != 0x80000
             || u32_at(raw, 104) != 0
             || u32_at(raw, 108) != 0

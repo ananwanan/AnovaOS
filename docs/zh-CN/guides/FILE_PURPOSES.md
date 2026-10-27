@@ -456,3 +456,13 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `xtask/src/foundation_write.rs` | 创建显式启用的 ext4 工作盘，保留六次 QEMU 写入/构建/重启/virtio 故障及宿主检查。 |
 | `docs/en/validation/M16.4.md` | 说明受控 ext4 write-v1 契约、故障与独立检查的本地证据（英文）。 |
 | `docs/zh-CN/validation/M16.4.md` | 提供受控 ext4 write-v1 契约与本地验收边界的中文对照。 |
+| `crates/storage/src/ext4/journal.rs` | Implement bounded checksum-v3 JBD2 commit/replay/revoke and persistent orphan recovery. |
+| `crates/storage/tests/journal.rs` | Verify sector/flush/half-sector power cuts, actual allocation failure and independent e2fsck interoperability. |
+| `scripts/reconstruct_journal_cut.py` | Reconstruct any retained journal fault from an immutable baseline and exact sector event trace. |
+| `xtask/src/foundation_journal.rs` | Create fresh JBD2 images and retain host matrix plus real guest write/power-cut/recovery evidence. |
+| `xtask/src/foundation_migrate.rs` | Copy readonly ext2 sources to new JBD2 disks and verify actual builds, interruption and UART budgets. |
+| `tests/guest/m16/workload.c` | Supervise actual guest make/GCC, parallel storage writes and UART command/save/log/interruption probes. |
+| `docs/en/validation/M16.5.md` | Specify the bounded JBD2 profile, ordering, failure/replay and actual local acceptance. |
+| `docs/zh-CN/validation/M16.5.md` | Translate the JBD2 profile, fault models, evidence and exact recovery limits. |
+| `docs/en/validation/M16.6.md` | Specify fresh-disk migration, real build closure, foreground budgets and exact local evidence. |
+| `docs/zh-CN/validation/M16.6.md` | Translate migration ownership, actual build/UART acceptance and independent remaining work. |

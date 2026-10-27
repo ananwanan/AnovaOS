@@ -177,10 +177,24 @@ pub(super) fn source_identity(root: &Path) -> Result<String> {
         .split('\0')
         .filter(|name| {
             !name.is_empty()
-                && matches!(
-                    Path::new(name).extension().and_then(|e| e.to_str()),
-                    Some("rs" | "py" | "toml" | "json" | "lock" | "sh" | "yml")
-                )
+                && (Path::new(name)
+                    .file_name()
+                    .is_some_and(|v| v.to_string_lossy().starts_with("Makefile"))
+                    || matches!(
+                        Path::new(name).extension().and_then(|e| e.to_str()),
+                        Some(
+                            "rs" | "c"
+                                | "h"
+                                | "S"
+                                | "ld"
+                                | "py"
+                                | "toml"
+                                | "json"
+                                | "lock"
+                                | "sh"
+                                | "yml"
+                        )
+                    ))
         })
         .collect();
     paths.sort_unstable();

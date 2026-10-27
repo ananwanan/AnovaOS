@@ -15,8 +15,9 @@ directories, reclaimable persistent file nodes and the controlled ext4 readonly-
 profile. See [M16 validation](../validation/M16.md) for exact scope and checks.
 The default ext2 image, 16 MiB heap, 32 task/fd and 2,048 cache-slot bounds remain.
 Opt-in non-journal ext4 write-v1 is implemented; see [M16.4](../validation/M16.4.md).
-JBD2 recovery, fresh-work-disk adoption and full M16 acceptance are pending;
-remote CI remains separate from the local results.
+Opt-in [JBD2 recovery](../validation/M16.5.md) and [fresh-disk migration/builds](../validation/M16.6.md)
+are locally accepted for the declared bzip2 profile, including foreground UART budgets.
+Full M16 capacity/remote CI acceptance remains separate; ext2 stays the default.
 
 Plan reviewed 2026-10-26 (Asia/Shanghai) on synchronized `dev` at `05a5fb1`,
 which includes M15.6 delivery `16c0ddf`. The acceptance records below describe their
@@ -47,7 +48,7 @@ its unimplemented status. M17/M18 and the remaining M16 stages retain their plan
 
 | Plan | Scope | Next prerequisite |
 | --- | --- | --- |
-| [M16 foundation](../milestones/M16_FOUNDATION.md) | CI/budgets, backend isolation and resources, ext4 read-only, writes, JBD2 recovery and new-work-disk adoption | Finish remote CI/budgets, then JBD2 recovery and work-disk adoption |
+| [M16 foundation](../milestones/M16_FOUNDATION.md) | CI/budgets, backend isolation and resources, ext4 read-only, writes, JBD2 recovery and new-work-disk adoption | Finish remote CI/full capacity acceptance; JBD2/migration and declared bzip2 budgets accepted locally |
 | [M17 desktop](../milestones/M17_DESKTOP.md) | Supervised session, PTY terminal, files/editor, diagnostics and all-GUI C/C++/Rust workflow | Accepted M16 workspace/resources; use inherited guest compilers |
 | [M18 self-hosting](../ROADMAP.md#m18-conditional-self-hosting) | Separate compiler component stages, guest-only image generation and repeated recovery | Per-component tools, source closure, stage0/dependencies and measured capacity after M16/M17 |
 
@@ -555,3 +556,14 @@ window composition remain on the CPU; no shader draws, guest OpenGL/Vulkan API,
 zero-copy scanout, performance speedup, physical GPU passthrough or recovery
 from an unacknowledged reset is established. Exact scope and current regression
 evidence are in [M14 GPU](../milestones/M14_GPU.md) and [validation/M14.5](../validation/M14.5.md).
+
+## Regression checks for this delivery
+
+Local gates passed: `foundation-journal-test`, `foundation-migrate-test`, the
+existing `foundation-write-test`, `foundation-test`, `persistence-test` and all
+13 `verify` boot/fault cases. `test-host` passed 224 tests; the final xtask-only
+rerun passed all 48 tests. Strict host Clippy and the bare-metal
+`ext4-write,bootstrap-metrics` kernel Clippy passed, as did workspace/user
+formatting, Python/workflow parsing, bilingual documentation, 454-file purpose
+coverage and `git diff --check`. Remote CI was configured, not accepted by these
+local results; the current workflow triggers on `dev` pushes/PRs or manual dispatch.

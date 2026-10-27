@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Stage bounded ext4 changes, maintain allocation counters and rebuild extent maps without a journal.
+//! Stage bounded ext4 changes, maintain allocation counters and publish through the selected durability profile.
 //! Allocation/read failures discard the overlay; device commit failures poison the mount and retain dirty state.
 use super::*;
 
@@ -9,12 +9,12 @@ pub const MAX_DIRECTORY_BLOCKS: usize = 256;
 pub(super) struct Change {
     pub number: u32,
     pub bytes: Box<[u8; BLOCK]>,
-    data: bool,
+    pub(super) data: bool,
 }
 pub(super) struct Transaction {
-    changes: Vec<Change>,
-    orphans: Vec<u32>,
-    hint: u32,
+    pub(super) changes: Vec<Change>,
+    pub(super) orphans: Vec<u32>,
+    pub(super) hint: u32,
 }
 impl Transaction {
     pub fn find(&self, n: u32) -> Option<&Change> {
@@ -28,11 +28,14 @@ impl Ext4 {
         if device.read_only() {
             return Err(READ_ONLY);
         }
-        let mut fs = Self::mount(device)?;
+        let mut fs = Self::mount_inner(device, true)?;
         fs.audit_writable()?;
         fs.cached = None;
         fs.bitmap_number = None;
         fs.writable = true;
+        while let Some(n) = fs.orphans.last().copied() {
+            fs.mutate(|s| s.release_inner(n))?;
+        }
         Ok(fs)
     }
     pub(super) fn is_orphan(&self, n: u32) -> bool {
@@ -62,7 +65,10 @@ impl Ext4 {
             hint: 0,
         });
         self.cached = None;
-        let result = operation(self);
+        let result = operation(self).and_then(|value| {
+            self.persist_orphans()?;
+            Ok(value)
+        });
         self.cached = None;
         self.bitmap_number = None;
         let transaction = self.transaction.take().unwrap();
@@ -97,7 +103,7 @@ impl Ext4 {
         self.cached = None;
         Ok(())
     }
-    fn write_device(&mut self, n: u32, bytes: &[u8; BLOCK]) -> Result<(), i64> {
+    pub(super) fn write_device(&mut self, n: u32, bytes: &[u8; BLOCK]) -> Result<(), i64> {
         let sector = u64::from(n) * 8;
         check_range(self.device.sectors(), sector, BLOCK)?;
         for (i, input) in bytes.chunks_exact(SECTOR).enumerate() {
@@ -109,6 +115,9 @@ impl Ext4 {
     fn commit(&mut self, mut t: Transaction) -> Result<(), i64> {
         if t.changes.is_empty() {
             return Ok(());
+        }
+        if self.journal.is_some() {
+            return self.commit_journal(t);
         }
         // Allocate/read everything still needed before the very first device mutation.
         let mut primary = buffer()?;
@@ -168,6 +177,9 @@ impl Ext4 {
         let mut primary = buffer()?;
         self.read_block(0, &mut primary)?;
         put16(&mut primary[..], 1024 + 58, 1);
+        if self.journal.is_some() {
+            put32(&mut primary[..], 1024 + 96, 0x42);
+        }
         put32(&mut primary[..], 1024 + 48, self.clock);
         let result = self
             .write_device(0, &primary)
@@ -175,7 +187,11 @@ impl Ext4 {
         if let Err(error) = result {
             // A failed clean-marker write/flush must not be reported as a clean shutdown.
             // Best effort only: an unavailable device cannot promise persisted dirty bytes.
-            put16(&mut primary[..], 1024 + 58, 0);
+            if self.journal.is_some() {
+                put32(&mut primary[..], 1024 + 96, 0x46);
+            } else {
+                put16(&mut primary[..], 1024 + 58, 0);
+            }
             let _ = self.write_device(0, &primary);
             let _ = self.device.flush();
             self.failed = true;

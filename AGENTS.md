@@ -120,7 +120,7 @@ journal recovery and fresh-disk migration. The planning commit implemented none 
 backend/cache isolation and controlled ext4 readonly access; see [M16 evidence](docs/en/validation/M16.md).
 Preserve `cargo xtask foundation-test` and `python3 ports/gcc/test_fetch.py` with all prior gates.
 M16.4 adds explicit non-journal ext4 write-v1; preserve `cargo xtask foundation-write-test` and read [M16.4](docs/en/validation/M16.4.md).
-JBD2 recovery/migration, complete budgets/remote CI and M17/M18 remain pending. Use existing guest compilers for M17; full compiler bootstrap, SMP, physical
+JBD2 recovery/migration now have the separate bounded acceptance below; complete budgets/remote CI and M17/M18 remain pending. Use existing guest compilers for M17; full compiler bootstrap, SMP, physical
 drivers and a new filesystem format are not its prerequisites. Keep serial/host
 recovery independent of the desktop and retain all accepted regression gates.
 
@@ -330,3 +330,15 @@ GUI frameworks, shader draws and hardware support need independent acceptance.
   inventory, ownership/safety review, ABI compatibility tests and exact
   validation evidence requirements. Add `cargo xtask` GUI commands only
   together with their functioning implementation.
+
+## M16.5/M16.6 continuing acceptance
+
+The owner-selected `feat/m16-foundation` now includes opt-in internal JBD2 checksum-v3,
+synchronous data/metadata journal transactions, audited replay and persistent orphan
+recovery. Preserve `cargo xtask foundation-journal-test`, its sector/flush/tear matrix,
+independent e2fsck replay and allocation failures. Read [M16.5](docs/en/validation/M16.5.md).
+Fresh work disks and readonly-source ext2 migration remain explicit. Preserve
+`cargo xtask foundation-migrate-test`, actual guest bzip2 compilation, storage pressure,
+UART latency budgets, interruption, failed-build retention and ext2 fallback; read
+[M16.6](docs/en/validation/M16.6.md). Keep existing non-journal/ext2 gates. Default
+storage, full M16/remote CI acceptance, larger quotas and M17/M18 remain independent.

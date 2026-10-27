@@ -200,3 +200,12 @@ Linux 包、glibc、依赖求解、签名认证或进程沙箱。见 [M13](miles
 [证据](validation/M15.5.md)。验收配置为带 bootstrap metrics、无 GUI 的 stripped opt-z，
 目标库仍是继承种子。编译器重建与 guest 独立镜像生成仍独立；[M15.6](validation/M15.6.md)
 已通过独立重复干净构建、最终产物精确比较，保留中间文件差异。
+
+## M16.5/M16.6 受控日志工作盘
+
+显式 `ext4-write` 准入支持独立审计的内置 JBD2 checksum-v3/data-journal 配置、单一同步未完成
+事务和持久孤儿重放；普通只读挂载拒绝需恢复磁盘。新盘 ext2-to-ext4 复制保留路径、字节、权限、
+秒级时间与 ABI 策略，不改变 native syscall v1 或已有盘字节。真实 guest GCC/make 重建 bzip2
+1.0.8，专用 UART 监督程序在存储压力下执行命令、保存、读取日志和中断。精确故障/预算和本地
+证据见 [M16.5](validation/M16.5.md)、[M16.6](validation/M16.6.md)。通用 Linux 日志、任意项目、
+桌面工作流和编译器自举需独立配置；ext2 仍为默认/恢复路线。

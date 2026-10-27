@@ -423,4 +423,20 @@ cargo xtask foundation-write-test
 可写启动必须明确指定磁盘；普通启动仍将 ext4 挂为只读，默认 ext2 恢复路线保留。
 独立六次启动的写入门禁验证文件/目录语义、真实 guest GCC/make、原生 OOM、ENOSPC、
 重启、宿主 e2fsck/哈希及真实 virtio 读/写/flush 错误；完整契约和保留证据见
-[M16.4](../validation/M16.4.md)。日志重放和默认迁移尚未验收。
+[M16.4](../validation/M16.4.md)。此历史门禁覆盖无日志 write-v1；以下独立命令验收 JBD2 与可选迁移。
+
+## M16.5/M16.6 日志与新工作盘
+
+```sh
+cargo xtask ext4-journal-image --linux build/disks/new-work.ext4
+cargo xtask run --ext4-write --toolchain --disk build/disks/new-work.ext4
+cargo xtask ext4-migrate build/disks/old.ext2 build/disks/migrated.ext4
+cargo xtask foundation-journal-test
+cargo xtask foundation-migrate-test
+```
+
+64 MiB/8 MiB 日志的新配置保持显式启用；两个创建/迁移命令都要求新目标。迁移只读打开已停止/
+干净的 ext2 源盘，在新盘旁保存准确清单。JBD2 使用单一同步 checksum-v3 数据/元数据事务、
+审计后重放及持久孤儿回收。新门禁保留 write/flush/tear 故障、独立 e2fsck 重放、真实 guest
+bzip2、中断/重启保留和宿主测量的前台 UART 预算。见 [M16.5](../validation/M16.5.md)、
+[M16.6](../validation/M16.6.md)。默认 ext2、现有软件限额、更广 M16/远端 CI 和 M17/M18 分别处理。

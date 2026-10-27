@@ -138,6 +138,10 @@ jobs:
         run: cargo xtask toolchain-test
       - name: Verify opt-in ext4 writes, guest builds, exhaustion, reboot and real disk failures
         run: cargo xtask foundation-write-test
+      - name: Verify JBD2 sector cuts, checksum rejection and actual virtio recovery
+        run: cargo xtask foundation-journal-test
+      - name: Verify retained ext2 migration, guest reconstruction and foreground UART budgets
+        run: cargo xtask foundation-migrate-test
       - name: Assess locked GCC source capacity and guest prerequisite blockers
         run: cargo xtask bootstrap-gcc-test
       - name: Prepare locked upstream Rust musl tools and offline vendor
@@ -187,4 +191,5 @@ jobs:
             build/rust/archive.sha256
             build/gui-sdk/
             build/foundation/
+            build/journal-host/
           if-no-files-found: ignore

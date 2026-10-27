@@ -36,6 +36,11 @@ impl Ext4 {
         let mut total_free_blocks = 0u32;
         let mut total_free_inodes = 0u32;
         let mut bytes = buffer()?;
+        if let Some(journal) = &self.journal {
+            for block in &journal.blocks {
+                claim(&mut owned, *block)?;
+            }
+        }
         for index in 0..self.groups.len() {
             let g = self.groups[index];
             for block in (g.start..g.prefix)
@@ -64,6 +69,9 @@ impl Ext4 {
                     continue;
                 }
                 if n < 11 && n != 2 {
+                    if n == 8 && self.journal.is_some() {
+                        continue;
+                    }
                     self.read_block(g.table + local / (BLOCK / 256) as u32, &mut bytes)?;
                     let raw = &bytes[(local as usize * 256) % BLOCK..][..256];
                     // mke2fs stamps the reserved bad-block inode even when it has no bad blocks.
@@ -78,7 +86,7 @@ impl Ext4 {
                 }
                 let inode = self.snapshot(n)?;
                 let k = if inode.info.directory { 2 } else { 1 };
-                kinds[n as usize] = k;
+                kinds[n as usize] = if self.is_orphan(n) { 0 } else { k };
                 links[n as usize] = u16_at(&inode.raw, 26);
                 // The controlled namespace is root-owned and has no ACLs, special modes or high IDs.
                 if u16_at(&inode.raw, 0) & 0o7000 != 0
@@ -100,6 +108,9 @@ impl Ext4 {
                     continue;
                 }
                 directories += 1;
+                if self.is_orphan(n) {
+                    continue;
+                }
                 if inode.info.size > MAX_DIRECTORY_BLOCKS * BLOCK {
                     return Err(UNSUPPORTED);
                 }
