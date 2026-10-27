@@ -8,7 +8,8 @@ Planned 2026-10-26 (Asia/Shanghai) against `dev` baseline `05a5fb1`.
 readonly profile are implemented and locally verified.** Dependency acquisition is repaired;
 JBD2 recovery and fresh-disk migration/build responsiveness now have separate local
 acceptance in [M16.5](../validation/M16.5.md)/[M16.6](../validation/M16.6.md).
-Remote CI and full capacity acceptance remain separate. See [M16 evidence](../validation/M16.md). The stage contracts below retain their full exits.
+The fresh-ext4 kernel capacity/recovery profile is locally accepted in
+[M16 capacity](../validation/M16_CAPACITY.md); full remote CI is pending. See [M16 evidence](../validation/M16.md). The stage contracts below retain their full exits.
 See the [roadmap](../ROADMAP.md), [current status](../guides/STATUS.md) and
 [architecture](../ARCHITECTURE.md) for implemented boundaries.
 
@@ -49,7 +50,7 @@ new requirements. Every stage needs its own evidence and failure boundaries.
 
 | Stage | Planned result | Status |
 | --- | --- | --- |
-| M16.1 | Recovered CI baseline and measured workload/resource budget | Acquisition repaired; local source build; remote CI/budgets pending |
+| M16.1 | Recovered CI baseline and measured workload/resource budget | Fresh-ext4 kernel capacity/recovery locally accepted; complete remote CI pending |
 | M16.2 | Filesystem backend boundary and bounded, scalable resource management | Backend/cache locally verified; quotas unchanged |
 | M16.3 | Controlled ext4 readonly mount and data access | Readonly-v1 locally verified; see evidence |
 | M16.4 | Controlled ext4 writes and declared POSIX semantics | Implemented opt-in write-v1; [profile/evidence](../validation/M16.4.md) |

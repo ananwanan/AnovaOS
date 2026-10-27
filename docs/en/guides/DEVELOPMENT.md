@@ -641,5 +641,11 @@ existing software quotas, broader M16/remote CI and M17/M18 remain separate.
 `cargo xtask foundation-capacity-test` uses a fresh 64 MiB JBD2 disk with inherited Rust seeds,
 separates real heap/VFS/fd/task/disk exhaustion from clean guest kernel construction,
 and verifies exact retained-ELF boot/rejection/recovery. Budget, sampling and evidence
-contracts are in [M16 capacity](../validation/M16_CAPACITY.md). Full CI also runs on
-pushes to `feat/m16-foundation`; manual dispatch remains available.
+contracts are in [M16 capacity](../validation/M16_CAPACITY.md). Actions temporarily run only on pushes to `main`; PR, manual and other-branch
+triggers are disabled by owner request.
+
+The local `e2db30f` execution passed all four sessions. Its measured normal build
+used 9,494,480 heap bytes, 1,564 VFS slots, 14 tasks, 16 FDs/process and 6,072 disk
+blocks at peak; the earlier pressure session separately reached real limits and
+verified reuse. Read the capacity record for frame sampling limits, exact input
+closure and complete retained logs before applying these figures to another recipe.

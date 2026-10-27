@@ -471,7 +471,7 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `tests/guest/m16/capacity.c` | Exhaust pinned VFS directory slots twice and verify rejected creation, removal and reuse. |
 | `docs/en/validation/M16_CAPACITY.md` | Record exact ext4 kernel capacity, recovery and remote CI execution evidence. |
 | `docs/zh-CN/validation/M16_CAPACITY.md` | Translate the ext4 kernel capacity and remote CI closeout record with matching boundaries. |
-
-| `docs/assets/validation/M16_CI.json` | Retain exact remote run/job/step observations and OVMF transport failure excerpts for M16 closeout. |
-
+| `docs/assets/validation/M16_CI.json` | Retain exact remote run/job/step observations, input failures, repairs and artifact identities. |
 | `docs/assets/validation/M16_CORE_CI54.json` | Preserve digest-verified core CI artifact result records, exact source identity and bounded accepted scope. |
+| `docs/assets/validation/M16_CAPACITY_LOCAL.json` | Preserve accepted local ext4 kernel capacity, budgets, complete provenance and digest-verified raw logs. |
+| `docs/assets/validation/M16_CORE_CI57.json` | Retain verified current-code core CI artifact results, source identity and artifact digest. |

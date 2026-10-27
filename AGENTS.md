@@ -120,7 +120,7 @@ journal recovery and fresh-disk migration. The planning commit implemented none 
 backend/cache isolation and controlled ext4 readonly access; see [M16 evidence](docs/en/validation/M16.md).
 Preserve `cargo xtask foundation-test` and `python3 ports/gcc/test_fetch.py` with all prior gates.
 M16.4 adds explicit non-journal ext4 write-v1; preserve `cargo xtask foundation-write-test` and read [M16.4](docs/en/validation/M16.4.md).
-JBD2 recovery/migration now have the separate bounded acceptance below; complete budgets/remote CI and M17/M18 remain pending. Use existing guest compilers for M17; full compiler bootstrap, SMP, physical
+JBD2 recovery/migration now have the separate bounded acceptance below; the declared ext4 kernel budget/recovery profile is locally accepted; complete remote CI and M17/M18 remain pending. Use existing guest compilers for M17; full compiler bootstrap, SMP, physical
 drivers and a new filesystem format are not its prerequisites. Keep serial/host
 recovery independent of the desktop and retain all accepted regression gates.
 
@@ -347,3 +347,10 @@ The M16 kernel-capacity follow-up adds `cargo xtask foundation-capacity-test`. P
 its separate pressure/build sessions, predeclared budgets, successful-mutation ext4
 allocation peaks and exact guest-built kernel boot/recovery. Read
 [M16 capacity](docs/en/validation/M16_CAPACITY.md); implementation alone is not acceptance.
+
+## Temporary main-only Actions policy
+
+The owner now limits GitHub Actions to pushes to `main`. Keep PR, manual-dispatch
+and all other branch triggers disabled until the owner changes this policy.
+Preserve the complete job/gate definitions. Feature-branch remote reruns are paused;
+record actual failures and local fixes without claiming complete remote acceptance.

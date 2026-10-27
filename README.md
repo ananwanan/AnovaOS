@@ -13,6 +13,11 @@ snapshots. Repository: [ananwanan/AnovaOS](https://github.com/ananwanan/AnovaOS)
 All remaining M16 development continues on **`feat/m16-foundation`**, with pull
 requests targeting `dev`.
 
+
+GitHub Actions temporarily run **only on pushes to `main`**. PR, manual and other-branch
+triggers are disabled. The latest feature-branch CI failure and locally verified
+fixture correction are recorded separately from local capacity acceptance.
+
 ## Current status
 
 The accepted local profiles cover **M0–M13, M14.1–M14.5 and M15.1–M15.6**.
@@ -34,7 +39,7 @@ claim of a complete desktop OS or complete self-hosting.
 | M15.3–M15.4 | Independent GCC and Rust/LLVM/Cargo source audits and real guest prerequisite probes; compiler reconstruction remains blocked |
 | M15.5 | Actual guest kernel compilation with inherited tools/target libraries, exact retained-ELF host-assisted packaging and verified boot identity/recovery |
 | M15.6 | Two independent clean builds each of bzip2 and kernel, identical final artifacts, archived evidence and all 12 boot/rejection/recovery sessions |
-| M16 (partial) | Verified source fallback/cache, filesystem backends, on-demand directories, reclaimable file nodes and controlled ext4 readonly/writes, opt-in JBD2 recovery and fresh-disk bzip2 builds with measured foreground use; remote CI/full M16 capacity acceptance remain separate |
+| M16 (bounded local profile) | Verified inputs, backend/cache isolation, controlled ext4 readonly/writes and JBD2 recovery; fresh-disk bzip2/UART acceptance and actual kernel reconstruction after heap/VFS/fd/task/disk exhaustion; remote CI tracked separately |
 
 Evidence is recorded per stage in the [validation index](docs/en/index.md#validation).
 Each record identifies its executed checks. Configured CI, actual remote CI execution
@@ -48,8 +53,10 @@ SMP, USB/physical hardware support, native Rust `std`, reconstructed compilers
 and guest-only boot-image generation remain unverified. See
 [status](docs/en/guides/STATUS.md) and [compatibility](docs/en/COMPATIBILITY.md).
 
-The additional `foundation-capacity-test` implements fresh-ext4 kernel reconstruction
-and separate pressure/build accounting; actual capacity and CI results are tracked in [M16 capacity](docs/en/validation/M16_CAPACITY.md).
+`foundation-capacity-test` passed locally on a fresh 64 MiB ext4 work disk after
+real resource exhaustion/recovery. The actual kernel build used 9,494,480 heap bytes,
+1,564 VFS slots, 14 tasks, 16 FDs/process and 6,072 allocated 4 KiB blocks at peak.
+[M16 capacity](docs/en/validation/M16_CAPACITY.md) retains complete results and CI status.
 
 ## Next development work
 
@@ -57,8 +64,8 @@ The owner-approved order is **M16 resources/VFS/ext4 → M17 development desktop
 M18 conditional compiler and image self-hosting**. M16 now has a locally verified backend/cache and
 controlled ext4 readonly/writes, JBD2 recovery and opt-in migration/build acceptance. M17/M18 remain planned.
 
-1. [M16 foundation](docs/en/milestones/M16_FOUNDATION.md): finish remote CI/resource-budget
-   acceptance and any broader workload sizing. JBD2 and fresh-image migration now have separate
+1. [M16 foundation](docs/en/milestones/M16_FOUNDATION.md): finish remote CI acceptance; the declared kernel capacity profile passed locally.
+   Broader workload sizing remains independent. JBD2 and fresh-image migration now have separate
    [M16.5](docs/en/validation/M16.5.md)/[M16.6](docs/en/validation/M16.6.md) local gates. Backend
    isolation, on-demand directories, reclaimable file nodes and controlled ext4 readonly
    access are implemented; see [local evidence](docs/en/validation/M16.md) and [M16.4 writes](docs/en/validation/M16.4.md).

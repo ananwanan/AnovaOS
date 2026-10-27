@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Create fresh internal-JBD2 work images and verify sector/flush recovery plus real virtio guest durability.
-//! Keep journal adoption explicit and preserve failed images independently of recovered copies.
+//! Normalize copied seed ownership; keep journal adoption explicit and preserve failed images.
 use super::*;
 
 pub(super) fn check(path: &Path) -> Result<()> {
@@ -50,12 +50,13 @@ pub fn create(root: &Path, path: &Path, linux: bool) -> Result<()> {
                 "-J",
                 "size=8",
                 "-E",
-                "lazy_itable_init=0",
+                "lazy_itable_init=0,root_owner=0:0",
                 "-d",
             ])
             .arg(&source.0)
             .arg(path),
     )?;
+    foundation_write::root_owned_fixture(path, &["/.anova-abi"])?;
     check(path)?;
     source.cleanup()
 }

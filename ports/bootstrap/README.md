@@ -79,3 +79,8 @@ ISO bytes and verifies actual boot identity plus recovery. See
 ext4 work disk, separately measures deliberate exhaustion and clean construction,
 and preserves exact kernel boot/failure recovery. See
 [M16 capacity](../../docs/en/validation/M16_CAPACITY.md) for budgets and actual results.
+
+The local ext4 capacity run passed at `e2db30f`: pressure recovery, clean kernel
+construction, exact preserved-ELF packaging, real syntax rejection and two new-kernel
+boots. The 64 MiB work disk holds outputs; readonly sources and inherited compilers
+remain in the separate initramfs. This is not compiler or guest-only image bootstrap.

@@ -11,6 +11,10 @@
 
 后续所有 M16 开发统一在 **`feat/m16-foundation`** 分支进行，Pull Request 目标为 `dev`。
 
+
+GitHub Actions 暂时**仅在推送 `main` 时运行**，关闭 PR、手动和其他分支入口。
+最近一次功能分支 CI 失败及本地验证的镜像修复，与本地容量验收分开记录。
+
 ## 当前状态
 
 本地已验收范围覆盖 **M0–M13、M14.1–M14.5、M15.1–M15.6**。
@@ -31,7 +35,7 @@
 | M15.3–M15.4 | GCC 和 Rust/LLVM/Cargo 独立源码审计与实际 guest 前置依赖探测；编译器重建仍被阻塞 |
 | M15.5 | 使用继承工具和目标库在系统内编译真实内核；保留 ELF 后由宿主辅助打包，验证启动身份与恢复 |
 | M15.6 | bzip2 和内核各进行两轮独立干净构建，最终产物逐字节一致，归档证据与全部 12 次启动/拒绝/恢复会话通过 |
-| M16（部分） | 受检源码回退/缓存、文件系统后端、按需目录、可回收文件节点和受控 ext4 只读与显式启用的无日志写入；显式启用的 JBD2 恢复，以及新盘 bzip2 构建和前台响应实测；远端 CI/M16 完整容量验收另计 |
+| M16（有界本地配置） | 受检输入、后端/缓存解耦、受控 ext4 只读/写入及 JBD2 恢复；新盘 bzip2/串口验收，以及堆/VFS/FD/任务/磁盘耗尽恢复后的真实内核重建；远端 CI 单独记录 |
 
 证据按阶段收录在[验收索引](docs/zh-CN/index.md#验收记录)，各记录明确实际运行的检查。
 已配置 CI、远端 CI 实际结果和本地验收是分别记录的事实。
@@ -42,8 +46,9 @@ ext2 没有日志或断电恢复。通用 Linux/glibc、SMP、USB/实机支持�
 编译器源码重建及完全由 guest 生成启动镜像仍未验证。详见
 [当前状态](docs/zh-CN/guides/STATUS.md)和[兼容范围](docs/zh-CN/COMPATIBILITY.md)。
 
-新增 `foundation-capacity-test` 实现新 ext4 盘内核重建及分离的压力/构建计量；实际容量与 CI 结果见
-[M16 容量](docs/zh-CN/validation/M16_CAPACITY.md)。
+`foundation-capacity-test` 已在新建 64 MiB ext4 工作盘上通过真实资源耗尽/恢复及内核重建。
+正常构建峰值为 9,494,480 堆字节、1,564 个 VFS 槽、14 个任务、每进程 16 个 FD，
+磁盘分配 6,072 个 4 KiB 块。[M16 容量](docs/zh-CN/validation/M16_CAPACITY.md)保留完整结果与 CI 状态。
 
 ## 下一步开发
 
@@ -51,7 +56,7 @@ ext2 没有日志或断电恢复。通用 Linux/glibc、SMP、USB/实机支持�
 M16 已实现后端/缓存、受控 ext4 只读/写入、JBD2 恢复和显式启用的迁移/构建验收。
 M17/M18 仍为计划。
 
-1. [M16 基础能力](docs/zh-CN/milestones/M16_FOUNDATION.md)：完成远端 CI/资源预算验收，
+1. [M16 基础能力](docs/zh-CN/milestones/M16_FOUNDATION.md)：完成远端 CI；声明的内核容量配置已本地通过，
    更广负载仍需独立定容。JBD2 与新盘迁移已有独立的 [M16.5](docs/zh-CN/validation/M16.5.md)/
    [M16.6](docs/zh-CN/validation/M16.6.md) 本地门禁。后端解耦、按需目录、可回收文件节点和受控
    ext4 只读访问已实现，可写范围见 [M16.4](docs/zh-CN/validation/M16.4.md)，既有证据见 [M16](docs/zh-CN/validation/M16.md)。

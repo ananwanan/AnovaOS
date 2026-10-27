@@ -1482,6 +1482,502 @@
           ]
         }
       ]
+    },
+    {
+      "run_id": 40463666492,
+      "run_attempt": 1,
+      "event": "push",
+      "head_sha": "1b63f42d00fafe79f9148708c5295713a7faddac",
+      "status": "completed",
+      "conclusion": "failure",
+      "jobs": [
+        {
+          "id": 122053876017,
+          "name": "boot",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-27T06:52:16Z",
+          "completed_at": "2026-10-27T07:06:47Z",
+          "html_url": "https://github.com/ananwanan/AnovaOS/actions/runs/40463666492/job/122053876017",
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1,
+              "started_at": "2026-10-27T06:52:17Z",
+              "completed_at": "2026-10-27T06:52:18Z"
+            },
+            {
+              "name": "Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2,
+              "started_at": "2026-10-27T06:52:18Z",
+              "completed_at": "2026-10-27T06:52:19Z"
+            },
+            {
+              "name": "Install host utilities",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3,
+              "started_at": "2026-10-27T06:52:19Z",
+              "completed_at": "2026-10-27T06:52:32Z"
+            },
+            {
+              "name": "Load the pinned Rust toolchain",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 4,
+              "started_at": "2026-10-27T06:52:32Z",
+              "completed_at": "2026-10-27T06:52:43Z"
+            },
+            {
+              "name": "Cache checksum-verified boot inputs",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 5,
+              "started_at": "2026-10-27T06:52:43Z",
+              "completed_at": "2026-10-27T06:52:44Z"
+            },
+            {
+              "name": "Check formatting",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 6,
+              "started_at": "2026-10-27T06:52:44Z",
+              "completed_at": "2026-10-27T06:52:45Z"
+            },
+            {
+              "name": "Check bilingual documentation",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 7,
+              "started_at": "2026-10-27T06:52:45Z",
+              "completed_at": "2026-10-27T06:52:45Z"
+            },
+            {
+              "name": "Check file-purpose explanations",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 8,
+              "started_at": "2026-10-27T06:52:45Z",
+              "completed_at": "2026-10-27T06:53:12Z"
+            },
+            {
+              "name": "Check host tools",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 9,
+              "started_at": "2026-10-27T06:53:12Z",
+              "completed_at": "2026-10-27T06:53:22Z"
+            },
+            {
+              "name": "Check and build native Rust/C applications",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 10,
+              "started_at": "2026-10-27T06:53:22Z",
+              "completed_at": "2026-10-27T06:53:52Z"
+            },
+            {
+              "name": "Trace pinned Linux applications on the host",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 11,
+              "started_at": "2026-10-27T06:53:52Z",
+              "completed_at": "2026-10-27T06:54:02Z"
+            },
+            {
+              "name": "Check the bare-metal kernel",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 12,
+              "started_at": "2026-10-27T06:54:02Z",
+              "completed_at": "2026-10-27T06:54:18Z"
+            },
+            {
+              "name": "Test host logic",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 13,
+              "started_at": "2026-10-27T06:54:18Z",
+              "completed_at": "2026-10-27T06:57:24Z"
+            },
+            {
+              "name": "Test bootstrap source integrity and archive rejection",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 14,
+              "started_at": "2026-10-27T06:57:24Z",
+              "completed_at": "2026-10-27T06:57:24Z"
+            },
+            {
+              "name": "Build the kernel",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 15,
+              "started_at": "2026-10-27T06:57:24Z",
+              "completed_at": "2026-10-27T06:57:32Z"
+            },
+            {
+              "name": "Fetch verified boot inputs",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 16,
+              "started_at": "2026-10-27T06:57:32Z",
+              "completed_at": "2026-10-27T06:57:32Z"
+            },
+            {
+              "name": "Check prerequisites",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 17,
+              "started_at": "2026-10-27T06:57:32Z",
+              "completed_at": "2026-10-27T06:57:32Z"
+            },
+            {
+              "name": "Verify M9 pthread/signals/dynamic musl, VFS, isolation, memory and traps",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 18,
+              "started_at": "2026-10-27T06:57:32Z",
+              "completed_at": "2026-10-27T06:59:44Z"
+            },
+            {
+              "name": "Verify real serial input and volatile tmpfs across boots",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 19,
+              "started_at": "2026-10-27T06:59:44Z",
+              "completed_at": "2026-10-27T07:00:03Z"
+            },
+            {
+              "name": "Verify software graphics, QMP screenshot and serial fallback",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 20,
+              "started_at": "2026-10-27T07:00:03Z",
+              "completed_at": "2026-10-27T07:00:24Z"
+            },
+            {
+              "name": "Verify bounded GPU admission and headless CPU fallback",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 21,
+              "started_at": "2026-10-27T07:00:24Z",
+              "completed_at": "2026-10-27T07:00:47Z"
+            },
+            {
+              "name": "Verify polled PS2 keyboard, pointer, cursor pixels and device fallback",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 22,
+              "started_at": "2026-10-27T07:00:47Z",
+              "completed_at": "2026-10-27T07:01:15Z"
+            },
+            {
+              "name": "Verify isolated native windows, physical input, redraw and compositor recovery",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 23,
+              "started_at": "2026-10-27T07:01:15Z",
+              "completed_at": "2026-10-27T07:01:51Z"
+            },
+            {
+              "name": "Verify persistent sources, binaries, clean shutdown and device failures",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 24,
+              "started_at": "2026-10-27T07:01:51Z",
+              "completed_at": "2026-10-27T07:02:29Z"
+            },
+            {
+              "name": "Verify controlled ext4 readonly, large namespace, reboot and rejection",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 25,
+              "started_at": "2026-10-27T07:02:29Z",
+              "completed_at": "2026-10-27T07:04:52Z"
+            },
+            {
+              "name": "Verify controlled virtio networking, DNS and socket boundaries",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 26,
+              "started_at": "2026-10-27T07:04:52Z",
+              "completed_at": "2026-10-27T07:05:08Z"
+            },
+            {
+              "name": "Verify offline packages, reboot rollback and strict HTTPS",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 27,
+              "started_at": "2026-10-27T07:05:08Z",
+              "completed_at": "2026-10-27T07:05:32Z"
+            },
+            {
+              "name": "Verify versioned SDK templates, package policy and crash symbols",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 28,
+              "started_at": "2026-10-27T07:05:32Z",
+              "completed_at": "2026-10-27T07:06:37Z"
+            },
+            {
+              "name": "Upload boot evidence",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 29,
+              "started_at": "2026-10-27T07:06:37Z",
+              "completed_at": "2026-10-27T07:06:45Z"
+            },
+            {
+              "name": "Post Cache checksum-verified boot inputs",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 57,
+              "started_at": "2026-10-27T07:06:45Z",
+              "completed_at": "2026-10-27T07:06:45Z"
+            },
+            {
+              "name": "Post Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 58,
+              "started_at": "2026-10-27T07:06:45Z",
+              "completed_at": "2026-10-27T07:06:46Z"
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 59,
+              "started_at": "2026-10-27T07:06:46Z",
+              "completed_at": "2026-10-27T07:06:46Z"
+            }
+          ]
+        },
+        {
+          "id": 122058633021,
+          "name": "guest-toolchain",
+          "status": "completed",
+          "conclusion": "failure",
+          "started_at": "2026-10-27T07:06:50Z",
+          "completed_at": "2026-10-27T07:26:39Z",
+          "html_url": "https://github.com/ananwanan/AnovaOS/actions/runs/40463666492/job/122058633021",
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1,
+              "started_at": "2026-10-27T07:06:51Z",
+              "completed_at": "2026-10-27T07:06:52Z"
+            },
+            {
+              "name": "Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2,
+              "started_at": "2026-10-27T07:06:52Z",
+              "completed_at": "2026-10-27T07:06:53Z"
+            },
+            {
+              "name": "Install compiler construction and guest test utilities",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3,
+              "started_at": "2026-10-27T07:06:53Z",
+              "completed_at": "2026-10-27T07:07:13Z"
+            },
+            {
+              "name": "Load the pinned Rust toolchain",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 4,
+              "started_at": "2026-10-27T07:07:13Z",
+              "completed_at": "2026-10-27T07:07:23Z"
+            },
+            {
+              "name": "Cache checksum-verified boot inputs",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 5,
+              "started_at": "2026-10-27T07:07:23Z",
+              "completed_at": "2026-10-27T07:07:24Z"
+            },
+            {
+              "name": "Fetch verified boot inputs",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 6,
+              "started_at": "2026-10-27T07:07:24Z",
+              "completed_at": "2026-10-27T07:07:50Z"
+            },
+            {
+              "name": "Cache checksum-verified compiler source archives",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 7,
+              "started_at": "2026-10-27T07:07:50Z",
+              "completed_at": "2026-10-27T07:07:50Z"
+            },
+            {
+              "name": "Build the locked GCC, sysroot and make from source",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 8,
+              "started_at": "2026-10-27T07:07:50Z",
+              "completed_at": "2026-10-27T07:24:49Z"
+            },
+            {
+              "name": "Verify guest C/C++, incremental make, negative builds and reboot retention",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 9,
+              "started_at": "2026-10-27T07:24:49Z",
+              "completed_at": "2026-10-27T07:26:10Z"
+            },
+            {
+              "name": "Verify opt-in ext4 writes, guest builds, exhaustion, reboot and real disk failures",
+              "status": "completed",
+              "conclusion": "failure",
+              "number": 10,
+              "started_at": "2026-10-27T07:26:10Z",
+              "completed_at": "2026-10-27T07:26:32Z"
+            },
+            {
+              "name": "Verify JBD2 sector cuts, checksum rejection and actual virtio recovery",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 11,
+              "started_at": "2026-10-27T07:26:32Z",
+              "completed_at": "2026-10-27T07:26:32Z"
+            },
+            {
+              "name": "Verify retained ext2 migration, guest reconstruction and foreground UART budgets",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 12,
+              "started_at": "2026-10-27T07:26:32Z",
+              "completed_at": "2026-10-27T07:26:32Z"
+            },
+            {
+              "name": "Assess locked GCC source capacity and guest prerequisite blockers",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 13,
+              "started_at": "2026-10-27T07:26:32Z",
+              "completed_at": "2026-10-27T07:26:32Z"
+            },
+            {
+              "name": "Prepare locked upstream Rust musl tools and offline vendor",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 14,
+              "started_at": "2026-10-27T07:26:32Z",
+              "completed_at": "2026-10-27T07:26:32Z"
+            },
+            {
+              "name": "Assess independent LLVM, rustc and Cargo source-build prerequisites",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 15,
+              "started_at": "2026-10-27T07:26:32Z",
+              "completed_at": "2026-10-27T07:26:32Z"
+            },
+            {
+              "name": "Verify fresh ext4 kernel build capacity and exhaustion recovery",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 16,
+              "started_at": "2026-10-27T07:26:32Z",
+              "completed_at": "2026-10-27T07:26:32Z"
+            },
+            {
+              "name": "Compare independent clean guest tool/kernel builds and boot recovery",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 17,
+              "started_at": "2026-10-27T07:26:32Z",
+              "completed_at": "2026-10-27T07:26:32Z"
+            },
+            {
+              "name": "Verify Rust std, detached threads and real compiler startup",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 18,
+              "started_at": "2026-10-27T07:26:32Z",
+              "completed_at": "2026-10-27T07:26:32Z"
+            },
+            {
+              "name": "Verify guest Rust, offline Cargo, build scripts, C FFI, macros and reboot",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 19,
+              "started_at": "2026-10-27T07:26:32Z",
+              "completed_at": "2026-10-27T07:26:32Z"
+            },
+            {
+              "name": "Verify guest-built native GUI SDK clients, scanout, input and reboot",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 20,
+              "started_at": "2026-10-27T07:26:32Z",
+              "completed_at": "2026-10-27T07:26:32Z"
+            },
+            {
+              "name": "Verify online Cargo, strict TLS, transport failures and offline rebuild",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 21,
+              "started_at": "2026-10-27T07:26:32Z",
+              "completed_at": "2026-10-27T07:26:32Z"
+            },
+            {
+              "name": "Upload compiler build and guest evidence",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 22,
+              "started_at": "2026-10-27T07:26:32Z",
+              "completed_at": "2026-10-27T07:26:37Z"
+            },
+            {
+              "name": "Post Cache checksum-verified compiler source archives",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 42,
+              "started_at": "2026-10-27T07:26:37Z",
+              "completed_at": "2026-10-27T07:26:37Z"
+            },
+            {
+              "name": "Post Cache checksum-verified boot inputs",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 43,
+              "started_at": "2026-10-27T07:26:37Z",
+              "completed_at": "2026-10-27T07:26:37Z"
+            },
+            {
+              "name": "Post Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 44,
+              "started_at": "2026-10-27T07:26:37Z",
+              "completed_at": "2026-10-27T07:26:38Z"
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 45,
+              "started_at": "2026-10-27T07:26:38Z",
+              "completed_at": "2026-10-27T07:26:38Z"
+            }
+          ]
+        }
+      ]
     }
   ],
   "failures": [
@@ -1510,7 +2006,35 @@
         "https://musl.cc/x86_64-linux-musl-native.tgz",
         "https://more.musl.cc/11.2.1/x86_64-linux-musl/x86_64-linux-musl-native.tgz"
       ],
-      "diagnostic": "RuntimeError: All locked source transports failed: bootstrap.tgz"
+      "diagnostic": "RuntimeError: All locked source transports failed: bootstrap.tgz",
+      "log_excerpt": [
+        "2026-10-27T06:44:16.5147618Z curl: (28) Failed to connect to musl.cc port 443 after 15001 ms: Timeout was reached",
+        "2026-10-27T06:44:32.5186107Z curl: (28) Failed to connect to musl.cc port 443 after 15002 ms: Timeout was reached",
+        "2026-10-27T06:44:47.5273320Z curl: (28) Failed to connect to more.musl.cc port 443 after 15001 ms: Timeout was reached",
+        "2026-10-27T06:45:03.5310612Z curl: (28) Failed to connect to more.musl.cc port 443 after 15002 ms: Timeout was reached",
+        "2026-10-27T06:45:03.6337037Z RuntimeError: All locked source transports failed: bootstrap.tgz"
+      ]
+    },
+    {
+      "run_id": 40463666492,
+      "run_attempt": 1,
+      "job_id": 122058633021,
+      "step": "Verify opt-in ext4 writes, guest builds, exhaustion, reboot and real disk failures",
+      "diagnostic": "[DISK:REJECT] mount error=-2; /persist unavailable; [M16:WRITE:FAIL] line=26 errno=30",
+      "root_cause": "mke2fs -d copied CI runner UID/GID 1001 into seed files; writable ext4 correctly rejected non-root ownership.",
+      "correction": "Fresh write and journal fixture builders now declare root_owner=0:0, normalize every explicitly seeded UID/GID and independently audit writable admission. Kernel ownership checks are unchanged.",
+      "local_verification": "54 xtask tests and strict Clippy passed, including simulated non-root ownership on both fixture formats, rejection before correction and successful admission/content/fsck after correction.",
+      "remote_reverification": "Deferred under owner-requested main-only push policy; no feature branch Actions rerun.",
+      "uart_sha256": "9e27e795fedfd4bac1044ea91e53be12e8df7f65a6212c62faa69f6e77e5eb71",
+      "uart_utf8": "\u001b[2J\u001b[01;01H\u001b[=3h\u001b[2J\u001b[01;01H\u001b[2J\u001b[01;01H\u001b[=3h\u001b[2J\u001b[01;01H\u001b[2J\u001b[01;01H\u001b[=3h\u001b[2J\u001b[01;01HBdsDxe: loading Boot0001 \"UEFI QEMU DVD-ROM QM00005 \" from PciRoot(0x0)/Pci(0x1F,0x2)/Sata(0x2,0xFFFF,0x0)\r\nBdsDxe: starting Boot0001 \"UEFI QEMU DVD-ROM QM00005 \" from PciRoot(0x0)/Pci(0x1F,0x2)/Sata(0x2,0xFFFF,0x0)\r\n\u001b[2J\u001b[01;01H\u001b[01;01H\u001b[2J\u001b[01;01H\u001b[01;01H\u001b[2J\u001b[01;01H\u001b[01;01Hl\u001b[01;02Hi\u001b[01;03Hm\u001b[01;04Hi\u001b[01;05Hn\u001b[01;06He\u001b[01;07H:\u001b[01;08H \u001b[01;09HL\u001b[01;10Ho\u001b[01;11Ha\u001b[01;12Hd\u001b[01;13Hi\u001b[01;14Hn\u001b[01;15Hg\u001b[01;16H \u001b[01;17He\u001b[01;18Hx\u001b[01;19He\u001b[01;20Hc\u001b[01;21Hu\u001b[01;22Ht\u001b[01;23Ha\u001b[01;24Hb\u001b[01;25Hl\u001b[01;26He\u001b[01;27H \u001b[01;28H`\u001b[01;29Hb\u001b[01;30Ho\u001b[01;31Ho\u001b[01;32Ht\u001b[01;33H(\u001b[01;34H)\u001b[01;35H:\u001b[01;36H/\u001b[01;37Hb\u001b[01;38Ho\u001b[01;39Ho\u001b[01;40Ht\u001b[01;41H/\u001b[01;42Hk\u001b[01;43He\u001b[01;44Hr\u001b[01;45Hn\u001b[01;46He\u001b[01;47Hl\u001b[01;48H.\u001b[01;49He\u001b[01;50Hl\u001b[01;51Hf\u001b[01;52H`\u001b[01;53H.\u001b[01;54H.\u001b[01;55H.\u001b[01;56H\u001b[02;01Hl\u001b[02;02Hi\u001b[02;03Hm\u001b[02;04Hi\u001b[02;05Hn\u001b[02;06He\u001b[02;07H:\u001b[02;08H \u001b[02;09HP\u001b[02;10Hh\u001b[02;11Hy\u001b[02;12Hs\u001b[02;13Hi\u001b[02;14Hc\u001b[02;15Ha\u001b[02;16Hl\u001b[02;17H \u001b[02;18Hb\u001b[02;19Ha\u001b[02;20Hs\u001b[02;21He\u001b[02;22H:\u001b[02;23H \u001b[02;24H \u001b[02;25H \u001b[02;26H0\u001b[02;27Hx\u001b[02;28H3\u001b[02;29H9\u001b[02;30H7\u001b[02;31Hd\u001b[02;32H4\u001b[02;33H0\u001b[02;34H0\u001b[02;35H0\u001b[02;36H\u001b[03;01Hl\u001b[03;02Hi\u001b[03;03Hm\u001b[03;04Hi\u001b[03;05Hn\u001b[03;06He\u001b[03;07H:\u001b[03;08H \u001b[03;09HV\u001b[03;10Hi\u001b[03;11Hr\u001b[03;12Ht\u001b[03;13Hu\u001b[03;14Ha\u001b[03;15Hl\u001b[03;16H \u001b[03;17Hb\u001b[03;18Ha\u001b[03;19Hs\u001b[03;20He\u001b[03;21H:\u001b[03;22H \u001b[03;23H \u001b[03;24H \u001b[03;25H \u001b[03;26H0\u001b[03;27Hx\u001b[03;28Hf\u001b[03;29Hf\u001b[03;30Hf\u001b[03;31Hf\u001b[03;32Hf\u001b[03;33Hf\u001b[03;34Hf\u001b[03;35Hf\u001b[03;36H8\u001b[03;37H0\u001b[03;38H0\u001b[03;39H0\u001b[03;40H0\u001b[03;41H0\u001b[03;42H0\u001b[03;43H0\u001b[03;44H\u001b[04;01Hl\u001b[04;02Hi\u001b[04;03Hm\u001b[04;04Hi\u001b[04;05Hn\u001b[04;06He\u001b[04;07H:\u001b[04;08H \u001b[04;09HS\u001b[04;10Hl\u001b[04;11Hi\u001b[04;12Hd\u001b[04;13He\u001b[04;14H:\u001b[04;15H \u001b[04;16H \u001b[04;17H \u001b[04;18H \u001b[04;19H \u001b[04;20H \u001b[04;21H \u001b[04;22H \u001b[04;23H \u001b[04;24H \u001b[04;25H \u001b[04;26H0\u001b[04;27Hx\u001b[04;28H0\u001b[04;29H\u001b[05;01Hl\u001b[05;02Hi\u001b[05;03Hm\u001b[05;04Hi\u001b[05;05Hn\u001b[05;06He\u001b[05;07H:\u001b[05;08H \u001b[05;09HE\u001b[05;10HL\u001b[05;11HF\u001b[05;12H \u001b[05;13He\u001b[05;14Hn\u001b[05;15Ht\u001b[05;16Hr\u001b[05;17Hy\u001b[05;18H \u001b[05;19Hp\u001b[05;20Ho\u001b[05;21Hi\u001b[05;22Hn\u001b[05;23Ht\u001b[05;24H:\u001b[05;25H \u001b[05;26H0\u001b[05;27Hx\u001b[05;28Hf\u001b[05;29Hf\u001b[05;30Hf\u001b[05;31Hf\u001b[05;32Hf\u001b[05;33Hf\u001b[05;34Hf\u001b[05;35Hf\u001b[05;36H8\u001b[05;37H0\u001b[05;38H0\u001b[05;39H0\u001b[05;40H1\u001b[05;41H5\u001b[05;42Hc\u001b[05;43H0\u001b[05;44H\u001b[06;01Hl\u001b[06;02Hi\u001b[06;03Hm\u001b[06;04Hi\u001b[06;05Hn\u001b[06;06He\u001b[06;07H:\u001b[06;08H \u001b[06;09HB\u001b[06;10Ha\u001b[06;11Hs\u001b[06;12He\u001b[06;13H \u001b[06;14Hr\u001b[06;15He\u001b[06;16Hv\u001b[06;17Hi\u001b[06;18Hs\u001b[06;19Hi\u001b[06;20Ho\u001b[06;21Hn\u001b[06;22H:\u001b[06;23H \u001b[06;24H \u001b[06;25H \u001b[06;26H3\u001b[06;27H\u001b[07;01Hl\u001b[07;02Hi\u001b[07;03Hm\u001b[07;04Hi\u001b[07;05Hn\u001b[07;06He\u001b[07;07H:\u001b[07;08H \u001b[07;09HR\u001b[07;10He\u001b[07;11Hq\u001b[07;12Hu\u001b[07;13He\u001b[07;14Hs\u001b[07;15Ht\u001b[07;16Hs\u001b[07;17H \u001b[07;18Hc\u001b[07;19Ho\u001b[07;20Hu\u001b[07;21Hn\u001b[07;22Ht\u001b[07;23H:\u001b[07;24H \u001b[07;25H \u001b[07;26H1\u001b[07;27H0\u001b[07;28H\u001b[08;01Hl\u001b[08;02Hi\u001b[08;03Hm\u001b[08;04Hi\u001b[08;05Hn\u001b[08;06He\u001b[08;07H:\u001b[08;08H \u001b[08;09HT\u001b[08;10Ho\u001b[08;11Hp\u001b[08;12H \u001b[08;13Ho\u001b[08;14Hf\u001b[08;15H \u001b[08;16HH\u001b[08;17HH\u001b[08;18HD\u001b[08;19HM\u001b[08;20H:\u001b[08;21H \u001b[08;22H \u001b[08;23H \u001b[08;24H \u001b[08;25H \u001b[08;26H0\u001b[08;27Hx\u001b[08;28H4\u001b[08;29H0\u001b[08;30H0\u001b[08;31H0\u001b[08;32H0\u001b[08;33H0\u001b[08;34H0\u001b[08;35H0\u001b[08;36H\u001b[09;01Ha\u001b[09;02Hc\u001b[09;03Hp\u001b[09;04Hi\u001b[09;05H:\u001b[09;06H \u001b[09;07HF\u001b[09;08Ho\u001b[09;09Hu\u001b[09;10Hn\u001b[09;11Hd\u001b[09;12H \u001b[09;13HR\u001b[09;14HS\u001b[09;15HD\u001b[09;16HP\u001b[09;17H \u001b[09;18Ha\u001b[09;19Ht\u001b[09;20H \u001b[09;21H0\u001b[09;22Hx\u001b[09;23H3\u001b[09;24Hf\u001b[09;25H7\u001b[09;26H7\u001b[09;27He\u001b[09;28H0\u001b[09;29H0\u001b[09;30H0\u001b[09;31H\u001b[10;01Ha\u001b[10;02Hc\u001b[10;03Hp\u001b[10;04Hi\u001b[10;05H:\u001b[10;06H \u001b[10;07HF\u001b[10;08Ho\u001b[10;09Hu\u001b[10;10Hn\u001b[10;11Hd\u001b[10;12H \u001b[10;13HX\u001b[10;14HS\u001b[10;15HD\u001b[10;16HP\u001b[10;17H \u001b[10;18Ha\u001b[10;19Ht\u001b[10;20H \u001b[10;21H0\u001b[10;22Hx\u001b[10;23H3\u001b[10;24Hf\u001b[10;25H7\u001b[10;26H7\u001b[10;27He\u001b[10;28H0\u001b[10;29H1\u001b[10;30H4\u001b[10;31H\u001b[11;01Hl\u001b[11;02Hi\u001b[11;03Hm\u001b[11;04Hi\u001b[11;05Hn\u001b[11;06He\u001b[11;07H:\u001b[11;08H \u001b[11;09HL\u001b[11;10Ho\u001b[11;11Ha\u001b[11;12Hd\u001b[11;13Hi\u001b[11;14Hn\u001b[11;15Hg\u001b[11;16H \u001b[11;17Hm\u001b[11;18Ho\u001b[11;19Hd\u001b[11;20Hu\u001b[11;21Hl\u001b[11;22He\u001b[11;23H \u001b[11;24H`\u001b[11;25Hb\u001b[11;26Ho\u001b[11;27Ho\u001b[11;28Ht\u001b[11;29H(\u001b[11;30H)\u001b[11;31H:\u001b[11;32H/\u001b[11;33Hb\u001b[11;34Ho\u001b[11;35Ho\u001b[11;36Ht\u001b[11;37H/\u001b[11;38Ha\u001b[11;39Hp\u001b[11;40Hp\u001b[11;41Hs\u001b[11;42H/\u001b[11;43Hh\u001b[11;44He\u001b[11;45Hl\u001b[11;46Hl\u001b[11;47Ho\u001b[11;48H-\u001b[11;49Hr\u001b[11;50Hu\u001b[11;51Hs\u001b[11;52Ht\u001b[11;53H.\u001b[11;54He\u001b[11;55Hl\u001b[11;56Hf\u001b[11;57H`\u001b[11;58H.\u001b[11;59H.\u001b[11;60H.\u001b[11;61H\u001b[12;01Hl\u001b[12;02Hi\u001b[12;03Hm\u001b[12;04Hi\u001b[12;05Hn\u001b[12;06He\u001b[12;07H:\u001b[12;08H \u001b[12;09HL\u001b[12;10Ho\u001b[12;11Ha\u001b[12;12Hd\u001b[12;13Hi\u001b[12;14Hn\u001b[12;15Hg\u001b[12;16H \u001b[12;17Hm\u001b[12;18Ho\u001b[12;19Hd\u001b[12;20Hu\u001b[12;21Hl\u001b[12;22He\u001b[12;23H \u001b[12;24H`\u001b[12;25Hb\u001b[12;26Ho\u001b[12;27Ho\u001b[12;28Ht\u001b[12;29H(\u001b[12;30H)\u001b[12;31H:\u001b[12;32H/\u001b[12;33Hb\u001b[12;34Ho\u001b[12;35Ho\u001b[12;36Ht\u001b[12;37H/\u001b[12;38Ha\u001b[12;39Hp\u001b[12;40Hp\u001b[12;41Hs\u001b[12;42H/\u001b[12;43Hh\u001b[12;44He\u001b[12;45Hl\u001b[12;46Hl\u001b[12;47Ho\u001b[12;48H-\u001b[12;49Hc\u001b[12;50H.\u001b[12;51He\u001b[12;52Hl\u001b[12;53Hf\u001b[12;54H`\u001b[12;55H.\u001b[12;56H.\u001b[12;57H.\u001b[12;58H\u001b[13;01Hl\u001b[13;02Hi\u001b[13;03Hm\u001b[13;04Hi\u001b[13;05Hn\u001b[13;06He\u001b[13;07H:\u001b[13;08H \u001b[13;09HL\u001b[13;10Ho\u001b[13;11Ha\u001b[13;12Hd\u001b[13;13Hi\u001b[13;14Hn\u001b[13;15Hg\u001b[13;16H \u001b[13;17Hm\u001b[13;18Ho\u001b[13;19Hd\u001b[13;20Hu\u001b[13;21Hl\u001b[13;22He\u001b[13;23H \u001b[13;24H`\u001b[13;25Hb\u001b[13;26Ho\u001b[13;27Ho\u001b[13;28Ht\u001b[13;29H(\u001b[13;30H)\u001b[13;31H:\u001b[13;32H/\u001b[13;33Hb\u001b[13;34Ho\u001b[13;35Ho\u001b[13;36Ht\u001b[13;37H/\u001b[13;38Ha\u001b[13;39Hp\u001b[13;40Hp\u001b[13;41Hs\u001b[13;42H/\u001b[13;43Hp\u001b[13;44Hr\u001b[13;45Ho\u001b[13;46Hb\u001b[13;47He\u001b[13;48H.\u001b[13;49He\u001b[13;50Hl\u001b[13;51Hf\u001b[13;52H`\u001b[13;53H.\u001b[13;54H.\u001b[13;55H.\u001b[13;56H\u001b[14;01Hl\u001b[14;02Hi\u001b[14;03Hm\u001b[14;04Hi\u001b[14;05Hn\u001b[14;06He\u001b[14;07H:\u001b[14;08H \u001b[14;09HL\u001b[14;10Ho\u001b[14;11Ha\u001b[14;12Hd\u001b[14;13Hi\u001b[14;14Hn\u001b[14;15Hg\u001b[14;16H \u001b[14;17Hm\u001b[14;18Ho\u001b[14;19Hd\u001b[14;20Hu\u001b[14;21Hl\u001b[14;22He\u001b[14;23H \u001b[14;24H`\u001b[14;25Hb\u001b[14;26Ho\u001b[14;27Ho\u001b[14;28Ht\u001b[14;29H(\u001b[14;30H)\u001b[14;31H:\u001b[14;32H/\u001b[14;33Hb\u001b[14;34Ho\u001b[14;35Ho\u001b[14;36Ht\u001b[14;37H/\u001b[14;38Ha\u001b[14;39Hp\u001b[14;40Hp\u001b[14;41Hs\u001b[14;42H/\u001b[14;43Hp\u001b[14;44Hr\u001b[14;45Ho\u001b[14;46Hc\u001b[14;47He\u001b[14;48Hs\u001b[14;49Hs\u001b[14;50H-\u001b[14;51Ht\u001b[14;52He\u001b[14;53Hs\u001b[14;54Ht\u001b[14;55H.\u001b[14;56He\u001b[14;57Hl\u001b[14;58Hf\u001b[14;59H`\u001b[14;60H.\u001b[14;61H.\u001b[14;62H.\u001b[14;63H\u001b[15;01Hl\u001b[15;02Hi\u001b[15;03Hm\u001b[15;04Hi\u001b[15;05Hn\u001b[15;06He\u001b[15;07H:\u001b[15;08H \u001b[15;09HL\u001b[15;10Ho\u001b[15;11Ha\u001b[15;12Hd\u001b[15;13Hi\u001b[15;14Hn\u001b[15;15Hg\u001b[15;16H \u001b[15;17Hm\u001b[15;18Ho\u001b[15;19Hd\u001b[15;20Hu\u001b[15;21Hl\u001b[15;22He\u001b[15;23H \u001b[15;24H`\u001b[15;25Hb\u001b[15;26Ho\u001b[15;27Ho\u001b[15;28Ht\u001b[15;29H(\u001b[15;30H)\u001b[15;31H:\u001b[15;32H/\u001b[15;33Hb\u001b[15;34Ho\u001b[15;35Ho\u001b[15;36Ht\u001b[15;37H/\u001b[15;38Ha\u001b[15;39Hp\u001b[15;40Hp\u001b[15;41Hs\u001b[15;42H/\u001b[15;43Hi\u001b[15;44Hn\u001b[15;45Hi\u001b[15;46Ht\u001b[15;47H.\u001b[15;48He\u001b[15;49Hl\u001b[15;50Hf\u001b[15;51H`\u001b[15;52H.\u001b[15;53H.\u001b[15;54H.\u001b[15;55H\u001b[16;01Hl\u001b[16;02Hi\u001b[16;03Hm\u001b[16;04Hi\u001b[16;05Hn\u001b[16;06He\u001b[16;07H:\u001b[16;08H \u001b[16;09HL\u001b[16;10Ho\u001b[16;11Ha\u001b[16;12Hd\u001b[16;13Hi\u001b[16;14Hn\u001b[16;15Hg\u001b[16;16H \u001b[16;17Hm\u001b[16;18Ho\u001b[16;19Hd\u001b[16;20Hu\u001b[16;21Hl\u001b[16;22He\u001b[16;23H \u001b[16;24H`\u001b[16;25Hb\u001b[16;26Ho\u001b[16;27Ho\u001b[16;28Ht\u001b[16;29H(\u001b[16;30H)\u001b[16;31H:\u001b[16;32H/\u001b[16;33Hb\u001b[16;34Ho\u001b[16;35Ho\u001b[16;36Ht\u001b[16;37H/\u001b[16;38Ha\u001b[16;39Hp\u001b[16;40Hp\u001b[16;41Hs\u001b[16;42H/\u001b[16;43Hs\u001b[16;44Hh\u001b[16;45He\u001b[16;46Hl\u001b[16;47Hl\u001b[16;48H.\u001b[16;49He\u001b[16;50Hl\u001b[16;51Hf\u001b[16;52H`\u001b[16;53H.\u001b[16;54H.\u001b[16;55H.\u001b[16;56H\u001b[17;01Hl\u001b[17;02Hi\u001b[17;03Hm\u001b[17;04Hi\u001b[17;05Hn\u001b[17;06He\u001b[17;07H:\u001b[17;08H \u001b[17;09HL\u001b[17;10Ho\u001b[17;11Ha\u001b[17;12Hd\u001b[17;13Hi\u001b[17;14Hn\u001b[17;15Hg\u001b[17;16H \u001b[17;17Hm\u001b[17;18Ho\u001b[17;19Hd\u001b[17;20Hu\u001b[17;21Hl\u001b[17;22He\u001b[17;23H \u001b[17;24H`\u001b[17;25Hb\u001b[17;26Ho\u001b[17;27Ho\u001b[17;28Ht\u001b[17;29H(\u001b[17;30H)\u001b[17;31H:\u001b[17;32H/\u001b[17;33Hb\u001b[17;34Ho\u001b[17;35Ho\u001b[17;36Ht\u001b[17;37H/\u001b[17;38Ha\u001b[17;39Hp\u001b[17;40Hp\u001b[17;41Hs\u001b[17;42H/\u001b[17;43Hf\u001b[17;44Hs\u001b[17;45H-\u001b[17;46Ht\u001b[17;47He\u001b[17;48Hs\u001b[17;49Ht\u001b[17;50H.\u001b[17;51He\u001b[17;52Hl\u001b[17;53Hf\u001b[17;54H`\u001b[17;55H.\u001b[17;56H.\u001b[17;57H.\u001b[17;58H\u001b[18;01Hl\u001b[18;02Hi\u001b[18;03Hm\u001b[18;04Hi\u001b[18;05Hn\u001b[18;06He\u001b[18;07H:\u001b[18;08H \u001b[18;09HL\u001b[18;10Ho\u001b[18;11Ha\u001b[18;12Hd\u001b[18;13Hi\u001b[18;14Hn\u001b[18;15Hg\u001b[18;16H \u001b[18;17Hm\u001b[18;18Ho\u001b[18;19Hd\u001b[18;20Hu\u001b[18;21Hl\u001b[18;22He\u001b[18;23H \u001b[18;24H`\u001b[18;25Hb\u001b[18;26Ho\u001b[18;27Ho\u001b[18;28Ht\u001b[18;29H(\u001b[18;30H)\u001b[18;31H:\u001b[18;32H/\u001b[18;33Hb\u001b[18;34Ho\u001b[18;35Ho\u001b[18;36Ht\u001b[18;37H/\u001b[18;38Ha\u001b[18;39Hp\u001b[18;40Hp\u001b[18;41Hs\u001b[18;42H/\u001b[18;43He\u001b[18;44Hd\u001b[18;45Hi\u001b[18;46Ht\u001b[18;47H.\u001b[18;48He\u001b[18;49Hl\u001b[18;50Hf\u001b[18;51H`\u001b[18;52H.\u001b[18;53H.\u001b[18;54H.\u001b[18;55H\u001b[19;01Hl\u001b[19;02Hi\u001b[19;03Hm\u001b[19;04Hi\u001b[19;05Hn\u001b[19;06He\u001b[19;07H:\u001b[19;08H \u001b[19;09HL\u001b[19;10Ho\u001b[19;11Ha\u001b[19;12Hd\u001b[19;13Hi\u001b[19;14Hn\u001b[19;15Hg\u001b[19;16H \u001b[19;17Hm\u001b[19;18Ho\u001b[19;19Hd\u001b[19;20Hu\u001b[19;21Hl\u001b[19;22He\u001b[19;23H \u001b[19;24H`\u001b[19;25Hb\u001b[19;26Ho\u001b[19;27Ho\u001b[19;28Ht\u001b[19;29H(\u001b[19;30H)\u001b[19;31H:\u001b[19;32H/\u001b[19;33Hb\u001b[19;34Ho\u001b[19;35Ho\u001b[19;36Ht\u001b[19;37H/\u001b[19;38Ha\u001b[19;39Hp\u001b[19;40Hp\u001b[19;41Hs\u001b[19;42H/\u001b[19;43Hc\u001b[19;44Ho\u001b[19;45Hm\u001b[19;46Hp\u001b[19;47Ho\u001b[19;48Hs\u001b[19;49Hi\u001b[19;50Ht\u001b[19;51Ho\u001b[19;52Hr\u001b[19;53H.\u001b[19;54He\u001b[19;55Hl\u001b[19;56Hf\u001b[19;57H`\u001b[19;58H.\u001b[19;59H.\u001b[19;60H.\u001b[19;61H\u001b[20;01Hl\u001b[20;02Hi\u001b[20;03Hm\u001b[20;04Hi\u001b[20;05Hn\u001b[20;06He\u001b[20;07H:\u001b[20;08H \u001b[20;09HL\u001b[20;10Ho\u001b[20;11Ha\u001b[20;12Hd\u001b[20;13Hi\u001b[20;14Hn\u001b[20;15Hg\u001b[20;16H \u001b[20;17Hm\u001b[20;18Ho\u001b[20;19Hd\u001b[20;20Hu\u001b[20;21Hl\u001b[20;22He\u001b[20;23H \u001b[20;24H`\u001b[20;25Hb\u001b[20;26Ho\u001b[20;27Ho\u001b[20;28Ht\u001b[20;29H(\u001b[20;30H)\u001b[20;31H:\u001b[20;32H/\u001b[20;33Hb\u001b[20;34Ho\u001b[20;35Ho\u001b[20;36Ht\u001b[20;37H/\u001b[20;38Ha\u001b[20;39Hp\u001b[20;40Hp\u001b[20;41Hs\u001b[20;42H/\u001b[20;43Hg\u001b[20;44Hu\u001b[20;45Hi\u001b[20;46H-\u001b[20;47Hc\u001b[20;48Hl\u001b[20;49Hi\u001b[20;50He\u001b[20;51Hn\u001b[20;52Ht\u001b[20;53H.\u001b[20;54He\u001b[20;55Hl\u001b[20;56Hf\u001b[20;57H`\u001b[20;58H.\u001b[20;59H.\u001b[20;60H.\u001b[20;61H\u001b[21;01Hl\u001b[21;02Hi\u001b[21;03Hm\u001b[21;04Hi\u001b[21;05Hn\u001b[21;06He\u001b[21;07H:\u001b[21;08H \u001b[21;09HL\u001b[21;10Ho\u001b[21;11Ha\u001b[21;12Hd\u001b[21;13Hi\u001b[21;14Hn\u001b[21;15Hg\u001b[21;16H \u001b[21;17Hm\u001b[21;18Ho\u001b[21;19Hd\u001b[21;20Hu\u001b[21;21Hl\u001b[21;22He\u001b[21;23H \u001b[21;24H`\u001b[21;25Hb\u001b[21;26Ho\u001b[21;27Ho\u001b[21;28Ht\u001b[21;29H(\u001b[21;30H)\u001b[21;31H:\u001b[21;32H/\u001b[21;33Hb\u001b[21;34Ho\u001b[21;35Ho\u001b[21;36Ht\u001b[21;37H/\u001b[21;38Ha\u001b[21;39Hp\u001b[21;40Hp\u001b[21;41Hs\u001b[21;42H/\u001b[21;43Hg\u001b[21;44Hu\u001b[21;45Hi\u001b[21;46H-\u001b[21;47Ht\u001b[21;48He\u001b[21;49Hs\u001b[21;50Ht\u001b[21;51H.\u001b[21;52He\u001b[21;53Hl\u001b[21;54Hf\u001b[21;55H`\u001b[21;56H.\u001b[21;57H.\u001b[21;58H.\u001b[21;59H\u001b[22;01Hl\u001b[22;02Hi\u001b[22;03Hm\u001b[22;04Hi\u001b[22;05Hn\u001b[22;06He\u001b[22;07H:\u001b[22;08H \u001b[22;09HL\u001b[22;10Ho\u001b[22;11Ha\u001b[22;12Hd\u001b[22;13Hi\u001b[22;14Hn\u001b[22;15Hg\u001b[22;16H \u001b[22;17Hm\u001b[22;18Ho\u001b[22;19Hd\u001b[22;20Hu\u001b[22;21Hl\u001b[22;22He\u001b[22;23H \u001b[22;24H`\u001b[22;25Hb\u001b[22;26Ho\u001b[22;27Ho\u001b[22;28Ht\u001b[22;29H(\u001b[22;30H)\u001b[22;31H:\u001b[22;32H/\u001b[22;33Hb\u001b[22;34Ho\u001b[22;35Ho\u001b[22;36Ht\u001b[22;37H/\u001b[22;38Ha\u001b[22;39Hp\u001b[22;40Hp\u001b[22;41Hs\u001b[22;42H/\u001b[22;43Hg\u001b[22;44Hu\u001b[22;45Hi\u001b[22;46H-\u001b[22;47Hr\u001b[22;48Hu\u001b[22;49Hn\u001b[22;50H.\u001b[22;51He\u001b[22;52Hl\u001b[22;53Hf\u001b[22;54H`\u001b[22;55H.\u001b[22;56H.\u001b[22;57H.\u001b[22;58H\u001b[23;01Hl\u001b[23;02Hi\u001b[23;03Hm\u001b[23;04Hi\u001b[23;05Hn\u001b[23;06He\u001b[23;07H:\u001b[23;08H \u001b[23;09HL\u001b[23;10Ho\u001b[23;11Ha\u001b[23;12Hd\u001b[23;13Hi\u001b[23;14Hn\u001b[23;15Hg\u001b[23;16H \u001b[23;17Hm\u001b[23;18Ho\u001b[23;19Hd\u001b[23;20Hu\u001b[23;21Hl\u001b[23;22He\u001b[23;23H \u001b[23;24H`\u001b[23;25Hb\u001b[23;26Ho\u001b[23;27Ho\u001b[23;28Ht\u001b[23;29H(\u001b[23;30H)\u001b[23;31H:\u001b[23;32H/\u001b[23;33Hb\u001b[23;34Ho\u001b[23;35Ho\u001b[23;36Ht\u001b[23;37H/\u001b[23;38Hi\u001b[23;39Hn\u001b[23;40Hi\u001b[23;41Ht\u001b[23;42Hr\u001b[23;43Ha\u001b[23;44Hm\u001b[23;45Hf\u001b[23;46Hs\u001b[23;47H.\u001b[23;48Ha\u001b[23;49Hn\u001b[23;50Ho\u001b[23;51Hv\u001b[23;52Ha\u001b[23;53Hf\u001b[23;54Hs\u001b[23;55H`\u001b[23;56H.\u001b[23;57H.\u001b[23;58H.\u001b[23;59H\u001b[24;01H[BOOT:ENTRY] AnovaOS 0.1.0 arch=x86_64\r\n[BOOT:PROTOCOL] Limine 9.5.0 base=3\r\n[BOOT:MEMORY] entries=45 usable_bytes=888700928 hhdm=0xffff800000000000 kernel_phys=0x397d4000\r\n[BOOT:RESERVE] 0x0..0x1000 bootloader-reclaimable\r\n[BOOT:RESERVE] 0x800000..0x808000 acpi-nvs\r\n[BOOT:RESERVE] 0x80b000..0x80c000 acpi-nvs\r\n[BOOT:RESERVE] 0x810000..0x900000 acpi-nvs\r\n[BOOT:RESERVE] 0x900000..0x1780000 bootloader-reclaimable\r\n[BOOT:RESERVE] 0x31f71000..0x31fcb000 bootloader-reclaimable\r\n[BOOT:RESERVE] 0x31fcb000..0x38f33000 kernel-and-modules\r\n[BOOT:RESERVE] 0x38f33000..0x39012000 kernel-and-modules\r\n[BOOT:RESERVE] 0x39012000..0x390f8000 kernel-and-modules\r\n[BOOT:RESERVE] 0x390f8000..0x391e4000 kernel-and-modules\r\n[BOOT:RESERVE] 0x391e4000..0x392d8000 kernel-and-modules\r\n[BOOT:RESERVE] 0x392d8000..0x39387000 kernel-and-modules\r\n[BOOT:RESERVE] 0x39387000..0x3946f000 kernel-and-modules\r\n[BOOT:RESERVE] 0x3946f000..0x39536000 kernel-and-modules\r\n[BOOT:RESERVE] 0x39536000..0x395dc000 kernel-and-modules\r\n[BOOT:RESERVE] 0x395dc000..0x3968b000 kernel-and-modules\r\n[BOOT:RESERVE] 0x3968b000..0x39731000 kernel-and-modules\r\n[BOOT:RESERVE] 0x39731000..0x397d4000 kernel-and-modules\r\n[BOOT:RESERVE] 0x397d4000..0x398b8000 kernel-and-modules\r\n[BOOT:RESERVE] 0x398b8000..0x3a275000 bootloader-reclaimable\r\n[BOOT:RESERVE] 0x3bb75000..0x3bbf2000 bootloader-reclaimable\r\n[BOOT:RESERVE] 0x3bbf2000..0x3bbf6000 kernel-and-modules\r\n[BOOT:RESERVE] 0x3bbf6000..0x3bc3d000 bootloader-reclaimable\r\n[BOOT:RESERVE] 0x3e32e000..0x3ec0e000 bootloader-reclaimable\r\n[BOOT:RESERVE] 0x3ec0e000..0x3eccf000 reserved\r\n[BOOT:RESERVE] 0x3eccf000..0x3f4ed000 bootloader-reclaimable\r\n[BOOT:RESERVE] 0x3f4ed000..0x3f5ed000 reserved\r\n[BOOT:RESERVE] 0x3f5ed000..0x3f6ed000 reserved\r\n[BOOT:RESERVE] 0x3f6ed000..0x3f76d000 reserved\r\n[BOOT:RESERVE] 0x3f76d000..0x3f77f000 acpi-reclaimable\r\n[BOOT:RESERVE] 0x3f77f000..0x3f7ff000 acpi-nvs\r\n[BOOT:RESERVE] 0x3f7ff000..0x3fef4000 bootloader-reclaimable\r\n[BOOT:RESERVE] 0x3fef4000..0x3ff78000 reserved\r\n[BOOT:RESERVE] 0x3ff78000..0x40000000 acpi-nvs\r\n[BOOT:RESERVE] 0x80000000..0x801d4c00 framebuffer\r\n[BOOT:RESERVE] 0xe0000000..0xf0000000 reserved\r\n[BOOT:RESERVE] 0xffc00000..0x100000000 reserved\r\n[BOOT:RESERVE] 0xfd00000000..0x10000000000 reserved\r\n[BOOT:OWNERSHIP] boot data and non-usable memory reserved; M3 claims only usable RAM\r\n[BOOT:ACPI] rsdp_phys=0x3f77e014\r\n[BOOT:FRAMEBUFFER] 800x600 pitch=3200 bpp=32 (admission deferred; not written)\r\n[BOOT:MODULES] count=13; retained, not executed\r\n[CPU:PAGING] retained Limine maps; private root=0x39887000 NX=on\r\n[CPU:IST] index=1 guard=0xffffffff800d4000 top=0xffffffff800d9000\r\n[CPU:IST] index=2 guard=0xffffffff800d9000 top=0xffffffff800de000\r\n[CPU:IST] index=3 guard=0xffffffff800de000 top=0xffffffff800e3000\r\n[CPU:TABLES] GDT TSS IDT ready; IF=0; three guarded IST stacks\r\n[TRAP:BREAKPOINT] rip=0xffffffff8001f432 saved_if=0 return=iretq\r\n[POWER:READY] q35_pm1a=0x604 sleep_type=0\r\n[CPU:ACPI] root=0x3f77d0e8 width=8 entries=6 lapic=0xfee00000 enabled_cpus=1 pm_port=0x608 pm_mask=0xffffff\r\n[CPU:IOAPIC] id=0 gsi=0..24 destination=0 all_masked=true\r\n[CPU:APIC] id=0 periodic_vector=64 divider=16 initial=625766 calibration_pm=71590 calibration_apic=1251517 tick_ns=10000000\r\n[PCI:ENUM] functions=6 modern_blk=false\r\n[PCI:BLK] bdf=00:02.0 device=0x10421af4\r\n[PCI:ENUM] functions=6 modern_blk=true\r\n[MM:FRAMES] total=216968 reserved=53 free=216915 metadata=0x1000..0x36000 boot_reclaim=false\r\n[MM:TABLES] root=0x36000 owned_tables=75 boot_table_refs=0 NX=on WP=on PGE=off direct_map=NX\r\n[MM:HEAP] base=0xffffd00020000000 bytes=16777216 buddy=true RW=true NX=true\r\n[CLOCK:UTC] source=CMOS epoch=1793085990 monotonic=LAPIC\r\n[MM:STACK] rsp=0xffffd00000050eb0 bottom=0xffffd00000011000 top=0xffffd00000051000 guards=2 RSP0=owned\r\n[MM:READY] owned stack, frames, tables and heap verified\r\n[CPU:TIMER] ticks=8 monotonic_ns=80000000 pm_elapsed=243783 eoi=verified IF=0\r\n[TRAP:BREAKPOINT] rip=0xffffffff8001f432 saved_if=1 return=iretq\r\n[USER:CPU] syscall=true return=iretq x87=true SSE2=true AVX=false\r\n[BOOT:PROTOCOL] Limine 9.5.0 base=3\r\n[BOOT:PROTOCOL] Limine 9.5.0 base=3\r\n[APP:RUST] hello from Ring 3; args: hello-rust AnovaOS ring3; BSS=zero x87/SSE2=ok\r\n[USER:EXIT] pid=1 status=0\r\n[USER:REAP] pid=1 frames_restored=true\r\n[BOOT:PROTOCOL] Limine 9.5.0 base=3\r\n[BOOT:PROTOCOL] Limine 9.5.0 base=3\r\n[APP:C] hello from Ring 3; args: hello-c native-v1; BSS=zero SSE2=ok\r\n[USER:EXIT] pid=2 status=7\r\n[USER:REAP] pid=2 frames_restored=true\r\n[BOOT:PROTOCOL] Limine 9.5.0 base=3\r\n[BOOT:PROTOCOL] Limine 9.5.0 base=3\r\n[PROC:WORKER] GPR/XMM0-15/x87/MXCSR preserved\r\n[USER:EXIT] pid=23 status=0\r\n[PROC:WORKER] GPR/XMM0-15/x87/MXCSR preserved\r\n[USER:EXIT] pid=24 status=0\r\n[USER:EXIT] pid=22 status=0\r\n[SCHED:TEST] preemptions=60 preempt_switches=58 switches=66 sleeps=2 waits=2 idle_halts=2 forks=0 execs=0 spawns=3 reaps=3\r\n[USER:REAP] pid=22 frames_restored=true\r\n[SCHED:READY] processes_reclaimed=true descriptors=0 frames_restored=true heap_restored=true\r\n[USER:READY] Rust/C apps and concurrent processes exited; kernel resumed\r\n[VFS:MOUNTS] root=initramfs:ro /tmp=tmpfs:rw /dev=devfs stdin=0 stdout=1 stderr=2\r\n[BOOT:PROTOCOL] Limine 9.5.0 base=3\r\n[BOOT:PROTOCOL] Limine 9.5.0 base=3\r\n[BLK:READY] sectors=16384 queue=8 dma_pages=1 version=1 flush=true readonly=false irq=poll\r\n[BLK:BOUNDS] last_sector=ok capacity=reject overflow=reject flush=ok\r\n[BLK:RESET] acknowledged=true dma_released=true\r\n[DISK:REJECT] mount error=-2; /persist unavailable\r\n[INIT:START] pid=1 native-v1 tmpfs=volatile\r\nAnovaOS native shell. /tmp is lost on reboot. Type help.\r\nanova> ext4-write-test suite\r\n[LINUX:EXEC] image=ext4-write-test dynamic=false\r\n[M16:WRITE:FAIL] line=26 errno=30\r\n[USER:EXIT] pid=3 status=1\r\nanova> ",
+      "job_log_excerpt": [
+        "2026-10-27T07:08:06.3727910Z curl: (28) Failed to connect to musl.cc port 443 after 15002 ms: Timeout was reached",
+        "2026-10-27T07:08:22.3767272Z curl: (28) Failed to connect to musl.cc port 443 after 15002 ms: Timeout was reached",
+        "2026-10-27T07:08:37.3865532Z curl: (28) Failed to connect to more.musl.cc port 443 after 15002 ms: Timeout was reached",
+        "2026-10-27T07:08:53.3902852Z curl: (28) Failed to connect to more.musl.cc port 443 after 15002 ms: Timeout was reached",
+        "2026-10-27T07:10:04.9200781Z curl: (28) SSL connection timeout",
+        "2026-10-27T07:26:32.9560670Z error: foundation-write: guest failure; see /home/runner/work/AnovaOS/AnovaOS/build/logs/foundation-write.serial.log"
+      ]
     }
   ],
   "manual_retry": {
@@ -1539,5 +2063,44 @@
     "run_id": 40460883750,
     "job_id": 122044930564,
     "scope": "boot job success only; guest-toolchain failed input acquisition"
-  }
+  },
+  "core_ci57_artifact": {
+    "id": 12715692453,
+    "name": "qemu-boot-evidence",
+    "size_in_bytes": 16179359,
+    "digest": "sha256:76d51dbf684ce5a86dbed3ef07b8281cefecb7a06355fd12f3778cb3076c58d9",
+    "download_digest_verified": true,
+    "permanent_result_records": "M16_CORE_CI57.json",
+    "result_record_count": 45,
+    "run_id": 40463666492,
+    "job_id": 122053876017,
+    "scope": "Core job passed; guest source build and C/C++ gates passed but ext4 fixture failed."
+  },
+  "manual_retry_while_running": {
+    "run_id": 40463666492,
+    "from_job_id": 122053876017,
+    "operation": "GitHub rerun_workflow_job",
+    "http_status": 403,
+    "message": "The workflow run containing this job is already running",
+    "started_new_attempt": false
+  },
+  "ci57_guest_artifact": {
+    "id": 12717126551,
+    "name": "guest-toolchain-evidence",
+    "size_in_bytes": 47318051,
+    "sha256": "8c0d62cede96b215d74c38dfb4791bc26240fcff341d582629fea4240379e6aa",
+    "download_digest_verified": true,
+    "scope": "Source compiler construction and C/C++ guest gates passed; ext4 write fixture mount failed; remaining gates skipped."
+  },
+  "main_only_policy": {
+    "requested_at": "2026-10-27",
+    "trigger": "push",
+    "branches": [
+      "main"
+    ],
+    "pull_request": false,
+    "workflow_dispatch": false,
+    "feature_branch_rerun_authorized": false
+  },
+  "acceptance_scope": "Local ext4 kernel capacity accepted; complete remote CI remains unaccepted. Main-only policy supersedes feature-branch CI execution."
 }

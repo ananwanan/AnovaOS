@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Create opt-in non-journal ext4 work images and retain actual QEMU write/build/reboot/fault evidence.
-//! Independent e2fsprogs inspection checks stopped disks; this gate does not establish journal recovery.
+//! Normalize seed ownership for non-root hosts; independently inspect every stopped disk.
 use super::*;
 use sha2::{Digest, Sha256};
 use std::io::{Read, Seek, SeekFrom};
@@ -50,14 +50,60 @@ pub fn create(root: &Path, path: &Path, linux: bool) -> Result<()> {
                 "-O",
                 "none,extent,filetype,sparse_super,large_file",
                 "-E",
-                "lazy_itable_init=0",
+                "lazy_itable_init=0,root_owner=0:0",
                 "-d",
             ])
             .arg(&source.0)
             .arg(path),
     )?;
+    root_owned_fixture(path, SEED_PATHS)?;
     check(path)?;
     source.cleanup()?;
+    Ok(())
+}
+
+const SEED_PATHS: &[&str] = &[
+    "/.anova-abi",
+    "/Makefile",
+    "/bad.c",
+    "/main.c",
+    "/read-fault",
+    "/tmp",
+];
+
+/// Only normalize explicitly seeded paths while constructing a fresh controlled fixture.
+/// mke2fs -d copies host IDs; guest writable admission must remain strictly root-owned.
+pub(super) fn root_owned_fixture(path: &Path, names: &[&str]) -> Result<()> {
+    checked_file(path)?;
+    for name in names {
+        if !name.starts_with('/')
+            || name.len() > 512
+            || name
+                .bytes()
+                .any(|b| !b.is_ascii_alphanumeric() && !b"/._-".contains(&b))
+            || name
+                .split('/')
+                .skip(1)
+                .any(|p| matches!(p, "" | "." | ".."))
+        {
+            return Err("Invalid fresh-fixture seed path".into());
+        }
+    }
+    for name in names {
+        for field in ["uid", "gid"] {
+            command(
+                Command::new("debugfs")
+                    .args(["-w", "-R", &format!("set_inode_field {name} {field} 0")])
+                    .arg(path),
+            )?;
+        }
+    }
+    // debugfs can return success for a rejected command; audit the actual resulting bytes.
+    use anova_storage::filesystem::Filesystem;
+    let mut disk = anova_storage::ext4::Ext4::mount_writable(Box::new(disk::Image::open(path)?))
+        .map_err(|error| format!("Fresh root-owned ext4 fixture audit failed: {error}"))?;
+    disk.shutdown()
+        .map_err(|error| format!("Fresh fixture shutdown failed: {error}"))?;
     Ok(())
 }
 fn check(path: &Path) -> Result<()> {
@@ -323,4 +369,56 @@ pub fn verify(root: &Path) -> Result<()> {
         work.display()
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use anova_storage::{ext4::Ext4, filesystem::Filesystem};
+
+    #[test]
+    fn fresh_fixtures_remove_host_ids_without_relaxing_guest_admission() -> Result<()> {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let work = Temporary::new(root, "fixture-owners")?;
+        for journal in [false, true] {
+            let path = work.0.join(if journal {
+                "journal.ext4"
+            } else {
+                "write.ext4"
+            });
+            let names = if journal {
+                &["/.anova-abi"][..]
+            } else {
+                SEED_PATHS
+            };
+            if journal {
+                foundation_journal::create(root, &path, true)?;
+            } else {
+                create(root, &path, true)?;
+            }
+            // Reproduce mke2fs -d copying a non-root CI runner's ownership into every seed.
+            for name in names {
+                for field in ["uid", "gid"] {
+                    command(
+                        Command::new("debugfs")
+                            .args(["-w", "-R", &format!("set_inode_field {name} {field} 1001")])
+                            .arg(&path),
+                    )?;
+                }
+            }
+            assert!(Ext4::mount_writable(Box::new(disk::Image::open(&path)?)).is_err());
+            let before = digest(&path)?;
+            assert!(root_owned_fixture(&path, &["/.anova-abi", "/bad\ncommand"]).is_err());
+            assert_eq!(digest(&path)?, before);
+            root_owned_fixture(&path, names)?;
+            let mut disk = Ext4::mount_writable(Box::new(disk::Image::open(&path)?)).unwrap();
+            let marker = disk.lookup(2, ".anova-abi").unwrap().unwrap();
+            let mut bytes = [0; 16];
+            assert_eq!(disk.read(marker.inode, 0, &mut bytes), Ok(bytes.len()));
+            assert_eq!(&bytes, b"linux.x86_64.v1\n");
+            disk.shutdown().unwrap();
+            check(&path)?;
+        }
+        work.cleanup()
+    }
 }

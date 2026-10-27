@@ -700,3 +700,11 @@ observations; bootstrap diagnostics capture final orphan cleanup before detachin
 the device. This adds no native ABI or scheduling policy. The capacity gate compares
 final counters with the stopped disk and keeps pressure/build sessions independent.
 See [M16 capacity](validation/M16_CAPACITY.md).
+
+The actual fresh-ext4 kernel run at `e2db30f` stayed within existing quotas:
+9,494,480 sampled heap bytes, 142,825 additional frames, 1,564 VFS slots,
+14 tasks and 16 FDs/process; disk allocation peaked at 6,072 blocks / 241 inodes.
+Separate pressure reached the heap, all VFS/task/FD slots and disk ENOSPC, then
+the same recovered disk completed construction and new-kernel boot recovery.
+These observations size the declared non-GUI recipe; broader workloads require
+independent measurements. Complete results and raw logs are in the capacity record.
