@@ -129,7 +129,7 @@ impl Kernel {
         }
     }
 
-    pub(super) fn executable_linux(&self, i: usize, name: &str) -> Result<bool, i64> {
+    pub(super) fn executable_linux(&mut self, i: usize, name: &str) -> Result<bool, i64> {
         if name.contains('/') {
             return self.fs.linux_executable(self.process(i).cwd, name);
         }
@@ -1007,7 +1007,8 @@ impl Kernel {
                                 }
                                 let mut bytes = [0; 280];
                                 bytes[..8].copy_from_slice(&entry.inode.to_le_bytes());
-                                bytes[8..16].copy_from_slice(&(entry.inode + 1).to_le_bytes());
+                                bytes[8..16]
+                                    .copy_from_slice(&(entry.next_offset as u64).to_le_bytes());
                                 bytes[16..18].copy_from_slice(&(n as u16).to_le_bytes());
                                 bytes[18] = match entry.kind {
                                     2 => 4,

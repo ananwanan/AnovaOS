@@ -4,8 +4,10 @@
 **English** | [简体中文](../../zh-CN/milestones/M16_FOUNDATION.md)
 
 Planned 2026-10-26 (Asia/Shanghai) against `dev` baseline `05a5fb1`.
-**All six stages below are planned and unimplemented.** This document defines
-future work and acceptance, not new filesystem, resource or CI results.
+**Updated 2026-10-27 against `616ff47`: backend/cache isolation and a controlled ext4
+readonly profile are implemented and locally verified.** Dependency acquisition is repaired;
+remote CI, complete workload/latency acceptance, ext4 writes, JBD2 recovery and migration
+remain open. See [M16 evidence](../validation/M16.md). The stage contracts below retain their full exits.
 See the [roadmap](../ROADMAP.md), [current status](../guides/STATUS.md) and
 [architecture](../ARCHITECTURE.md) for implemented boundaries.
 
@@ -26,9 +28,10 @@ software bounds. Linux/native ELF and startup limits remain separate.
 
 The ext2 implementation accepts one 4 KiB-block group, at most 32,768 blocks
 and 4,096 inodes, and direct/single-indirect regular files. These are limits of
-our current implementation, not ext2 format maxima. VFS directly owns `Ext2`,
-imports the complete persistent namespace at mount and reserves node capacity
-up front. A larger disk alone cannot supply scalable namespace or cache behavior.
+our current implementation, not ext2 format maxima. The pre-M16 VFS directly owned `Ext2`, imported the complete persistent namespace
+and reserved node capacity up front. It now owns a capability-described backend, loads
+disk names on demand, grows fallibly from 32 cache slots and reclaims inactive regular
+files within the unchanged 2,048-slot ceiling. Directories/cwds and active files/maps stay pinned. A larger disk alone cannot supply scalable namespace or cache behavior.
 Historical [GCC](M15_GCC.md) and [Rust](M15_RUST.md) audits retain their original
 1 MiB file profile; M15.5 raised current persistent files to 4 MiB.
 
@@ -45,9 +48,9 @@ new requirements. Every stage needs its own evidence and failure boundaries.
 
 | Stage | Planned result | Status |
 | --- | --- | --- |
-| M16.1 | Recovered CI baseline and measured workload/resource budget | Planned; unimplemented |
-| M16.2 | Filesystem backend boundary and bounded, scalable resource management | Planned; unimplemented |
-| M16.3 | Controlled ext4 readonly mount and data access | Planned; unimplemented |
+| M16.1 | Recovered CI baseline and measured workload/resource budget | Acquisition repaired; local source build; remote CI/budgets pending |
+| M16.2 | Filesystem backend boundary and bounded, scalable resource management | Backend/cache locally verified; quotas unchanged |
+| M16.3 | Controlled ext4 readonly mount and data access | Readonly-v1 locally verified; see evidence |
 | M16.4 | Controlled ext4 writes and declared POSIX semantics | Planned; unimplemented |
 | M16.5 | JBD2 recovery and verified durability | Planned; unimplemented |
 | M16.6 | Fresh-disk migration, real builds and responsive foreground use | Planned; unimplemented |
@@ -169,7 +172,8 @@ Preserve the existing gates in [DEVELOPMENT](../guides/DEVELOPMENT.md), includin
 runtime/storage/persistence, C/C++/Rust/Cargo/network, SDK and M14 GUI/GPU checks.
 Retain all five M15 `bootstrap-*-test`/`bootstrap-test` gates, source rejection
 suites and the `bootstrap-metrics` feature check. Introduce an M16 command only
-with its working implementation; no M16 xtask command exists at this baseline.
+with its working implementation. `cargo xtask foundation-test` now runs the actual
+readonly-v1 acceptance; it does not accept M16.4–M16.6.
 Record exact inputs, feature profiles, commits/worktree hashes, QEMU configuration,
 logs, artifacts and independent disk checks; keep translations and status current.
 

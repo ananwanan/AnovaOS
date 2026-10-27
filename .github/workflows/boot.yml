@@ -57,6 +57,7 @@ jobs:
         run: cargo xtask test-host
       - name: Test bootstrap source integrity and archive rejection
         run: |
+          python3 ports/gcc/test_fetch.py
           python3 ports/bootstrap/test_prepare.py
           python3 ports/bootstrap/test_gcc_probe.py
           python3 ports/bootstrap/test_rust_probe.py
@@ -81,6 +82,8 @@ jobs:
         run: cargo xtask gui-test
       - name: Verify persistent sources, binaries, clean shutdown and device failures
         run: cargo xtask persistence-test
+      - name: Verify controlled ext4 readonly, large namespace, reboot and rejection
+        run: cargo xtask foundation-test
       - name: Verify controlled virtio networking, DNS and socket boundaries
         run: cargo xtask network-test
       - name: Verify offline packages, reboot rollback and strict HTTPS
@@ -101,6 +104,7 @@ jobs:
             build/input/
             build/gui/
             build/gpu/
+            build/foundation/
           if-no-files-found: ignore
 
 
@@ -118,6 +122,14 @@ jobs:
         run: rustup show active-toolchain
       - name: Fetch verified boot inputs
         run: cargo xtask fetch
+      - name: Cache checksum-verified compiler source archives
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: |
+            build/toolchain/*.tgz
+            build/toolchain/*.tar.xz
+            build/toolchain/*.tar.gz
+          key: compiler-inputs-${{ runner.os }}-${{ hashFiles('ports/gcc/inputs.json') }}
       - name: Build the locked GCC, sysroot and make from source
         env:
           ANOVA_BUILD_JOBS: 2

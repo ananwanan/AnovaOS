@@ -393,3 +393,19 @@ cargo xtask bootstrap-kernel-test
 历史证据保留原日期/范围；本地、远端 CI、实机结果分开记录。
 执行 `python3 scripts/check_docs.py`、`cargo xtask check-files`、`git diff --check`。
 脚本验证页面对应、语言导航、本地文件/标题链接，语义一致性仍需人工审查。
+
+## M16 文件系统基础
+
+`cargo xtask foundation-test` 构建普通原生镜像，在 `build/foundation/` 下新建受控 ext4
+测试盘。四次真实 TCG 启动验证可写/只读设备上的只读访问、10,001 项目录、20 MiB 普通
+文件、200 MiB 稀疏文件、盘上原生执行、正常重启、未知特性/需重放镜像拒绝及串口恢复。
+每次正向启动限时 120 秒，负向启动沿用 60 秒门禁。保留准确 ISO/initramfs、原始/拒绝盘、
+哈希/result JSON 和 `build/logs/foundation-*.serial.log`；正常停止盘必须通过 `e2fsck -fn`。
+`test-host` 包含独立 ext4 镜像与 VFS 缓存压力测试，CI 还执行
+`python3 ports/gcc/test_fetch.py`，见 [M16 证据](../validation/M16.md)。
+
+编译器输入在 musl.cc 传输失败后回退到锁定的官方 more.musl.cc 归档，两者使用原有摘要。
+可选 `ANOVA_SOURCE_CACHE=/absolute/directory` 按锁定本地文件名供应归档（包括
+`bootstrap.tgz`）；坏缓存或符号链接直接失败，不绕过检查。CI 仅缓存受检源码归档，
+不缓存生成的编译器产物。旧 ext2 镜像仍为默认可写路线；本只读门禁未验收 ext4 写入、
+JBD2 恢复或迁移/构建期间的前台响应。

@@ -4,8 +4,9 @@
 [English](../../en/milestones/M16_FOUNDATION.md) | **简体中文**
 
 本计划于 2026-10-26（Asia/Shanghai）基于 `dev` 的 `05a5fb1` 制定。
-**以下六个阶段全部处于计划状态，尚未实现。** 本文定义未来工作与验收，
-不代表新增文件系统、资源扩容或 CI 结果。已实现边界见[路线图](../ROADMAP.md)、
+**2026-10-27 基于 `616ff47` 更新：后端/缓存解耦和受控 ext4 只读配置已实现并通过本地验证。**
+依赖获取已修复；远端 CI、完整负载/延迟验收、ext4 可写、JBD2 恢复和迁移仍待完成。
+详见 [M16 证据](../validation/M16.md)。下文保留各阶段完整退出条件。已实现边界见[路线图](../ROADMAP.md)、
 [当前状态](../guides/STATUS.md)和[架构](../ARCHITECTURE.md)。
 
 M16 先扩展开发基础，再进入 [M17 开发者桌面](M17_DESKTOP.md)。完整编译器
@@ -23,8 +24,9 @@ Linux/native ELF 和启动参数的限制也必须分别处理。
 
 当前 ext2 实现仅支持一个 4 KiB block group，最多 32,768 blocks、4,096 inodes，
 普通文件使用 direct/single-indirect 寻址。这些是本项目实现子集的限制，
-不是 ext2 格式极限。VFS 直接持有 `Ext2`，挂载时导入整个持久命名空间，
-预先保留节点容量；仅扩大磁盘无法使命名空间和缓存具备可扩展行为。
+不是 ext2 格式极限。M16 前 VFS 直接持有 `Ext2`，挂载时导入整个命名空间并预留节点容量。
+现在通过能力明确的后端按需加载目录，缓存从 32 槽可失败扩展，在原有 2,048 槽限额内
+回收不活跃普通文件；目录/cwd、打开文件和映射保持固定身份。仅扩大磁盘无法使命名空间和缓存具备可扩展行为。
 历史 [GCC](M15_GCC.md)、[Rust](M15_RUST.md) 审计保留原始 1 MiB 文件配置；
 M15.5 已将当前持久文件上限提高到 4 MiB。
 
@@ -38,9 +40,9 @@ M15.5 已将当前持久文件上限提高到 4 MiB。
 
 | 阶段 | 计划结果 | 状态 |
 | --- | --- | --- |
-| M16.1 | 恢复 CI 基线，确定实测工作负载和资源预算 | 计划中；未实现 |
-| M16.2 | 文件系统后端边界与有界、可扩展的资源管理 | 计划中；未实现 |
-| M16.3 | 受控 ext4 只读挂载与数据访问 | 计划中；未实现 |
+| M16.1 | 恢复 CI 基线，确定实测工作负载和资源预算 | 获取已修复；本地源码构建；远端 CI/预算待验收 |
+| M16.2 | 文件系统后端边界与有界、可扩展的资源管理 | 后端/缓存已本地验证；限额不变 |
+| M16.3 | 受控 ext4 只读挂载与数据访问 | 只读 v1 已本地验证；见证据 |
 | M16.4 | 受控 ext4 写入和明确的 POSIX 语义 | 计划中；未实现 |
 | M16.5 | JBD2 恢复和持久性验证 | 计划中；未实现 |
 | M16.6 | 新盘迁移、真实构建和可响应的前台操作 | 计划中；未实现 |
@@ -141,7 +143,7 @@ scheduler boundary 采样不等于准确峰值 RSS；正常关机后盘占用不
 保留 [DEVELOPMENT](../guides/DEVELOPMENT.md) 既有 gates，包括 runtime/storage/
 persistence、C/C++/Rust/Cargo/network、SDK 和 M14 GUI/GPU。保留五项 M15
 `bootstrap-*-test`/`bootstrap-test` gates、源码拒绝测试及 `bootstrap-metrics`
-feature check。只有可运行实现交付时才引入 M16 命令；基线尚无 M16 xtask 命令。
+feature check。只有可运行实现交付时才引入 M16 命令；`cargo xtask foundation-test` 已实现只读 v1 验收，不代表 M16.4–M16.6 完成。
 记录准确输入、feature profiles、commits/worktree hashes、QEMU 配置、日志、产物和
 独立磁盘检查；同步维护翻译和状态。
 

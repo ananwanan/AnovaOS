@@ -2,6 +2,7 @@
 //! Test VFS paths, backend file/cache limits, timestamp coherence, ownership and rollback.
 use super::*;
 use alloc::{boxed::Box, rc::Rc, vec};
+use anova_storage::ext2::Ext2;
 use anova_storage::{BlockDevice, SECTOR, check_range, ext2::BLOCK};
 use core::cell::RefCell;
 
@@ -100,7 +101,7 @@ fn timestamp_disk_blocks(blocks: u32) -> TimestampDisk {
 
 fn assert_persistent_times(fs: &mut Vfs<'_>, inode: u64) {
     let cached = fs.times(inode);
-    let number = fs.nodes[inode as usize].inode.unwrap();
+    let number = fs.nodes[fs.identity_node(inode).unwrap()].inode.unwrap();
     let stored = fs.disk.as_mut().unwrap().inode(number).unwrap();
     assert_eq!(
         cached,
@@ -108,6 +109,38 @@ fn assert_persistent_times(fs: &mut Vfs<'_>, inode: u64) {
             .map(|time| u64::from(time) * 1_000_000_000)
     );
     assert_eq!(fs.attributes(inode).1, cached[1]);
+}
+
+#[test]
+fn uncached_ext2_children_prevent_rmdir_and_preserve_rename_open_unlink_lifetimes() {
+    let archive = image();
+    let device = timestamp_disk();
+    let mut disk = Ext2::mount(Box::new(device.clone())).unwrap();
+    let directory = disk.create(2, "unloaded", true).unwrap();
+    let file = disk.create(directory, "old", false).unwrap();
+    disk.write(file, 0, b"retained").unwrap();
+    disk.shutdown().unwrap();
+    let mut fs = Vfs::new(&archive).unwrap();
+    fs.insert(ROOT, "persist", Data::Directory, Mount::Initramfs)
+        .unwrap();
+    fs.mount_disk(Ext2::mount(Box::new(device)).unwrap())
+        .unwrap();
+    assert_eq!(fs.rmdir(ROOT, "/persist/unloaded", &[]), Err(NOT_EMPTY));
+    fs.rename(ROOT, "/persist/unloaded/old", "/persist/unloaded/new")
+        .unwrap();
+    let mut fds = Descriptors::default();
+    let fd = fs
+        .open(&mut fds, ROOT, "/persist/unloaded/new", OPEN_READ)
+        .unwrap();
+    let identity = fs.descriptor_metadata(&fds, fd).unwrap().0;
+    fs.unlink(ROOT, "/persist/unloaded/new").unwrap();
+    let mut bytes = [0; 8];
+    assert_eq!(fs.read(&fds, fd, &mut bytes), Ok(8));
+    assert_eq!(&bytes, b"retained");
+    assert_eq!(fs.descriptor_metadata(&fds, fd).unwrap().0, identity);
+    fs.close(&mut fds, fd).unwrap();
+    fs.rmdir(ROOT, "/persist/unloaded", &[]).unwrap();
+    fs.shutdown().unwrap();
 }
 
 #[test]

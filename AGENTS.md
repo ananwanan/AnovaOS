@@ -116,8 +116,10 @@ M17 development desktop → M18 conditional compiler/image self-hosting**. See
 [M17 desktop](docs/en/milestones/M17_DESKTOP.md), [ROADMAP](docs/en/ROADMAP.md) and
 [DEV-004](docs/en/guides/REQUIREMENTS.md). Start with CI baseline recovery and measured
 budgets; preserve ext2 images while separately validating ext4 read-only, writes,
-journal recovery and fresh-disk migration. None of M16–M18 is implemented by this
-plan. Use existing guest compilers for M17; full compiler bootstrap, SMP, physical
+journal recovery and fresh-disk migration. The planning commit implemented none of M16–M18. The current M16 delivery now implements
+backend/cache isolation and controlled ext4 readonly access; see [M16 evidence](docs/en/validation/M16.md).
+Preserve `cargo xtask foundation-test` and `python3 ports/gcc/test_fetch.py` with all prior gates.
+M16 writes, JBD2 recovery/migration, complete budgets/remote CI and M17/M18 remain pending. Use existing guest compilers for M17; full compiler bootstrap, SMP, physical
 drivers and a new filesystem format are not its prerequisites. Keep serial/host
 recovery independent of the desktop and retain all accepted regression gates.
 

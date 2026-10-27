@@ -6,8 +6,8 @@
 This describes implemented boundaries through the accepted M15.6 reconstruction profile and
 separately scoped future architecture. Guest toolchains, native SDKs and bounded Rust GUI/GPU
 profiles are implemented; full compiler reconstruction, guest-only image generation, SMP and
-physical hardware remain separate. Planned M16 resources/ext4 and M17 desktop boundaries are
-described below; they do not change implemented capabilities. Current evidence is in [STATUS](guides/STATUS.md).
+physical hardware remain separate. M16 now implements the backend/cache boundary and a
+controlled readonly ext4 profile; writes/recovery/adoption and M17 desktop remain future work. Current evidence is in [STATUS](guides/STATUS.md).
 
 ## 1. Overall structure
 
@@ -475,7 +475,8 @@ both owners, while munmap/exec/exit release them. Mapped inodes outlive close,
 unlink and name replacement. Writable shared-file mappings remain rejected;
 this is not persistent mmap writeback. File timestamps retain access/modify/
 change fields, and explicit ext2 updates use the existing checked disk writes.
-Ext2 import traverses nested cache directories iteratively within the node cap.
+M16 replaces eager ext2 import with on-demand backend lookup and streaming directory cursors;
+directories remain pinned within the node quota, while inactive regular-file nodes can be evicted.
 
 `cargo-online` is an explicit launcher policy over the same official Cargo;
 networking, TLS, archive extraction and Git operate in user space. It preserves
@@ -628,23 +629,32 @@ image generation, power-loss recovery and general reproducibility remain
 separate. See [M15 repeat](milestones/M15_REPEAT.md) and
 [local evidence](validation/M15.6.md).
 
-## Planned M16 storage/resources and M17 desktop
+## M16 storage/resources and planned M17 desktop
 
-This section is a future contract, not an implemented backend or desktop.
+The backend/cache boundary and controlled ext4 readonly-v1 below are implemented.
+Writes, recovery, resource expansion and the desktop retain their independently scoped exits.
+See [M16 evidence](validation/M16.md).
 [M16 foundation](milestones/M16_FOUNDATION.md) precedes
 [M17 desktop](milestones/M17_DESKTOP.md); see [ROADMAP](ROADMAP.md) for stages.
 
-- Keep checked block-device I/O below filesystem policy. Replace the VFS's direct
-  ext2 dependency with a narrow backend boundary for identities, metadata, file/directory
-  operations and declared capabilities. Preserve native/Linux ABI admission metadata.
-- Load namespace metadata on demand with bounded reclaimable caches instead of importing
-  every inode at mount. Expand heap/task/fd/storage budgets against measured workloads;
-  preserve checked allocation, OOM rollback and old ext2 behavior. Disk format changes
-  alone cannot remove VFS limits or long non-preemptible I/O stalls.
-- Implement a controlled ext4 feature profile in separate read-only, write and JBD2
-  crash-recovery stages. Reject unsupported features; use independent tooling and crash
-  injection to verify byte identity, allocation and recovery. Keep existing ext2 images
-  usable and copy into new verified work disks before any default-profile change.
+- `crates/storage/src/filesystem.rs` separates checked sector I/O from volume policy.
+  Backends declare root inode, file capacity, timestamp quantum, format and readonly state.
+  VFS owns one backend with immutable native/Linux ABI admission metadata. Persistent stat
+  identities use a separate 64-bit range independent of cache slots; directory cookies are
+  backend byte positions, including Linux getdents `d_off`. Native v1 layouts are unchanged.
+- Mount publishes only the root and ABI marker. Lookup loads metadata on demand; readdir
+  streams without caching every child. Cache vectors start at 32 slots and grow fallibly
+  within 2,048. Inactive regular-file nodes can be evicted; directories/cwds, open descriptions,
+  mapped files and the marker are pinned. Reserving a node slot precedes ext2 mutation.
+  The 16 MiB heap, 32 task/fd and existing mapping quotas are retained. This is bounded
+  metadata reclamation, not unconstrained directories, memory growth or nonblocking I/O.
+- `crates/storage/src/ext4.rs` reads the strict non-journal, 4 KiB/256-byte-inode
+  extent profile. It checks multiple local groups, metadata reservations/allocation,
+  extent depth/visited blocks/order/overlap and bounded file sizes. Unknown features,
+  dirty/recovery-required images, checksummed/64bit/flex/indexed layouts and unsupported
+  inode types fail closed. Sparse/unwritten regions read as zeros. No sector write or
+  flush is issued by this readonly backend. Ext2 remains the default writable recovery
+  profile; ext4 writes, JBD2 fault recovery and verified copy migration are still pending.
 - Keep desktop/session/compositor policy in Rust user processes. A PTY terminal connects
   the native GUI to explicitly admitted Linux-musl shell/compiler processes. Extend
   transport/SDK bounds only with version/ownership tests; retain the C/C++/Rust contract.

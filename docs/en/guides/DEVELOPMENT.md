@@ -580,3 +580,22 @@ Keep historical validation dates and scope; record local, remote CI and hardware
 results separately. Run `python3 scripts/check_docs.py`, `cargo xtask check-files`
 and `git diff --check`. The Python check validates page parity, language links,
 local files and heading fragments; reviewers still verify translation meaning.
+
+## M16 filesystem foundation
+
+`cargo xtask foundation-test` builds a normal native image and creates fresh controlled ext4
+fixtures below `build/foundation/`. Four real TCG boots check readonly access on writable and
+readonly devices, 10,001 directory entries, 20 MiB initialized bytes, a 200 MiB sparse file,
+native disk execution, clean reboot, unknown-feature/replay rejection and serial recovery.
+Each boot has a 120-second deadline (negative boots use the existing 60-second gate).
+The gate retains the exact ISO/initramfs, original and rejected disks, hashes/result JSON
+and `build/logs/foundation-*.serial.log`. Stopped valid disks must pass `e2fsck -fn`.
+`test-host` includes independent ext4 fixtures and VFS cache-pressure tests; CI also runs
+`python3 ports/gcc/test_fetch.py`. See [M16 evidence](../validation/M16.md).
+
+Compiler inputs now fall back from musl.cc to the locked official more.musl.cc archive.
+Both require the original digest. `ANOVA_SOURCE_CACHE=/absolute/directory` optionally
+supplies archives by their locked local names (including `bootstrap.tgz`); cache corruption
+or symlinks fail instead of bypassing verification. CI caches only checked source archives,
+not generated compiler outputs. Existing ext2 images remain writable/default. Ext4 writes,
+JBD2 recovery and migration/build responsiveness have no acceptance in this readonly gate.

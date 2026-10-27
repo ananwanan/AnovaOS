@@ -377,7 +377,7 @@ exit 0
     let path = apps.join("initramfs.anovafs");
     output_path(&path)?;
     fs::write(&path, &bytes)?;
-    let fs = anova_vfs::Vfs::new(&bytes).map_err(|e| format!("Invalid initramfs: {e}"))?;
+    let mut fs = anova_vfs::Vfs::new(&bytes).map_err(|e| format!("Invalid initramfs: {e}"))?;
     for name in NAMES {
         let data = fs
             .executable(anova_vfs::ROOT, &format!("/bin/{name}"))

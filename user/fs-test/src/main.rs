@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 #![no_std]
 #![no_main]
-//! Exercise real VFS/ext2 syscalls, inherited offsets, exec/cwd, user buffers, reboot data and pipes.
+//! Exercise VFS/ext2 and readonly ext4 syscalls, offsets, exec/cwd, user buffers, reboot and pipes.
 //! Child modes validate resources after fork/exec; shell-check reads files produced by its script.
 use anova_rt::{self as rt, abi::*};
 mod disk;
+mod foundation;
 fn ok(pid: u64) {
     assert_eq!(
         rt::wait(pid).unwrap().status,
@@ -263,6 +264,7 @@ unsafe extern "C" fn anova_main(argc: usize, argv: *const *const u8) -> u32 {
         b"shell-check" => shell_check(),
         b"disk-suite" => disk::suite(),
         b"disk-reboot" => disk::reboot(),
+        b"foundation-readonly" => foundation::readonly(),
         b"disk-error" => disk::io_error(),
         b"suite" => {
             files();

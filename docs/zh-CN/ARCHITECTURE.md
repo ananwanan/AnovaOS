@@ -3,8 +3,8 @@
 
 [English](../en/ARCHITECTURE.md) | **简体中文**
 
-本文覆盖至 M15.6 已验收重建范围内的实现边界，另注明未来架构。下文 M16 资源/ext4 与
-M17 桌面属于计划，不改变已实现能力。guest 工具链、原生 SDK、
+本文覆盖至 M15.6 已验收重建及 M16 后端/缓存、受控 ext4 只读配置的实现边界。
+M16 可写/恢复/采用和 M17 桌面仍是后续工作。guest 工具链、原生 SDK、
 有界 Rust GUI/GPU 均已实现；完整编译器重建、guest 独立镜像生成、SMP 和实机另计。
 当前能力与证据见 [STATUS](guides/STATUS.md)。
 
@@ -274,7 +274,8 @@ component/512路径，Linux getdents独立于native80字节wire，不能表示�
 在线增加select导入mask/单调deadline/保留中断frame。只读共享文件映射持版本化VFS inode lease/
 物理页元数据，下次用户执行前刷新成功写；fork保双方owner，munmap/exec/exit释放，inode跨close/
 unlink/替换存活。不支持可写共享/persistent writeback。时间戳保atime/mtime/ctime，ext2显式
-更新走受检disk，嵌套缓存目录迭代导入受节点限额。`cargo-online`只是同官方Cargo launcher，
+更新走受检 disk。M16 已改用按需后端查询与流式目录游标；目录受节点限额固定，
+不活跃普通文件节点可以回收。`cargo-online`只是同官方Cargo launcher，
 网络/TLS/解归档/Git在用户态，保环境，默认`/persist/cargo-home`与锁定CA，不禁验证；普通Cargo
 默认离线。受控/公开门禁见[M12网络](milestones/M12_NETWORK.md)。
 
@@ -353,18 +354,25 @@ input/seed/recipe和完整bzip2/内核ELF bytes相同。失败保诊断、不出
 产物强求匹配；compiler source、guest-only image、断电恢复、通用reproducibility另计。
 见[repeat](milestones/M15_REPEAT.md)/[M15.6证据](validation/M15.6.md)。
 
-## 计划中的 M16 存储/资源与 M17 桌面
+## M16 存储/资源与计划中的 M17 桌面
 
-本节是未来契约，不代表已实现后端或桌面。[M16 基础能力](milestones/M16_FOUNDATION.md)
+后端/缓存边界及受控 ext4 只读 v1 已实现；可写、恢复、资源扩展和桌面仍需各自验收。
+见 [M16 证据](validation/M16.md)。[M16 基础能力](milestones/M16_FOUNDATION.md)
 先于 [M17 桌面](milestones/M17_DESKTOP.md)，阶段划分见[路线图](ROADMAP.md)。
 
-- 受检块设备 I/O 位于文件系统策略之下。用窄后端边界替换 VFS 对 ext2 的直接依赖，
-  覆盖身份、元数据、文件/目录操作和明确支持的能力，并保留 native/Linux ABI 准入元数据。
-- 使用有界可回收缓存按需加载命名空间，替代挂载时导入全部 inode。按实测负载扩大
-  堆/task/fd/存储预算，保留受检分配、OOM 回滚和旧 ext2 行为。仅换磁盘格式不能解除 VFS
-  限制或长时间不可抢占 I/O 的停顿。
-- 分别实现受控 ext4 只读、可写和 JBD2 崩溃恢复。拒绝未知特性，使用独立工具与崩溃注入
-  验证字节、分配和恢复。保持 ext2 旧盘可用；默认配置变更前，先复制到新工作盘并验证。
+- `crates/storage/src/filesystem.rs` 将受检扇区 I/O 与卷策略分开。后端声明根 inode、文件
+  容量、时间精度、格式与只读状态；VFS 持有后端和不可变 native/Linux ABI 准入策略。
+  持久 stat 身份使用独立于缓存槽的 64 位编号区间，目录游标为后端字节位置，Linux
+  getdents 的 `d_off` 同样如此；native v1 布局保持冻结。
+- 挂载只发布根和 ABI 标记。查询按需加载元数据，readdir 直接流式读取目录，不缓存每个
+  子节点。缓存从 32 槽可失败扩展到 2,048 槽；不活跃普通文件可回收，目录/cwd、打开描述、
+  映射文件和标记固定。ext2 修改前先预留节点。保留 16 MiB 堆、32 task/fd 和原有映射限额。
+  这属于有界元数据回收，不代表无限目录、动态内存扩容或非阻塞 I/O。
+- `crates/storage/src/ext4.rs` 读取严格的无日志 4 KiB/256-byte-inode extent 配置，检查多组
+  元数据保留/分配、extent 深度/访问记录/顺序/重叠和文件上限。拒绝未知特性、脏盘/需恢复
+  镜像、checksum/64bit/flex/indexed 布局和不支持的 inode 类型；稀疏/未初始化区域返回零。
+  只读后端不会发出扇区写入或 flush。ext2 仍是默认可写/恢复配置，ext4 可写、JBD2 故障
+  恢复和受检复制迁移仍待完成。
 - 桌面/会话/合成器策略保留在 Rust 用户进程中。PTY 终端把原生 GUI 连接至显式准入的
   Linux-musl shell/编译器进程。扩展传输/SDK 限额时验证版本和所有权，保留 C/C++/Rust 契约。
 - 提供真实日志及全局资源容量测量，明确任务/服务控制权限。通过受检生命周期操作恢复

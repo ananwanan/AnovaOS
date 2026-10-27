@@ -2,22 +2,27 @@
 #![no_std]
 //! Bounded mounts with immutable ABI policy, shared files/maps, packet pairs, pipes and PTYs.
 //! Cached timestamps retain the backing filesystem's supported precision.
-//! Persistent regular files have a separate storage limit; tmpfs and shared caches stay bounded.
+//! Persistent directories stream from a backend; inactive file nodes are reclaimable under pressure.
+//! Directory/cwd identities, open files, mappings and the ABI policy are pinned within fixed quotas.
 //! One non-preemptible owner serializes all mutations; no hardware, locks or user pointers.
 extern crate alloc;
 pub mod archive;
 pub mod fd;
 pub mod file_mapping;
 #[cfg(test)]
+mod foundation_tests;
+#[cfg(test)]
 mod tests;
 use alloc::borrow::Cow;
+use alloc::boxed::Box;
 use alloc::vec::Vec;
 use anova_abi::*;
-use anova_storage::ext2::Ext2;
+use anova_storage::filesystem::{Entry as DiskEntry, Filesystem};
 pub use fd::Descriptors;
 use file_mapping::MappedFile;
 
 pub const ROOT: usize = 0;
+const PERSISTENT_ID_BASE: u64 = 1 << 32;
 // Leave room for PTY/library nodes and the independent real heap-exhaustion workload.
 pub const NODE_LIMIT: usize = 2048;
 pub const OPEN_LIMIT: usize = 128;
@@ -33,12 +38,12 @@ pub enum Mount {
     Initramfs,
     Tmpfs,
     Devfs,
-    Ext2,
+    Persistent,
 }
 impl Mount {
     // Cached metadata must use the same precision as the persistent inode format.
     fn timestamp(self, nanos: u64) -> u64 {
-        if self == Self::Ext2 {
+        if self == Self::Persistent {
             nanos / 1_000_000_000 * 1_000_000_000
         } else {
             nanos
@@ -81,6 +86,7 @@ pub struct DirectoryEntry {
     pub kind: u32,
     pub name_len: u32,
     pub name: [u8; NAME_BYTES + 1],
+    pub next_offset: usize,
 }
 #[derive(Clone, Copy)]
 enum Target {
@@ -109,7 +115,7 @@ pub struct Vfs<'a> {
     nodes: Vec<Node<'a>>,
     opens: Vec<Option<Open>>,
     pipes: Vec<Option<Pipe>>,
-    disk: Option<Ext2>,
+    disk: Option<Box<dyn Filesystem>>,
     // This inode owns the mount-time executable ABI policy and cannot change while mounted.
     policy_node: Option<usize>,
     linux: [bool; NODE_LIMIT],
@@ -126,7 +132,7 @@ fn slots<T>(n: usize, mut f: impl FnMut() -> T) -> Result<Vec<T>, i64> {
 impl<'a> Vfs<'a> {
     pub fn new(archive: &'a [u8]) -> Result<Self, i64> {
         let mut nodes = Vec::new();
-        nodes.try_reserve_exact(NODE_LIMIT).map_err(|_| NO_MEMORY)?;
+        nodes.try_reserve_exact(32).map_err(|_| NO_MEMORY)?;
         nodes.push(Node {
             parent: ROOT,
             name: [0; NAME_BYTES + 1],
@@ -196,94 +202,173 @@ impl<'a> Vfs<'a> {
         }
         Ok(fs)
     }
-    /// Attach a disk only after its feature/allocation checks. Roll back namespace publication on error.
-    pub fn mount_disk(&mut self, mut disk: Ext2) -> Result<(), i64> {
+    /// Publish only the mount root and immutable ABI marker; all other names load on demand.
+    pub fn mount_disk<F: Filesystem + 'static>(&mut self, disk: F) -> Result<(), i64> {
+        self.mount_backend(anova_storage::try_box(disk)?)
+    }
+    pub fn mount_backend(&mut self, mut disk: Box<dyn Filesystem>) -> Result<(), i64> {
         if self.disk.is_some() {
             return Err(INVALID_ARGUMENT);
         }
         let root = self.resolve(ROOT, "/persist")?;
-        let before = self.nodes.len();
-        self.mount("/persist", Mount::Ext2)?;
-        self.nodes[root].inode = Some(2);
-        let result = (|| {
-            self.import_disk(&mut disk, root, 2)?;
-            // This explicit image-wide manifest selects native v1, never ELF OSABI heuristics.
-            let manifest = self.child(root, ".anova-abi").ok_or(INVALID_FILESYSTEM)?;
-            let number = self.nodes[manifest].inode.ok_or(INVALID_FILESYSTEM)?;
-            let mut bytes = [0; 32];
-            let n = disk.read(number, 0, &mut bytes)?;
-            if !matches!(&bytes[..n], b"anova.native.v1\n" | b"linux.x86_64.v1\n") {
-                return Err(INVALID_FILESYSTEM);
-            }
-            let linux = &bytes[..n] == b"linux.x86_64.v1\n";
-            for policy in &mut self.linux[before..self.nodes.len()] {
-                *policy = linux;
-            }
-            self.linux[root] = linux;
-            self.policy_node = Some(manifest);
-            Ok(())
-        })();
-        if let Err(e) = result {
-            self.nodes.truncate(before);
-            self.nodes[root].mount = Mount::Initramfs;
-            self.nodes[root].inode = None;
-            return Err(e);
+        let caps = disk.capabilities();
+        if caps.timestamp_nanos != 1_000_000_000 {
+            return Err(UNSUPPORTED);
         }
+        let info = disk.inode(caps.root)?;
+        if !info.directory {
+            return Err(INVALID_FILESYSTEM);
+        }
+        let marker = disk
+            .lookup(caps.root, ".anova-abi")?
+            .ok_or(INVALID_FILESYSTEM)?;
+        let policy = disk.inode(marker.inode)?;
+        if policy.directory || policy.size > 32 {
+            return Err(INVALID_FILESYSTEM);
+        }
+        let mut bytes = [0; 32];
+        let n = disk.read(marker.inode, 0, &mut bytes)?;
+        if n != policy.size {
+            return Err(INVALID_FILESYSTEM);
+        }
+        let linux = match &bytes[..n] {
+            b"anova.native.v1\n" => false,
+            b"linux.x86_64.v1\n" => true,
+            _ => return Err(INVALID_FILESYSTEM),
+        };
+        self.ensure_node_slot(&[])?;
+        self.mount("/persist", Mount::Persistent)?;
+        self.nodes[root].inode = Some(caps.root);
+        self.linux[root] = linux;
         self.disk = Some(disk);
-        Ok(())
-    }
-    fn import_disk(&mut self, disk: &mut Ext2, parent: usize, inode: u32) -> Result<(), i64> {
-        // NODE_LIMIT and duplicate-inode rejection bound traversal without a recursive stack.
-        // Cargo Git caches legitimately exceed the earlier eight-directory import depth.
-        let mut pending = Vec::new();
-        pending.try_reserve(1).map_err(|_| NO_MEMORY)?;
-        pending.push((parent, inode));
-        while let Some((parent, inode)) = pending.pop() {
-            for entry in disk.entries(inode)? {
-                if self.nodes.iter().any(|n| n.inode == Some(entry.inode)) {
-                    return Err(INVALID_FILESYSTEM);
-                }
-                let info = disk.inode(entry.inode)?;
-                let name = core::str::from_utf8(&entry.name[..entry.length])
-                    .map_err(|_| INVALID_FILESYSTEM)?;
-                let data = if info.directory {
-                    Data::Directory
-                } else {
-                    Data::Persistent {
-                        size: info.size,
-                        executable: info.executable,
-                    }
-                };
-                let node = self.insert(parent, name, data, Mount::Ext2)?;
-                self.nodes[node].inode = Some(entry.inode);
-                self.nodes[node].permissions = info.permissions;
-                self.nodes[node].modified = u64::from(info.modified) * 1_000_000_000;
-                self.nodes[node].accessed = u64::from(info.accessed) * 1_000_000_000;
-                self.nodes[node].changed = u64::from(info.changed) * 1_000_000_000;
-                if info.directory {
-                    pending.try_reserve(1).map_err(|_| NO_MEMORY)?;
-                    pending.push((node, entry.inode));
-                }
+        match self.cache_entry(root, marker, &[]) {
+            Ok(manifest) => {
+                self.policy_node = Some(manifest);
+                self.nodes[root].permissions = info.permissions;
+                self.nodes[root].modified = u64::from(info.modified) * 1_000_000_000;
+                self.nodes[root].accessed = u64::from(info.accessed) * 1_000_000_000;
+                self.nodes[root].changed = u64::from(info.changed) * 1_000_000_000;
+                Ok(())
+            }
+            Err(error) => {
+                self.disk = None;
+                self.nodes[root].mount = Mount::Initramfs;
+                self.nodes[root].inode = None;
+                self.linux[root] = false;
+                Err(error)
             }
         }
+    }
+    fn held(&self, index: usize) -> bool {
+        self.nodes[index]
+            .mapping
+            .as_ref()
+            .is_some_and(MappedFile::active)
+            || self
+                .opens
+                .iter()
+                .flatten()
+                .any(|o| matches!(o.target, Target::Node(n) if n == index))
+    }
+    fn reusable(&self, index: usize) -> bool {
+        !self.nodes[index].linked && !self.held(index)
+    }
+    /// Directory identities may be held as cwd outside the VFS and are never evicted.
+    fn ensure_node_slot(&mut self, protected: &[usize]) -> Result<(), i64> {
+        self.collect_mappings()?;
+        if (0..self.nodes.len()).any(|i| self.reusable(i)) {
+            return Ok(());
+        }
+        if self.nodes.len() < NODE_LIMIT {
+            self.nodes.try_reserve(1).map_err(|_| NO_MEMORY)?;
+            return Ok(());
+        }
+        let index = (0..self.nodes.len())
+            .find(|&i| {
+                self.nodes[i].linked
+                    && matches!(self.nodes[i].data, Data::Persistent { .. })
+                    && self.policy_node != Some(i)
+                    && !protected.contains(&i)
+                    && !self.held(i)
+            })
+            .ok_or(NO_SPACE)?;
+        // Eviction drops only cache state. It must never release the live on-disk inode.
+        self.nodes[index].linked = false;
+        self.nodes[index].inode = None;
+        self.nodes[index].data = Data::Mutable(Vec::new());
+        self.nodes[index].mapping = None;
         Ok(())
     }
-    fn ensure_node_slot(&self) -> Result<(), i64> {
-        if self.nodes.len() < NODE_LIMIT
-            || self.nodes.iter().enumerate().any(|(i, n)| {
-                !n.linked
-                    && !n.mapping.as_ref().is_some_and(MappedFile::active)
-                    && !self
-                        .opens
-                        .iter()
-                        .flatten()
-                        .any(|o| matches!(o.target,Target::Node(id) if id==i))
-            })
-        {
-            Ok(())
-        } else {
-            Err(NO_SPACE)
+    fn cache_entry(
+        &mut self,
+        parent: usize,
+        entry: DiskEntry,
+        protected: &[usize],
+    ) -> Result<usize, i64> {
+        // This profile has no hard-link API. Reject cycles and cached metadata aliases.
+        if self.nodes.iter().any(|n| n.inode == Some(entry.inode)) {
+            return Err(INVALID_FILESYSTEM);
         }
+        let info = self.disk.as_mut().ok_or(IO_ERROR)?.inode(entry.inode)?;
+        let name =
+            core::str::from_utf8(&entry.name[..entry.length]).map_err(|_| INVALID_FILESYSTEM)?;
+        if name == "." || name == ".." || name.contains(['/', '\0']) {
+            return Err(INVALID_FILESYSTEM);
+        }
+        self.ensure_node_slot(protected)?;
+        let data = if info.directory {
+            Data::Directory
+        } else {
+            Data::Persistent {
+                size: info.size,
+                executable: info.executable,
+            }
+        };
+        let node = self.insert(parent, name, data, Mount::Persistent)?;
+        self.nodes[node].inode = Some(info.number);
+        self.nodes[node].permissions = info.permissions;
+        self.nodes[node].modified = u64::from(info.modified) * 1_000_000_000;
+        self.nodes[node].accessed = u64::from(info.accessed) * 1_000_000_000;
+        self.nodes[node].changed = u64::from(info.changed) * 1_000_000_000;
+        Ok(node)
+    }
+    fn lookup_child(
+        &mut self,
+        parent: usize,
+        name: &str,
+        protected: &[usize],
+    ) -> Result<Option<usize>, i64> {
+        if let Some(index) = self.child(parent, name) {
+            return Ok(Some(index));
+        }
+        if self.nodes[parent].mount != Mount::Persistent {
+            return Ok(None);
+        }
+        let number = self.nodes[parent].inode.ok_or(INVALID_FILESYSTEM)?;
+        let entry = self.disk.as_mut().ok_or(IO_ERROR)?.lookup(number, name)?;
+        entry
+            .map(|entry| self.cache_entry(parent, entry, protected))
+            .transpose()
+    }
+    fn identity(&self, index: usize) -> u64 {
+        self.nodes[index]
+            .inode
+            .map_or(index as u64, |n| PERSISTENT_ID_BASE + u64::from(n))
+    }
+    fn identity_node(&self, identity: u64) -> Option<usize> {
+        if identity < PERSISTENT_ID_BASE {
+            return ((identity as usize) < self.nodes.len()).then_some(identity as usize);
+        }
+        let number = u32::try_from(identity - PERSISTENT_ID_BASE).ok()?;
+        self.nodes.iter().position(|n| n.inode == Some(number))
+    }
+    fn persistent_limit(&self) -> usize {
+        self.disk.as_ref().map_or(0, |d| d.capabilities().max_file)
+    }
+    fn persistent_writable(&self) -> bool {
+        self.disk
+            .as_ref()
+            .is_some_and(|d| !d.capabilities().read_only)
     }
     pub fn sync(&mut self) -> Result<(), i64> {
         self.collect_mappings()?;
@@ -299,13 +384,13 @@ impl<'a> Vfs<'a> {
         }
     }
     pub fn attributes(&self, inode: u64) -> (u16, u64) {
-        self.nodes
-            .get(inode as usize)
+        self.identity_node(inode)
+            .and_then(|n| self.nodes.get(n))
             .map_or((0o600, 0), |n| (n.permissions, n.modified))
     }
     pub fn times(&self, inode: u64) -> [u64; 3] {
-        self.nodes
-            .get(inode as usize)
+        self.identity_node(inode)
+            .and_then(|n| self.nodes.get(n))
             .map_or([0; 3], |n| [n.accessed, n.modified, n.changed])
     }
     /// Set checked regular-file/directory timestamps; persistent ext2 stores whole seconds.
@@ -315,11 +400,16 @@ impl<'a> Vfs<'a> {
         accessed: Option<u64>,
         modified: Option<u64>,
     ) -> Result<(), i64> {
-        let node = self.nodes.get_mut(inode as usize).ok_or(INVALID_ARGUMENT)?;
+        let index = self.identity_node(inode).ok_or(INVALID_ARGUMENT)?;
         if accessed.is_none() && modified.is_none() {
             return Ok(());
         }
-        if !matches!(node.mount, Mount::Tmpfs | Mount::Ext2) {
+        self.mutable_node(index)?;
+        let node = self.nodes.get_mut(index).ok_or(INVALID_ARGUMENT)?;
+        if accessed.is_none() && modified.is_none() {
+            return Ok(());
+        }
+        if !matches!(node.mount, Mount::Tmpfs | Mount::Persistent) {
             return Err(READ_ONLY);
         }
         let seconds = |time: u64| u32::try_from(time / 1_000_000_000).map_err(|_| INVALID_ARGUMENT);
@@ -404,7 +494,8 @@ impl<'a> Vfs<'a> {
         Ok(())
     }
     pub fn chmod(&mut self, cwd: usize, path: &str, permissions: u16) -> Result<(), i64> {
-        self.chmod_node(self.resolve(cwd, path)?, permissions)
+        let node = self.resolve(cwd, path)?;
+        self.chmod_node(node, permissions)
     }
     pub fn fchmod(&mut self, fds: &Descriptors, fd: u64, permissions: u16) -> Result<(), i64> {
         let Target::Node(n) = self.opens[fds.handle(fd)?].unwrap().target else {
@@ -458,7 +549,7 @@ impl<'a> Vfs<'a> {
         data: Data<'a>,
         mount: Mount,
     ) -> Result<usize, i64> {
-        self.collect_mappings()?;
+        self.ensure_node_slot(&[])?;
         if name.is_empty()
             || name.len() > NAME_BYTES
             || name == "."
@@ -525,10 +616,10 @@ impl<'a> Vfs<'a> {
             })
             .map(|(i, _)| i)
     }
-    pub fn resolve(&self, cwd: usize, path: &str) -> Result<usize, i64> {
+    pub fn resolve(&mut self, cwd: usize, path: &str) -> Result<usize, i64> {
         self.walk(cwd, path, 0)
     }
-    fn walk(&self, cwd: usize, path: &str, depth: usize) -> Result<usize, i64> {
+    fn walk(&mut self, cwd: usize, path: &str, depth: usize) -> Result<usize, i64> {
         if path.len() > PATH_BYTES {
             return Err(TOO_LONG);
         }
@@ -554,7 +645,7 @@ impl<'a> Vfs<'a> {
                     if name.len() > NAME_BYTES {
                         return Err(TOO_LONG);
                     }
-                    let next = self.child(at, name).ok_or(NOT_FOUND)?;
+                    let next = self.lookup_child(at, name, &[])?.ok_or(NOT_FOUND)?;
                     if let Data::Link(target) = self.nodes[next].data {
                         at = self.walk(at, target, depth + 1)?;
                     } else {
@@ -568,7 +659,7 @@ impl<'a> Vfs<'a> {
         }
         Ok(at)
     }
-    fn parent<'p>(&self, cwd: usize, path: &'p str) -> Result<(usize, &'p str), i64> {
+    fn parent<'p>(&mut self, cwd: usize, path: &'p str) -> Result<(usize, &'p str), i64> {
         if path.len() > PATH_BYTES {
             return Err(TOO_LONG);
         }
@@ -619,7 +710,7 @@ impl<'a> Vfs<'a> {
         }
         Ok(count)
     }
-    pub fn chdir(&self, cwd: usize, path: &str) -> Result<usize, i64> {
+    pub fn chdir(&mut self, cwd: usize, path: &str) -> Result<usize, i64> {
         let node = self.resolve(cwd, path)?;
         if matches!(self.nodes[node].data, Data::Directory) {
             Ok(node)
@@ -629,14 +720,14 @@ impl<'a> Vfs<'a> {
     }
     pub fn mkdir(&mut self, cwd: usize, path: &str) -> Result<(), i64> {
         let (parent, name) = self.parent(cwd, path)?;
-        if self.nodes[parent].mount == Mount::Ext2 {
-            self.ensure_node_slot()?;
+        if self.nodes[parent].mount == Mount::Persistent {
+            self.ensure_node_slot(&[])?;
             let inode = self.disk.as_mut().ok_or(IO_ERROR)?.create(
                 self.nodes[parent].inode.unwrap(),
                 name,
                 true,
             )?;
-            let node = self.insert(parent, name, Data::Directory, Mount::Ext2)?;
+            let node = self.insert(parent, name, Data::Directory, Mount::Persistent)?;
             self.nodes[node].inode = Some(inode);
             return Ok(());
         }
@@ -659,11 +750,11 @@ impl<'a> Vfs<'a> {
     /// Callers supply live cwd references; this bounded profile rejects those removals as busy.
     pub fn rmdir(&mut self, cwd: usize, path: &str, cwd_references: &[usize]) -> Result<(), i64> {
         let (parent, name) = self.parent(cwd, path)?;
-        let node = self.child(parent, name).ok_or(NOT_FOUND)?;
+        let node = self.lookup_child(parent, name, &[])?.ok_or(NOT_FOUND)?;
         if !matches!(self.nodes[node].data, Data::Directory) {
             return Err(NOT_DIRECTORY);
         }
-        if !matches!(self.nodes[node].mount, Mount::Tmpfs | Mount::Ext2) {
+        if !matches!(self.nodes[node].mount, Mount::Tmpfs | Mount::Persistent) {
             return Err(READ_ONLY);
         }
         if self.nodes[node].mount != self.nodes[parent].mount {
@@ -671,6 +762,16 @@ impl<'a> Vfs<'a> {
         }
         if cwd_references.contains(&node) {
             return Err(BUSY);
+        }
+        if self.nodes[node].mount == Mount::Persistent
+            && self
+                .disk
+                .as_mut()
+                .ok_or(IO_ERROR)?
+                .next_entry(self.nodes[node].inode.unwrap(), 0)?
+                .is_some()
+        {
+            return Err(NOT_EMPTY);
         }
         if self.nodes.iter().any(|n| n.linked && n.parent == node) {
             return Err(NOT_EMPTY);
@@ -687,7 +788,7 @@ impl<'a> Vfs<'a> {
         }) {
             return Err(BUSY);
         }
-        if self.nodes[node].mount == Mount::Ext2 {
+        if self.nodes[node].mount == Mount::Persistent {
             self.disk
                 .as_mut()
                 .ok_or(IO_ERROR)?
@@ -716,15 +817,15 @@ impl<'a> Vfs<'a> {
     }
     pub fn unlink(&mut self, cwd: usize, path: &str) -> Result<(), i64> {
         let (parent, name) = self.parent(cwd, path)?;
-        let node = self.child(parent, name).ok_or(NOT_FOUND)?;
+        let node = self.lookup_child(parent, name, &[])?.ok_or(NOT_FOUND)?;
         self.mutable_node(node)?;
-        if !matches!(self.nodes[node].mount, Mount::Tmpfs | Mount::Ext2) {
+        if !matches!(self.nodes[node].mount, Mount::Tmpfs | Mount::Persistent) {
             return Err(READ_ONLY);
         }
         if matches!(self.nodes[node].data, Data::Directory) {
             return Err(IS_DIRECTORY);
         }
-        if self.nodes[node].mount == Mount::Ext2 {
+        if self.nodes[node].mount == Mount::Persistent {
             self.disk
                 .as_mut()
                 .ok_or(IO_ERROR)?
@@ -756,13 +857,15 @@ impl<'a> Vfs<'a> {
     pub fn rename(&mut self, cwd: usize, from: &str, to: &str) -> Result<(), i64> {
         let (old_parent, old_name) = self.parent(cwd, from)?;
         let (parent, name) = self.parent(cwd, to)?;
-        let node = self.child(old_parent, old_name).ok_or(NOT_FOUND)?;
+        let node = self
+            .lookup_child(old_parent, old_name, &[])?
+            .ok_or(NOT_FOUND)?;
         self.mutable_node(node)?;
         let mount = self.nodes[node].mount;
-        if !matches!(mount, Mount::Tmpfs | Mount::Ext2) || self.nodes[parent].mount != mount {
+        if !matches!(mount, Mount::Tmpfs | Mount::Persistent) || self.nodes[parent].mount != mount {
             return Err(READ_ONLY);
         }
-        let target = self.child(parent, name);
+        let target = self.lookup_child(parent, name, &[node])?;
         if let Some(target) = target {
             self.mutable_node(target)?;
         }
@@ -777,7 +880,7 @@ impl<'a> Vfs<'a> {
         if target.is_some_and(|n| matches!(self.nodes[n].data, Data::Directory)) {
             return Err(IS_DIRECTORY);
         }
-        if mount == Mount::Ext2 {
+        if mount == Mount::Persistent {
             self.disk.as_mut().ok_or(IO_ERROR)?.rename(
                 self.nodes[old_parent].inode.unwrap(),
                 old_name,
@@ -920,7 +1023,7 @@ impl<'a> Vfs<'a> {
         self.mutable_node(node)?;
         match self.nodes[node].data {
             Data::Mutable(_) => Ok(FILE_BYTES),
-            Data::Persistent { .. } => Ok(anova_storage::ext2::MAX_FILE),
+            Data::Persistent { .. } => Ok(self.persistent_limit()),
             Data::Directory => Err(IS_DIRECTORY),
             _ => Err(READ_ONLY),
         }
@@ -992,7 +1095,7 @@ impl<'a> Vfs<'a> {
         }
         Ok(())
     }
-    pub fn executable(&self, cwd: usize, path: &str) -> Result<&'a [u8], i64> {
+    pub fn executable(&mut self, cwd: usize, path: &str) -> Result<&'a [u8], i64> {
         let node = self.resolve(cwd, path)?;
         match self.nodes[node].data {
             Data::Borrowed(bytes, true) => Ok(bytes),
@@ -1000,36 +1103,40 @@ impl<'a> Vfs<'a> {
         }
     }
     /// Image policy comes from the archive record, never an ELF-header heuristic.
-    pub fn linux_executable(&self, cwd: usize, path: &str) -> Result<bool, i64> {
-        Ok(self.linux[self.resolve(cwd, path)?])
+    pub fn linux_executable(&mut self, cwd: usize, path: &str) -> Result<bool, i64> {
+        let node = self.resolve(cwd, path)?;
+        Ok(self.linux[node])
     }
     /// Return backend-neutral inode, kind, size and executable metadata.
-    pub fn metadata(&self, cwd: usize, path: &str) -> Result<(u64, u32, usize, bool), i64> {
-        self.node_metadata(self.resolve(cwd, path)?)
+    pub fn metadata(&mut self, cwd: usize, path: &str) -> Result<(u64, u32, usize, bool), i64> {
+        let node = self.resolve(cwd, path)?;
+        self.node_metadata(node)
     }
-    pub fn writable(&self, cwd: usize, path: &str) -> Result<bool, i64> {
+    pub fn writable(&mut self, cwd: usize, path: &str) -> Result<bool, i64> {
         let n = self.resolve(cwd, path)?;
-        Ok(
-            self.policy_node != Some(n)
-                && matches!(self.nodes[n].mount, Mount::Tmpfs | Mount::Ext2),
-        )
+        Ok(self.policy_node != Some(n)
+            && (self.nodes[n].mount == Mount::Tmpfs
+                || self.nodes[n].mount == Mount::Persistent && self.persistent_writable()))
     }
     fn mutable_node(&self, node: usize) -> Result<(), i64> {
-        if self.policy_node == Some(node) {
+        if self.policy_node == Some(node)
+            || self.nodes[node].mount == Mount::Persistent && !self.persistent_writable()
+        {
             Err(READ_ONLY)
         } else {
             Ok(())
         }
     }
-    pub fn read_link(&self, cwd: usize, path: &str) -> Result<&'a str, i64> {
+    pub fn read_link(&mut self, cwd: usize, path: &str) -> Result<&'a str, i64> {
         let (parent, name) = self.parent(cwd, path)?;
-        match self.nodes[self.child(parent, name).ok_or(NOT_FOUND)?].data {
+        let node = self.lookup_child(parent, name, &[])?.ok_or(NOT_FOUND)?;
+        match self.nodes[node].data {
             Data::Link(target) => Ok(target),
             _ => Err(INVALID_ARGUMENT),
         }
     }
     pub fn metadata_nofollow(
-        &self,
+        &mut self,
         cwd: usize,
         path: &str,
     ) -> Result<(u64, u32, usize, bool), i64> {
@@ -1037,7 +1144,8 @@ impl<'a> Vfs<'a> {
             return self.metadata(cwd, path);
         }
         let (parent, name) = self.parent(cwd, path)?;
-        self.node_metadata(self.child(parent, name).ok_or(NOT_FOUND)?)
+        let node = self.lookup_child(parent, name, &[])?.ok_or(NOT_FOUND)?;
+        self.node_metadata(node)
     }
     fn node_metadata(&self, n: usize) -> Result<(u64, u32, usize, bool), i64> {
         let (kind, size, executable) = match &self.nodes[n].data {
@@ -1048,7 +1156,7 @@ impl<'a> Vfs<'a> {
             Data::Link(b) => (3, b.len(), false),
             Data::Device(_) => (4, 0, false),
         };
-        Ok((n as u64, kind, size, executable))
+        Ok((self.identity(n), kind, size, executable))
     }
     pub fn descriptor_metadata(
         &self,
@@ -1363,11 +1471,11 @@ impl<'a> Vfs<'a> {
                 if flags & OPEN_DIRECTORY != 0 {
                     return Err(NOT_DIRECTORY);
                 }
-                if !matches!(self.nodes[parent].mount, Mount::Tmpfs | Mount::Ext2) {
+                if !matches!(self.nodes[parent].mount, Mount::Tmpfs | Mount::Persistent) {
                     return Err(READ_ONLY);
                 }
-                self.ensure_node_slot()?;
-                if self.nodes[parent].mount == Mount::Ext2 {
+                self.ensure_node_slot(&[])?;
+                if self.nodes[parent].mount == Mount::Persistent {
                     let inode = self.disk.as_mut().ok_or(IO_ERROR)?.create(
                         self.nodes[parent].inode.unwrap(),
                         name,
@@ -1380,7 +1488,7 @@ impl<'a> Vfs<'a> {
                             size: 0,
                             executable: false,
                         },
-                        Mount::Ext2,
+                        Mount::Persistent,
                     )?;
                     self.nodes[node].inode = Some(inode);
                     node
@@ -1761,7 +1869,7 @@ impl<'a> Vfs<'a> {
                         open.offset
                     };
                     let end = offset.checked_add(input.len()).ok_or(NO_SPACE)?;
-                    if end <= anova_storage::ext2::MAX_FILE {
+                    if end <= self.persistent_limit() {
                         self.prepare_mapping_growth(n, end)?;
                     }
                 }
@@ -1850,8 +1958,8 @@ impl<'a> Vfs<'a> {
             .filter(|offset| {
                 *offset >= 0
                     && *offset
-                        <= length.max(if self.nodes[n].mount == Mount::Ext2 {
-                            anova_storage::ext2::MAX_FILE
+                        <= length.max(if self.nodes[n].mount == Mount::Persistent {
+                            self.persistent_limit()
                         } else {
                             FILE_BYTES
                         }) as i64
@@ -1879,12 +1987,16 @@ impl<'a> Vfs<'a> {
     }
     pub fn advance_readdir(&mut self, fds: &Descriptors, fd: u64) -> Result<(), i64> {
         if let Some(entry) = self.peek_readdir(fds, fd)? {
-            self.opens[fds.handle(fd)?].as_mut().unwrap().offset = entry.inode as usize + 1;
+            self.opens[fds.handle(fd)?].as_mut().unwrap().offset = entry.next_offset;
         }
         Ok(())
     }
     /// Inspect the next record without consuming it before an ABI buffer has been validated.
-    pub fn peek_readdir(&self, fds: &Descriptors, fd: u64) -> Result<Option<DirectoryEntry>, i64> {
+    pub fn peek_readdir(
+        &mut self,
+        fds: &Descriptors,
+        fd: u64,
+    ) -> Result<Option<DirectoryEntry>, i64> {
         let id = fds.handle(fd)?;
         let open = self.opens[id].unwrap();
         if open.flags & OPEN_READ == 0 {
@@ -1895,6 +2007,24 @@ impl<'a> Vfs<'a> {
         };
         if !matches!(self.nodes[n].data, Data::Directory) {
             return Err(NOT_DIRECTORY);
+        }
+        if self.nodes[n].mount == Mount::Persistent {
+            let Some((entry, next)) = self
+                .disk
+                .as_mut()
+                .ok_or(IO_ERROR)?
+                .next_entry(self.nodes[n].inode.unwrap(), open.offset as u64)?
+            else {
+                return Ok(None);
+            };
+            let info = self.disk.as_mut().ok_or(IO_ERROR)?.inode(entry.inode)?;
+            return Ok(Some(DirectoryEntry {
+                inode: PERSISTENT_ID_BASE + u64::from(entry.inode),
+                kind: if info.directory { 2 } else { 1 },
+                name_len: entry.length as u32,
+                name: entry.name,
+                next_offset: usize::try_from(next).map_err(|_| INVALID_FILESYSTEM)?,
+            }));
         }
         let Some((i, node)) = self
             .nodes
@@ -1916,6 +2046,7 @@ impl<'a> Vfs<'a> {
             kind,
             name_len: node.len as u32,
             name: node.name,
+            next_offset: i + 1,
         }))
     }
     pub fn live_objects(&self) -> (usize, usize) {

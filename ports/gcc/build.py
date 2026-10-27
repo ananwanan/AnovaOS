@@ -9,13 +9,15 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+from fetch import fetch
 
 root = Path(__file__).resolve().parents[2]
 work = root / 'build/toolchain'
 work.mkdir(parents=True, exist_ok=True)
-inputs = json.loads((root/'ports/gcc/inputs.json').read_text())['sources']
+lock = json.loads((root/'ports/gcc/inputs.json').read_text())
+inputs = lock['sources']
 recipe = hashlib.sha256()
-for name in ['build.py', 'build.sh', 'inputs.json']:
+for name in ['build.py', 'build.sh', 'inputs.json', 'fetch.py']:
     recipe.update((root/'ports/gcc'/name).read_bytes())
 stamp = work/'source-build.sha256'
 
@@ -40,13 +42,8 @@ if sys.argv[1:] == ['--verify']:
 
 for name, url, expected, directory in inputs:
     archive = work/name
-    if not archive.exists():
-        part = work/(name+'.part')
-        subprocess.run(['curl', '--fail', '--location', '--proto', '=https', '--tlsv1.2',
-                        '--retry', '2', '--max-time', '180', '-o', str(part), url], check=True)
-        if hashlib.sha256(part.read_bytes()).hexdigest() != expected:
-            raise RuntimeError('Input checksum mismatch: '+name)
-        part.rename(archive)
+    fetch(archive, [url, *lock.get('mirrors', {}).get(name, [])], expected,
+          os.environ.get('ANOVA_SOURCE_CACHE'))
     if not archive.is_file() or archive.is_symlink() or hashlib.sha256(archive.read_bytes()).hexdigest() != expected:
         raise RuntimeError('Input checksum mismatch: '+name)
     if not (work/directory).exists():

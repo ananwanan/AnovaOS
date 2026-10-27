@@ -1133,7 +1133,7 @@ pub fn start() {
         ));
     }
     let init = {
-        let root = Vfs::new(boot::initramfs()).expect("Invalid initramfs");
+        let mut root = Vfs::new(boot::initramfs()).expect("Invalid initramfs");
         root.executable(ROOT, "/bin/init").expect("Missing init")
     };
     checked_run(

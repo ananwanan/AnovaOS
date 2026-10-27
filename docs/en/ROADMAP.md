@@ -36,7 +36,7 @@ still requires corresponding drivers. See [STATUS](guides/STATUS.md),
 | M13 | Versioned SDK/packages | M4/M11/M12 | SDK/packages/diagnostics accepted |
 | M14 | Rust GUI/C/C++/Rust SDKs | M9/M13 and individual prerequisites | Five stages locally accepted; GPU scope bounded |
 | M15 | Optional source/kernel bootstrap | M11–M13 and measured resources | bzip2/kernel/repeats accepted; compiler assessment complete, reconstruction blocked |
-| M16 | Resources, backend-independent VFS and controlled ext4 | Existing storage/runtime; restored CI and measured budgets | Planned; no ext4 implementation or acceptance |
+| M16 | Resources, backend-independent VFS and controlled ext4 | Existing storage/runtime; restored CI and measured budgets | Partial: backend/cache and controlled ext4 readonly verified locally; writes/recovery/adoption pending |
 | M17 | Usable development desktop and GUI-only app workflow | M16 accepted workspace/resources; M9/M14 and inherited tools | Planned; full compiler bootstrap is not required |
 | M18 | Conditional compiler reconstruction and guest-only images | Measured component prerequisites after M16/M17 | Planned; each component accepted independently |
 
@@ -427,7 +427,11 @@ it is not required to develop applications inside AnovaOS.
 
 ## M16: resources, VFS and controlled ext4
 
-Owner-approved plan dated 2026-10-26; every substage below is **planned and unimplemented**.
+Owner-approved sequence dated 2026-10-26, implementation updated 2026-10-27:
+**M16 is partially implemented.** Backend/cache and controlled ext4 readonly pass local
+checks; dependency acquisition and the source toolchain build work locally. Remote CI,
+complete workload/latency acceptance, writes, JBD2 and migration remain open.
+See [executed evidence](validation/M16.md).
 The detailed contract is split into [M16 foundation](milestones/M16_FOUNDATION.md).
 Existing ext2 limits describe our implementation subset, not the format's maximum capacity.
 Use ext4 as the medium-term work-volume format; retain ext2 for existing images and recovery.

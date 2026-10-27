@@ -66,12 +66,16 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `crates/sched/src/lib.rs` | Bounded BSP scheduling policy and parent/child lifecycle without hardware or allocation. The kernel owns contexts/resources; this policy never switches stacks or takes locks. |
 | `crates/storage/Cargo.toml` | Declare the no_std checked sector/ext2 crate and its native error dependency. |
 | `crates/storage/src/ext2.rs` | Implement the declared ext2 profile, checked allocation, retained modes/timestamps, ordered writes and clean shutdown. |
+| `crates/storage/src/ext4.rs` | Read the controlled non-journal ext4 extent profile with checked geometry, allocation and bounded trees. |
+| `crates/storage/src/filesystem.rs` | Define persistent backend capabilities, stable metadata and bounded directory cursor operations. |
 | `crates/storage/src/lib.rs` | Define owned synchronous sector devices, read-only/flush/stop contracts and checked ranges. |
 | `crates/storage/tests/ext2.rs` | Verify on-disk ext2 bytes, indirection, sparse data, exhaustion, reboot and injected I/O failures. |
+| `crates/storage/tests/ext4.rs` | Compare e2fsprogs images and inject extent, geometry, allocation and readonly device failures. |
 | `crates/vfs/Cargo.toml` | Share bounded in-memory VFS, archive, open-file and pipe semantics with host tests. |
 | `crates/vfs/src/archive.rs` | Decode the project-owned ANOVAFS1 archive using checked byte ranges, never casts. Entries are parent-first absolute UTF-8 paths; payloads remain borrowed from boot RAM. |
 | `crates/vfs/src/fd.rs` | Own fallible shared descriptor tables, close-on-exec state and allocation-free empty placeholders. |
 | `crates/vfs/src/file_mapping.rs` | Retain bounded shared-file bytes and version successful writes independently of descriptor lifetime. |
+| `crates/vfs/src/foundation_tests.rs` | Stress on-demand lookup and 10,001-entry traversal, cache eviction, identities, shared offsets and maps. |
 | `crates/vfs/src/lib.rs` | Own bounded memory/ext2 namespaces, explicit ABI inheritance, coherent backing-store timestamp precision, private mapping snapshots, shared opens, pipes and PTYs. |
 | `crates/vfs/src/tests.rs` | Test VFS path/mount boundaries, descriptor ownership, private snapshots, persistent timestamp coherence, pipe shutdown and capacity rollback. |
 | `docs/en/ARCHITECTURE.md` | Describe implemented subsystem boundaries and the planned operating-system architecture. |
@@ -134,6 +138,7 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `docs/en/validation/M15.4.md` | Record local Rust/LLVM/Cargo feasibility probes, exact retained artifacts, reboot evidence and unverified source-build layers. |
 | `docs/en/validation/M15.5.md` | Record actual guest kernel compilation, exact retained-ELF boot and recovery evidence, capacity regressions and host-assistance limits. |
 | `docs/en/validation/M15.6.md` | Record actual two-round guest reconstruction, artifact comparison and recovery execution evidence. |
+| `docs/en/validation/M16.md` | Record partial M16 acquisition, measured guest build, backend/cache and controlled ext4 readonly acceptance. |
 | `docs/en/validation/M2.md` | Historical local CPU/timer/trap validation evidence and limitations. |
 | `docs/en/validation/M3.md` | Historical local memory/protection/OOM validation evidence and limitations. |
 | `docs/en/validation/M4.md` | Local native app/isolation/teardown results, environment, artifacts and limitations. |
@@ -203,6 +208,7 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `docs/zh-CN/validation/M15.4.md` | Provide the complete Simplified Chinese counterpart of `docs/en/validation/M15.4.md`, preserving technical scope, commands, evidence and original legal texts. |
 | `docs/zh-CN/validation/M15.5.md` | Provide the complete Simplified Chinese counterpart of `docs/en/validation/M15.5.md`, preserving technical scope, commands, evidence and original legal texts. |
 | `docs/zh-CN/validation/M15.6.md` | Provide the complete Simplified Chinese counterpart of `docs/en/validation/M15.6.md`, preserving technical scope, commands, evidence and original legal texts. |
+| `docs/zh-CN/validation/M16.md` | Provide the synchronized Chinese partial M16 evidence and remaining-stage boundaries. |
 | `docs/zh-CN/validation/M2.md` | Provide the complete Simplified Chinese counterpart of `docs/en/validation/M2.md`, preserving technical scope, commands, evidence and original legal texts. |
 | `docs/zh-CN/validation/M3.md` | Provide the complete Simplified Chinese counterpart of `docs/en/validation/M3.md`, preserving technical scope, commands, evidence and original legal texts. |
 | `docs/zh-CN/validation/M4.md` | Provide the complete Simplified Chinese counterpart of `docs/en/validation/M4.md`, preserving technical scope, commands, evidence and original legal texts. |
@@ -286,8 +292,10 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `ports/bootstrap/test_rust_probe.py` | Reject changed Rust sources, unsafe archive members and changed or redirected source publications. |
 | `ports/gcc/build.py` | Verify archives, cross-build GCC/binutils/make and target runtimes, and verify the complete installed-file cache. |
 | `ports/gcc/build.sh` | Enter the source-build recipe from the repository root with strict shell error handling. |
+| `ports/gcc/fetch.py` | Acquire locked sources through verified transport fallback/cache admission and atomic publication. |
 | `ports/gcc/inputs.json` | Lock compiler bootstrap and upstream source URLs/hashes; JSON carries an explicit purpose field instead of comments. |
 | `ports/gcc/package.py` | Select the bounded source-built C/C++ sysroot, preserve licenses and hash every packaged file. |
+| `ports/gcc/test_fetch.py` | Verify transport failure, checksum rejection, cache/symlink admission and partial cleanup. |
 | `ports/rust/build.py` | Verify archives, isolate strip scratch output and publish the inventoried guest Rust sysroot. |
 | `ports/rust/inputs.json` | Lock official Rust musl binary archives and the vendored itoa registry checksum. |
 | `rust-toolchain.toml` | Pins the compiler, lint/format tools and bare-metal standard-library artifacts. |
@@ -368,6 +376,7 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `user/editor/src/main.rs` | Open/edit bounded ASCII text, retain failed-save buffers and fsync successful saves. |
 | `user/fs-test/Cargo.toml` | Build the standalone native fs-test application with the shared no_std runtime. |
 | `user/fs-test/src/disk.rs` | Exercise real ext2 fd/indirect/sparse/unlink syscalls and verify persisted source/ELF data. |
+| `user/fs-test/src/foundation.rs` | Verify actual readonly ext4 directory/file syscalls, sparse zeros and mutation rejection in the guest. |
 | `user/fs-test/src/main.rs` | Exercise real VFS syscalls, inherited open offsets, exec/cwd, user buffers and blocking pipes. Child modes validate resources after fork/exec; shell-check reads files produced by its script. |
 | `user/gui-client/Cargo.toml` | Build independent native window clients and adversarial transport fixtures. |
 | `user/gui-client/src/main.rs` | Upload private red/blue surfaces, handle focused input and test crash/queue/ownership boundaries. |
@@ -420,6 +429,7 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `xtask/src/bootstrap_rust.rs` | Audit independent Rust/LLVM/Cargo source capacity and verify real guest seed, prerequisite failures and reboot evidence without claiming component reconstruction. |
 | `xtask/src/debug.rs` | Resolve captured guest fault PCs against exact ELF symbols and verify bounded real guest crash traces. |
 | `xtask/src/disk.rs` | Create safe native/Linux ext2 profiles and drive watchdog-bounded reboot/integrity/device-error scenarios. |
+| `xtask/src/foundation.rs` | Create/retain controlled ext4 images and run four QEMU readonly/reboot/rejection gates with source/artifact hashes. |
 | `xtask/src/gpu.rs` | Gate exact-device hardware rendering, full scanout comparisons, fault/reset recovery and headless CPU fallback. |
 | `xtask/src/graphics.rs` | Verify actual QMP pixels, bounded capture parsing, serial recovery and clean shutdown with and without VGA. |
 | `xtask/src/gui.rs` | Inject actual QMP input and compare native windows, failure recovery and every scanout pixel. |

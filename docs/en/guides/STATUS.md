@@ -3,6 +3,16 @@
 
 **English** | [简体中文](../../zh-CN/guides/STATUS.md)
 
+## M16 foundation progress (2026-10-27)
+
+Based on `dev` `616ff47`, the `feat/m16-foundation` delivery implements verified
+source transport fallback/cache admission, a filesystem backend boundary, on-demand
+directories, reclaimable persistent file nodes and the controlled ext4 readonly-v1
+profile. See [M16 validation](../validation/M16.md) for exact scope and checks.
+The default ext2 image, 16 MiB heap, 32 task/fd and 2,048 cache-slot bounds remain.
+Ext4 writes, JBD2 recovery, fresh-work-disk adoption and full M16 acceptance are pending;
+remote CI remains separate from the local results.
+
 Plan reviewed 2026-10-26 (Asia/Shanghai) on synchronized `dev` at `05a5fb1`,
 which includes M15.6 delivery `16c0ddf`. The acceptance records below describe their
 original executed revisions; the M15.6 gate used implementation base `55e3751`
@@ -27,12 +37,12 @@ Remote CI and publication are separate from local acceptance.
 ## Planned M16–M18 follow-up (2026-10-26)
 
 The owner selected **resources/VFS/ext4 → usable development desktop → conditional
-compiler/image self-hosting**. None of M16–M18 is implemented or accepted by this
-documentation change; existing limits and historical validation remain unchanged.
+compiler/image self-hosting**. That planning-only change had no implementation; the M16 progress above supersedes
+its unimplemented status. M17/M18 and the remaining M16 stages retain their planned scope.
 
 | Plan | Scope | Next prerequisite |
 | --- | --- | --- |
-| [M16 foundation](../milestones/M16_FOUNDATION.md) | CI/budgets, backend isolation and resources, ext4 read-only, writes, JBD2 recovery and new-work-disk adoption | Start M16.1: restore remote toolchain execution and measure the declared workload |
+| [M16 foundation](../milestones/M16_FOUNDATION.md) | CI/budgets, backend isolation and resources, ext4 read-only, writes, JBD2 recovery and new-work-disk adoption | Finish remote CI/budgets, then writable ext4 and journal recovery |
 | [M17 desktop](../milestones/M17_DESKTOP.md) | Supervised session, PTY terminal, files/editor, diagnostics and all-GUI C/C++/Rust workflow | Accepted M16 workspace/resources; use inherited guest compilers |
 | [M18 self-hosting](../ROADMAP.md#m18-conditional-self-hosting) | Separate compiler component stages, guest-only image generation and repeated recovery | Per-component tools, source closure, stage0/dependencies and measured capacity after M16/M17 |
 
