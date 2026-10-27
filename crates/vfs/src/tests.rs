@@ -111,6 +111,125 @@ fn assert_persistent_times(fs: &mut Vfs<'_>, inode: u64) {
     assert_eq!(fs.attributes(inode).1, cached[1]);
 }
 
+struct RetryRelease {
+    disk: Ext2,
+    fail: Rc<core::cell::Cell<bool>>,
+}
+impl Filesystem for RetryRelease {
+    fn capabilities(&self) -> anova_storage::filesystem::Capabilities {
+        self.disk.capabilities()
+    }
+    fn inode(&mut self, n: u32) -> Result<anova_storage::filesystem::Metadata, i64> {
+        Filesystem::inode(&mut self.disk, n)
+    }
+    fn read(&mut self, n: u32, offset: usize, bytes: &mut [u8]) -> Result<usize, i64> {
+        self.disk.read(n, offset, bytes)
+    }
+    fn next_entry(&mut self, n: u32, cursor: u64) -> Result<Option<(DiskEntry, u64)>, i64> {
+        self.disk.next_entry(n, cursor)
+    }
+    fn sync(&mut self) -> Result<(), i64> {
+        self.disk.sync()
+    }
+    fn shutdown(&mut self) -> Result<(), i64> {
+        self.disk.shutdown()
+    }
+    fn stop_device(&mut self) -> Result<(), i64> {
+        self.disk.stop_device()
+    }
+    fn create(&mut self, n: u32, name: &str, directory: bool) -> Result<u32, i64> {
+        self.disk.create(n, name, directory)
+    }
+    fn unlink(&mut self, n: u32, name: &str) -> Result<u32, i64> {
+        self.disk.unlink(n, name)
+    }
+    fn write(&mut self, n: u32, offset: usize, bytes: &[u8]) -> Result<usize, i64> {
+        self.disk.write(n, offset, bytes)
+    }
+    fn release_unlinked(&mut self, n: u32) -> Result<(), i64> {
+        if self.fail.replace(false) {
+            return Err(NO_MEMORY);
+        }
+        self.disk.release_unlinked(n)
+    }
+    fn rename(&mut self, p: u32, name: &str, d: u32, new: &str) -> Result<(), i64> {
+        self.disk.rename(p, name, d, new)
+    }
+}
+#[test]
+fn final_close_and_unmap_oom_keep_orphan_identity_until_reclamation_retries() {
+    let archive = image();
+    let mut fs = Vfs::new(&archive).unwrap();
+    fs.insert(ROOT, "persist", Data::Directory, Mount::Initramfs)
+        .unwrap();
+    let fail = Rc::new(core::cell::Cell::new(false));
+    fs.mount_disk(RetryRelease {
+        disk: Ext2::mount(Box::new(timestamp_disk())).unwrap(),
+        fail: fail.clone(),
+    })
+    .unwrap();
+    let mut fds = Descriptors::default();
+    for mapped in [false, true] {
+        let fd = fs
+            .open(
+                &mut fds,
+                ROOT,
+                "/persist/orphan",
+                OPEN_CREATE | OPEN_READ | OPEN_WRITE,
+            )
+            .unwrap();
+        fs.write(&fds, fd, b"retained").unwrap();
+        let node = fs.resolve(ROOT, "/persist/orphan").unwrap();
+        let number = fs.nodes[node].inode;
+        let mapping = if mapped {
+            Some(fs.shared_file_mapping(&fds, fd, 0, 4096).unwrap())
+        } else {
+            None
+        };
+        fs.unlink(ROOT, "/persist/orphan").unwrap();
+        fail.set(true);
+        if mapped {
+            fs.close(&mut fds, fd).unwrap();
+            let mut bytes = [0; 8];
+            mapping.as_ref().unwrap().copy_into(0, &mut bytes);
+            assert_eq!(&bytes, b"retained");
+            drop(mapping);
+            assert_eq!(fs.collect_mappings(), Err(NO_MEMORY));
+        } else {
+            assert_eq!(fs.close(&mut fds, fd), Err(NO_MEMORY));
+        }
+        assert_eq!(fs.nodes[node].inode, number);
+        assert!(!fs.reusable(node));
+        fs.sync().unwrap();
+        assert_eq!(fs.nodes[node].inode, None);
+        assert!(fs.reusable(node));
+    }
+    let source = fs
+        .open(&mut fds, ROOT, "/persist/source", OPEN_CREATE | OPEN_WRITE)
+        .unwrap();
+    fs.write(&fds, source, b"source").unwrap();
+    fs.close(&mut fds, source).unwrap();
+    let target = fs
+        .open(&mut fds, ROOT, "/persist/target", OPEN_CREATE | OPEN_WRITE)
+        .unwrap();
+    fs.close(&mut fds, target).unwrap();
+    fail.set(true);
+    fs.rename(ROOT, "/persist/source", "/persist/target")
+        .unwrap();
+    assert_eq!(fs.resolve(ROOT, "/persist/source"), Err(NOT_FOUND));
+    let fd = fs
+        .open(&mut fds, ROOT, "/persist/target", OPEN_READ)
+        .unwrap();
+    let mut bytes = [0; 6];
+    fs.read(&fds, fd, &mut bytes).unwrap();
+    assert_eq!(&bytes, b"source");
+    fs.close(&mut fds, fd).unwrap();
+    fail.set(true);
+    fs.unlink(ROOT, "/persist/target").unwrap();
+    fs.sync().unwrap();
+    fs.shutdown().unwrap();
+}
+
 #[test]
 fn uncached_ext2_children_prevent_rmdir_and_preserve_rename_open_unlink_lifetimes() {
     let archive = image();

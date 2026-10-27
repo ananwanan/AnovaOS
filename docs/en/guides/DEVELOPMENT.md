@@ -599,3 +599,20 @@ supplies archives by their locked local names (including `bootstrap.tgz`); cache
 or symlinks fail instead of bypassing verification. CI caches only checked source archives,
 not generated compiler outputs. Existing ext2 images remain writable/default. Ext4 writes,
 JBD2 recovery and migration/build responsiveness have no acceptance in this readonly gate.
+
+
+## M16.4 opt-in writable ext4
+
+```sh
+cargo xtask ext4-image --linux build/disks/work.ext4
+cargo xtask run --ext4-write --toolchain --disk build/disks/work.ext4
+cargo xtask foundation-write-test
+```
+
+The new 8 MiB image uses the pinned non-journal extent profile. Omit `--linux` and
+`--toolchain` for native applications. A writable run requires an explicit disk;
+ordinary runs still mount ext4 readonly and retain the default ext2 recovery path.
+The separate six-boot write gate verifies file/directory semantics, real guest
+GCC/make, native OOM, ENOSPC, reboot, host e2fsck/hashes and actual virtio read/write/
+flush failures. Its complete contract and retained evidence are in
+[M16.4](../validation/M16.4.md). No journal replay or default migration is accepted.

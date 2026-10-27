@@ -466,6 +466,7 @@ pub(super) fn session_network(
             "[SHELL:FAIL]",
             "[FS:FAIL]",
             "[EDIT:FAIL]",
+            "[M16:WRITE:FAIL]",
             "edit: command/save failed; buffer retained",
             "[POWER:FAIL]",
         ]

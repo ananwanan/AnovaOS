@@ -64,7 +64,7 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `crates/sched/src/lib.rs` | 提供无需硬件或分配的有界 BSP 调度策略及父子生命周期；上下文/资源由内核拥有，本策略不切栈或加锁。 |
 | `crates/storage/Cargo.toml` | 声明 no_std checked sector/ext2 crate 及其原生错误依赖。 |
 | `crates/storage/src/ext2.rs` | 实现声明范围内的 ext2、checked allocation、模式/时间戳保留、有序写入和正常关机。 |
-| `crates/storage/src/ext4.rs` | 读取受控无日志 ext4 extent 配置，检查几何、分配和有界树。 |
+| `crates/storage/src/ext4.rs` | 读取受控 ext4 extent，并显式接入审计后的无日志可写及有界分配归属。 |
 | `crates/storage/src/filesystem.rs` | 定义持久后端能力、稳定元数据及有界目录游标操作。 |
 | `crates/storage/src/lib.rs` | 定义自有同步扇区设备、只读/flush/stop 契约及 checked ranges。 |
 | `crates/storage/tests/ext2.rs` | 验证盘上 ext2 字节、间接块、稀疏数据、耗尽、重启及 I/O 故障注入。 |
@@ -447,3 +447,12 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `xtask/src/terminal.rs` | 驱动普通 UART 编辑/EOF、动态 musl 启动、真实 Ctrl+C 中断及易失数据重启检查。 |
 | `xtask/src/toolchain.rs` | 构建并打包可选开发 ISO，验证 guest 编辑、编译、make、失败场景与重启哈希。 |
 | `xtask/src/transcript.rs` | 捕获有序 guest stdout，保留 UART 证据，独立于文件系统快照或不完整 UTF-8 匹配原始字节。 |
+
+| `crates/storage/src/ext4/audit.rs` | 审计可写位图/计数、全局块归属和根目录/链接关系。 |
+| `crates/storage/src/ext4/directory.rs` | 暂存 ext4 目录增长、重命名替换/移动、父目录链接和孤儿命名空间修改。 |
+| `crates/storage/src/ext4/write.rs` | 暂存有界 ext4 分配/数据/extent 修改，发布错误停止服务，正常关机 flush 清洁标记。 |
+| `crates/storage/tests/ext4_write.rs` | 验证真实 ext4 可写镜像、逐预检分配失败、ENOSPC、元数据和 I/O 边界。 |
+| `user/linux/ext4_write.c` | 通过真实 musl 验证 ext4 写入、目录/cwd 移动、孤儿/映射/fork 生命周期、元数据和满盘复用。 |
+| `xtask/src/foundation_write.rs` | 创建显式启用的 ext4 工作盘，保留六次 QEMU 写入/构建/重启/virtio 故障及宿主检查。 |
+| `docs/en/validation/M16.4.md` | 说明受控 ext4 write-v1 契约、故障与独立检查的本地证据（英文）。 |
+| `docs/zh-CN/validation/M16.4.md` | 提供受控 ext4 write-v1 契约与本地验收边界的中文对照。 |

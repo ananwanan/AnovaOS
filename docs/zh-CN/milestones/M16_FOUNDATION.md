@@ -5,7 +5,7 @@
 
 本计划于 2026-10-26（Asia/Shanghai）基于 `dev` 的 `05a5fb1` 制定。
 **2026-10-27 基于 `616ff47` 更新：后端/缓存解耦和受控 ext4 只读配置已实现并通过本地验证。**
-依赖获取已修复；远端 CI、完整负载/延迟验收、ext4 可写、JBD2 恢复和迁移仍待完成。
+依赖获取已修复；远端 CI、完整负载/延迟验收、JBD2 恢复和迁移仍待完成。
 详见 [M16 证据](../validation/M16.md)。下文保留各阶段完整退出条件。已实现边界见[路线图](../ROADMAP.md)、
 [当前状态](../guides/STATUS.md)和[架构](../ARCHITECTURE.md)。
 
@@ -43,7 +43,7 @@ M15.5 已将当前持久文件上限提高到 4 MiB。
 | M16.1 | 恢复 CI 基线，确定实测工作负载和资源预算 | 获取已修复；本地源码构建；远端 CI/预算待验收 |
 | M16.2 | 文件系统后端边界与有界、可扩展的资源管理 | 后端/缓存已本地验证；限额不变 |
 | M16.3 | 受控 ext4 只读挂载与数据访问 | 只读 v1 已本地验证；见证据 |
-| M16.4 | 受控 ext4 写入和明确的 POSIX 语义 | 计划中；未实现 |
+| M16.4 | 受控 ext4 写入和明确的 POSIX 语义 | 已实现显式启用的 write-v1；[配置与证据](../validation/M16.4.md) |
 | M16.5 | JBD2 恢复和持久性验证 | 计划中；未实现 |
 | M16.6 | 新盘迁移、真实构建和可响应的前台操作 | 计划中；未实现 |
 
@@ -94,6 +94,9 @@ scheduler boundary 采样不等于准确峰值 RSS；正常关机后盘占用不
 
 ## M16.4：受控写入与 POSIX 语义
 
+显式 `ext4-write` 内核已实现有界无日志写入，准入、容量、语义、命令和实测见 [M16.4](../validation/M16.4.md)。
+M16.1 预算/远端 CI 和 M16.5/M16.6 仍独立验收。
+
 - 为声明配置加入有界分配/释放、create/read/write/resize、目录、rename、
   unlink/open 生命周期、executable modes 和 timestamps。按实际负载声明替换、
   补零/稀疏、links 和不支持操作，不伪造成功来通过构建探测。
@@ -143,7 +146,7 @@ scheduler boundary 采样不等于准确峰值 RSS；正常关机后盘占用不
 保留 [DEVELOPMENT](../guides/DEVELOPMENT.md) 既有 gates，包括 runtime/storage/
 persistence、C/C++/Rust/Cargo/network、SDK 和 M14 GUI/GPU。保留五项 M15
 `bootstrap-*-test`/`bootstrap-test` gates、源码拒绝测试及 `bootstrap-metrics`
-feature check。只有可运行实现交付时才引入 M16 命令；`cargo xtask foundation-test` 已实现只读 v1 验收，不代表 M16.4–M16.6 完成。
+feature check。只有可运行实现交付时才引入 M16 命令；`cargo xtask foundation-test` 已实现只读 v1 验收，不代表 M16.4–M16.6 完成；独立的 `foundation-write-test` 仅验证 M16.4 write-v1。
 记录准确输入、feature profiles、commits/worktree hashes、QEMU 配置、日志、产物和
 独立磁盘检查；同步维护翻译和状态。
 

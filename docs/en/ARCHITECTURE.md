@@ -7,7 +7,7 @@ This describes implemented boundaries through the accepted M15.6 reconstruction 
 separately scoped future architecture. Guest toolchains, native SDKs and bounded Rust GUI/GPU
 profiles are implemented; full compiler reconstruction, guest-only image generation, SMP and
 physical hardware remain separate. M16 now implements the backend/cache boundary and a
-controlled readonly ext4 profile; writes/recovery/adoption and M17 desktop remain future work. Current evidence is in [STATUS](guides/STATUS.md).
+controlled readonly ext4 profile plus explicit non-journal write-v1; journal recovery/adoption and M17 desktop remain future work. Current evidence is in [STATUS](guides/STATUS.md).
 
 ## 1. Overall structure
 
@@ -632,7 +632,7 @@ separate. See [M15 repeat](milestones/M15_REPEAT.md) and
 ## M16 storage/resources and planned M17 desktop
 
 The backend/cache boundary and controlled ext4 readonly-v1 below are implemented.
-Writes, recovery, resource expansion and the desktop retain their independently scoped exits.
+Opt-in write-v1 is implemented; recovery, resource expansion and the desktop retain their independently scoped exits.
 See [M16 evidence](validation/M16.md).
 [M16 foundation](milestones/M16_FOUNDATION.md) precedes
 [M17 desktop](milestones/M17_DESKTOP.md); see [ROADMAP](ROADMAP.md) for stages.
@@ -654,7 +654,14 @@ See [M16 evidence](validation/M16.md).
   dirty/recovery-required images, checksummed/64bit/flex/indexed layouts and unsupported
   inode types fail closed. Sparse/unwritten regions read as zeros. No sector write or
   flush is issued by this readonly backend. Ext2 remains the default writable recovery
-  profile; ext4 writes, JBD2 fault recovery and verified copy migration are still pending.
+  profile; JBD2 fault recovery and verified copy migration are still pending.
+- Explicit `ext4-write` kernels admit [write-v1](validation/M16.4.md) only after auditing
+  global block ownership, namespace links and allocation counters. Bounded unpublished overlays
+  protect old bytes/names on preflight ENOSPC/OOM/read failures; data/flush/metadata publication
+  errors poison the mount and retain dirty state. Allocation/free, extent reconstruction,
+  directory moves/replacement, orphan close/unmap retries, modes and second-resolution times
+  share the existing backend boundary. Shared readonly mappings and cwd identity stay pinned.
+  The profile has no journal or crash recovery; ordinary kernels still mount ext4 readonly.
 - Keep desktop/session/compositor policy in Rust user processes. A PTY terminal connects
   the native GUI to explicitly admitted Linux-musl shell/compiler processes. Extend
   transport/SDK bounds only with version/ownership tests; retain the C/C++/Rust contract.

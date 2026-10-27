@@ -1,7 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Verify a readonly ext4 work disk through real native syscalls, streaming reads and directory records.
-//! The host supplies independently checked bytes; no fixtures or disk writes are fabricated here.
+//! Verify readonly ext4 bytes and recoverable data-read failures through real native syscalls.
+//! The host supplies independently checked fixtures and a sector-specific virtio error rule.
 use anova_rt::{self as rt, abi::*};
+
+pub fn read_error() {
+    let fd = rt::open("/persist/read-fault", OPEN_READ).unwrap();
+    assert_eq!(rt::read(fd, &mut [0; 64]), Err(IO_ERROR));
+    assert_eq!(rt::seek(fd, 0, 1), Ok(0));
+    rt::close(fd).unwrap();
+    let fd = rt::open("/persist/after-read-fault", OPEN_WRITE | OPEN_CREATE).unwrap();
+    rt::write_all(fd, b"recovered").unwrap();
+    rt::close(fd).unwrap();
+    rt::sync().unwrap();
+    rt::write(b"[M16:READERROR] error=reported offset=retained unrelated_write=ok\n");
+}
 
 pub fn readonly() {
     let dir = rt::open("/persist/many", OPEN_READ | OPEN_DIRECTORY).unwrap();

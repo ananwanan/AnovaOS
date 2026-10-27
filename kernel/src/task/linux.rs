@@ -499,7 +499,7 @@ impl Kernel {
         }
         let pid = self.policy.entry(i).pid;
         let parent = self.policy.entry(i).parent;
-        let cwd_references: [usize; CAPACITY] = if matches!(f.rax, 84 | 263) {
+        let cwd_references: [usize; CAPACITY] = if matches!(f.rax, 82 | 84 | 263 | 264) {
             core::array::from_fn(|k| self.processes[k].as_ref().map_or(usize::MAX, |p| p.cwd))
         } else {
             [usize::MAX; CAPACITY]
@@ -600,10 +600,11 @@ impl Kernel {
                         let n = string(space, from, &mut a)?;
                         let m = string(space, to, &mut b)?;
                         self.fs
-                            .rename(
+                            .rename_with_cwds(
                                 p.cwd,
                                 core::str::from_utf8(&a[..n]).unwrap(),
                                 core::str::from_utf8(&b[..m]).unwrap(),
+                                &cwd_references,
                             )
                             .map_err(errno)?;
                         0

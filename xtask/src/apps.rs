@@ -188,6 +188,7 @@ pub fn build(root: &Path, clippy: bool) -> Result<()> {
     for (name, source, musl) in [
         ("linux-probe", "probe.c", false),
         ("linux-musl", "musl.c", true),
+        ("ext4-write-test", "ext4_write.c", true),
     ] {
         let path = apps.join(format!("{name}.elf"));
         let mut cc = Command::new(if musl { "musl-gcc" } else { "gcc" });
@@ -279,6 +280,7 @@ fn initramfs(apps: &Path) -> Result<()> {
         "tls-test",
         "network-test",
         "linux-probe",
+        "ext4-write-test",
         "linux-musl",
         "linux-threads",
         "linux-dynamic",

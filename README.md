@@ -31,15 +31,15 @@ claim of a complete desktop OS or complete self-hosting.
 | M15.3–M15.4 | Independent GCC and Rust/LLVM/Cargo source audits and real guest prerequisite probes; compiler reconstruction remains blocked |
 | M15.5 | Actual guest kernel compilation with inherited tools/target libraries, exact retained-ELF host-assisted packaging and verified boot identity/recovery |
 | M15.6 | Two independent clean builds each of bzip2 and kernel, identical final artifacts, archived evidence and all 12 boot/rejection/recovery sessions |
-| M16 (partial) | Verified source fallback/cache, filesystem backends, on-demand directories, reclaimable file nodes and controlled ext4 readonly; writable/journal/migration stages remain open |
+| M16 (partial) | Verified source fallback/cache, filesystem backends, on-demand directories, reclaimable file nodes and controlled ext4 readonly and opt-in non-journal writes; journal/migration stages remain open |
 
 Evidence is recorded per stage in the [validation index](docs/en/index.md#validation).
-This documentation update does not rerun those guest gates. Configured CI,
-actual remote CI execution and local acceptance are separate facts.
+Each record identifies its executed checks. Configured CI, actual remote CI execution
+and local acceptance are separate facts.
 
 The current system uses one BSP, 32 process/thread slots, a non-preemptible
 kernel, a fixed 16 MiB heap and masked peripheral IRQs with polled device I/O.
-Writable ext2 files are bounded at 4 MiB; controlled readonly ext4 files allow 256 MiB; tmpfs and readonly shared-file caches
+Writable ext2 files are bounded at 4 MiB; controlled ext4 files allow 256 MiB; tmpfs and readonly shared-file caches
 remain at 1 MiB. Ext2 has no journal or power-loss recovery. General Linux/glibc,
 SMP, USB/physical hardware support, native Rust `std`, reconstructed compilers
 and guest-only boot-image generation remain unverified. See
@@ -49,12 +49,12 @@ and guest-only boot-image generation remain unverified. See
 
 The owner-approved order is **M16 resources/VFS/ext4 → M17 development desktop →
 M18 conditional compiler and image self-hosting**. M16 now has a locally verified backend/cache and
-controlled ext4 readonly slice; writes, journal recovery and adoption remain pending. M17/M18 remain planned.
+controlled ext4 readonly slice and opt-in writes; journal recovery and adoption remain pending. M17/M18 remain planned.
 
 1. [M16 foundation](docs/en/milestones/M16_FOUNDATION.md): finish remote CI/resource-budget
-   acceptance, then implement ext4 writes, JBD2 recovery and fresh-image migration. Backend
+   acceptance, then complete JBD2 recovery and fresh-image migration. Backend
    isolation, on-demand directories, reclaimable file nodes and controlled ext4 readonly
-   access are implemented; see [local evidence](docs/en/validation/M16.md).
+   access are implemented; see [local evidence](docs/en/validation/M16.md) and [M16.4 writes](docs/en/validation/M16.4.md).
 2. [M17 desktop](docs/en/milestones/M17_DESKTOP.md): deliver a real PTY terminal,
    reliable editing, file browsing and diagnostics, then complete C/C++/Rust
    edit/build/run/error-repair/reboot entirely through the desktop using existing tools.
@@ -111,6 +111,7 @@ personality are explicit and independent.
 | Display/input/compositor | `cargo xtask graphics-test`, `input-test`, `gui-test`; interactive `run --graphics` or `run --gui` |
 | GUI runtime | `cargo xtask gui-sdk`, `gui-sdk-image`, `gui-sdk-test`, `gui-sdk-replay`; `run --gui-sdk` with a native disk |
 | GPU | `cargo xtask gpu-test` requires a verified hardware GL renderer; `gpu-fallback-test` is headless |
+| Writable ext4 (opt-in) | `cargo xtask foundation-write-test`; `ext4-image [--linux] build/disks/work.ext4`, then `run --ext4-write [--toolchain] --disk build/disks/work.ext4`; [profile and evidence](docs/en/validation/M16.4.md) |
 | Filesystem foundation | `cargo xtask foundation-test`: controlled ext4 readonly, 10,001-entry directory, 20 MiB file, 200 MiB sparse file, disk execution, reboot and rejection |
 | Source reconstruction | `cargo xtask bootstrap-prepare`, `bootstrap-test`, `bootstrap-gcc-test`, `bootstrap-rust-test`, `bootstrap-kernel-test`, `bootstrap-repeat-test` |
 

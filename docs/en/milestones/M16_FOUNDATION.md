@@ -6,7 +6,7 @@
 Planned 2026-10-26 (Asia/Shanghai) against `dev` baseline `05a5fb1`.
 **Updated 2026-10-27 against `616ff47`: backend/cache isolation and a controlled ext4
 readonly profile are implemented and locally verified.** Dependency acquisition is repaired;
-remote CI, complete workload/latency acceptance, ext4 writes, JBD2 recovery and migration
+remote CI, complete workload/latency acceptance, JBD2 recovery and migration
 remain open. See [M16 evidence](../validation/M16.md). The stage contracts below retain their full exits.
 See the [roadmap](../ROADMAP.md), [current status](../guides/STATUS.md) and
 [architecture](../ARCHITECTURE.md) for implemented boundaries.
@@ -51,7 +51,7 @@ new requirements. Every stage needs its own evidence and failure boundaries.
 | M16.1 | Recovered CI baseline and measured workload/resource budget | Acquisition repaired; local source build; remote CI/budgets pending |
 | M16.2 | Filesystem backend boundary and bounded, scalable resource management | Backend/cache locally verified; quotas unchanged |
 | M16.3 | Controlled ext4 readonly mount and data access | Readonly-v1 locally verified; see evidence |
-| M16.4 | Controlled ext4 writes and declared POSIX semantics | Planned; unimplemented |
+| M16.4 | Controlled ext4 writes and declared POSIX semantics | Implemented opt-in write-v1; [profile/evidence](../validation/M16.4.md) |
 | M16.5 | JBD2 recovery and verified durability | Planned; unimplemented |
 | M16.6 | Fresh-disk migration, real builds and responsive foreground use | Planned; unimplemented |
 
@@ -110,6 +110,10 @@ malformed/unsupported/recovery-required images fail without disk mutation.
 Readonly acceptance does not establish write, journal or crash recovery support.
 
 ## M16.4: controlled writes and POSIX semantics
+
+The explicit `ext4-write` kernel profile implements this bounded non-journal stage.
+See [M16.4](../validation/M16.4.md) for admission, capacities, semantics, commands and actual tests.
+M16.1 budgets/remote CI and M16.5/M16.6 retain their separate exits.
 
 - Add bounded allocation/free, create/read/write/resize, directories, rename,
   unlink/open lifetime, executable modes and timestamps for the declared profile.
@@ -173,7 +177,7 @@ runtime/storage/persistence, C/C++/Rust/Cargo/network, SDK and M14 GUI/GPU check
 Retain all five M15 `bootstrap-*-test`/`bootstrap-test` gates, source rejection
 suites and the `bootstrap-metrics` feature check. Introduce an M16 command only
 with its working implementation. `cargo xtask foundation-test` now runs the actual
-readonly-v1 acceptance; it does not accept M16.4–M16.6.
+readonly-v1 acceptance; it does not accept M16.4–M16.6. The separate `foundation-write-test` verifies only M16.4 write-v1.
 Record exact inputs, feature profiles, commits/worktree hashes, QEMU configuration,
 logs, artifacts and independent disk checks; keep translations and status current.
 

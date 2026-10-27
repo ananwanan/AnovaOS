@@ -409,3 +409,18 @@ cargo xtask bootstrap-kernel-test
 `bootstrap.tgz`）；坏缓存或符号链接直接失败，不绕过检查。CI 仅缓存受检源码归档，
 不缓存生成的编译器产物。旧 ext2 镜像仍为默认可写路线；本只读门禁未验收 ext4 写入、
 JBD2 恢复或迁移/构建期间的前台响应。
+
+
+## M16.4 显式启用 ext4 可写
+
+```sh
+cargo xtask ext4-image --linux build/disks/work.ext4
+cargo xtask run --ext4-write --toolchain --disk build/disks/work.ext4
+cargo xtask foundation-write-test
+```
+
+新建的 8 MiB 镜像使用锁定的无日志 extent 配置；原生程序省略 `--linux` 与 `--toolchain`。
+可写启动必须明确指定磁盘；普通启动仍将 ext4 挂为只读，默认 ext2 恢复路线保留。
+独立六次启动的写入门禁验证文件/目录语义、真实 guest GCC/make、原生 OOM、ENOSPC、
+重启、宿主 e2fsck/哈希及真实 virtio 读/写/flush 错误；完整契约和保留证据见
+[M16.4](../validation/M16.4.md)。日志重放和默认迁移尚未验收。

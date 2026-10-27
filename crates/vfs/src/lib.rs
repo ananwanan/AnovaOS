@@ -271,7 +271,7 @@ impl<'a> Vfs<'a> {
                 .any(|o| matches!(o.target, Target::Node(n) if n == index))
     }
     fn reusable(&self, index: usize) -> bool {
-        !self.nodes[index].linked && !self.held(index)
+        !self.nodes[index].linked && self.nodes[index].inode.is_none() && !self.held(index)
     }
     /// Directory identities may be held as cwd outside the VFS and are never evicted.
     fn ensure_node_slot(&mut self, protected: &[usize]) -> Result<(), i64> {
@@ -361,6 +361,22 @@ impl<'a> Vfs<'a> {
         }
         let number = u32::try_from(identity - PERSISTENT_ID_BASE).ok()?;
         self.nodes.iter().position(|n| n.inode == Some(number))
+    }
+    fn touch_node(&mut self, node: usize, contents: bool) {
+        if self.nodes[node].mount == Mount::Persistent
+            && self
+                .disk
+                .as_ref()
+                .is_some_and(|d| d.capabilities().format == anova_storage::filesystem::Format::Ext2)
+        {
+            // Preserve the independently accepted ext2 metadata/cache subset.
+            return;
+        }
+        let timestamp = self.nodes[node].mount.timestamp(self.clock);
+        self.nodes[node].changed = timestamp;
+        if contents {
+            self.nodes[node].modified = timestamp;
+        }
     }
     fn persistent_limit(&self) -> usize {
         self.disk.as_ref().map_or(0, |d| d.capabilities().max_file)
@@ -469,6 +485,7 @@ impl<'a> Vfs<'a> {
             *executable = true;
         }
         self.nodes[node].permissions |= 0o111;
+        self.touch_node(node, false);
         Ok(())
     }
     fn chmod_node(&mut self, node: usize, permissions: u16) -> Result<(), i64> {
@@ -477,6 +494,7 @@ impl<'a> Vfs<'a> {
             return Err(UNSUPPORTED);
         }
         let inode = self.nodes[node].inode;
+        let mount = self.nodes[node].mount;
         match self.nodes[node].data {
             Data::Persistent {
                 ref mut executable, ..
@@ -487,10 +505,18 @@ impl<'a> Vfs<'a> {
                     .set_permissions(inode.unwrap(), permissions)?;
                 *executable = permissions & 0o111 != 0;
             }
+            Data::Directory if inode.is_some() => {
+                self.disk
+                    .as_mut()
+                    .ok_or(IO_ERROR)?
+                    .set_permissions(inode.unwrap(), permissions)?;
+            }
             Data::Mutable(_) => {}
+            Data::Directory if mount == Mount::Tmpfs => {}
             _ => return Err(READ_ONLY),
         }
         self.nodes[node].permissions = permissions;
+        self.touch_node(node, false);
         Ok(())
     }
     pub fn chmod(&mut self, cwd: usize, path: &str, permissions: u16) -> Result<(), i64> {
@@ -588,6 +614,7 @@ impl<'a> Vfs<'a> {
         // Unlinked nodes remain alive until their final open description is closed.
         let reusable = self.nodes.iter().enumerate().position(|(i, n)| {
             !n.linked
+                && n.inode.is_none()
                 && !n.mapping.as_ref().is_some_and(MappedFile::active)
                 && !self
                     .opens
@@ -729,6 +756,7 @@ impl<'a> Vfs<'a> {
             )?;
             let node = self.insert(parent, name, Data::Directory, Mount::Persistent)?;
             self.nodes[node].inode = Some(inode);
+            self.touch_node(parent, true);
             return Ok(());
         }
         if self.nodes[parent].mount != Mount::Tmpfs {
@@ -795,6 +823,8 @@ impl<'a> Vfs<'a> {
                 .rmdir(self.nodes[parent].inode.unwrap(), name)?;
         }
         self.nodes[node].linked = false;
+        self.touch_node(parent, true);
+        self.touch_node(node, false);
         if !self
             .opens
             .iter()
@@ -805,13 +835,7 @@ impl<'a> Vfs<'a> {
                 .as_ref()
                 .is_some_and(MappedFile::active)
         {
-            if let Some(number) = self.nodes[node].inode.take() {
-                self.disk
-                    .as_mut()
-                    .ok_or(IO_ERROR)?
-                    .release_unlinked(number)?;
-            }
-            self.nodes[node].data = Data::Mutable(Vec::new());
+            self.reap_after_unlink(node)?;
         }
         Ok(())
     }
@@ -832,6 +856,8 @@ impl<'a> Vfs<'a> {
                 .unlink(self.nodes[parent].inode.unwrap(), name)?;
         }
         self.nodes[node].linked = false;
+        self.touch_node(parent, true);
+        self.touch_node(node, false);
         if !self
             .opens
             .iter()
@@ -842,19 +868,22 @@ impl<'a> Vfs<'a> {
                 .as_ref()
                 .is_some_and(MappedFile::active)
         {
-            if let Some(number) = self.nodes[node].inode.take() {
-                self.disk
-                    .as_mut()
-                    .ok_or(IO_ERROR)?
-                    .release_unlinked(number)?;
-            }
-            self.nodes[node].data = Data::Mutable(Vec::new());
+            self.reap_after_unlink(node)?;
         }
         Ok(())
     }
-    /// Rename regular files with open-inode retention, or directories within one parent to a new name.
-    /// The directory subset preserves dot-dot and parent links without permitting cycles/replacement.
+    /// Rename with the backend's directory-move contract; callers with live cwd references supply them below.
     pub fn rename(&mut self, cwd: usize, from: &str, to: &str) -> Result<(), i64> {
+        self.rename_with_cwds(cwd, from, to, &[])
+    }
+    /// Audited ext4 supports directory moves/replacement; ext2 and tmpfs retain their original subset.
+    pub fn rename_with_cwds(
+        &mut self,
+        cwd: usize,
+        from: &str,
+        to: &str,
+        cwd_references: &[usize],
+    ) -> Result<(), i64> {
         let (old_parent, old_name) = self.parent(cwd, from)?;
         let (parent, name) = self.parent(cwd, to)?;
         let node = self
@@ -872,13 +901,59 @@ impl<'a> Vfs<'a> {
         if target == Some(node) {
             return Ok(());
         }
-        if matches!(self.nodes[node].data, Data::Directory)
-            && (parent != old_parent || target.is_some())
-        {
+        let directory = matches!(self.nodes[node].data, Data::Directory);
+        let directory_moves =
+            mount == Mount::Persistent && self.disk.as_ref().is_some_and(|d| d.directory_moves());
+        if directory && (parent != old_parent || target.is_some()) && !directory_moves {
             return Err(UNSUPPORTED);
         }
-        if target.is_some_and(|n| matches!(self.nodes[n].data, Data::Directory)) {
-            return Err(IS_DIRECTORY);
+        if directory_moves && directory {
+            let mut ancestor = parent;
+            loop {
+                if ancestor == node {
+                    return Err(INVALID_ARGUMENT);
+                }
+                if ancestor == ROOT {
+                    break;
+                }
+                ancestor = self.nodes[ancestor].parent;
+            }
+        }
+        if let Some(target) = target {
+            let target_directory = matches!(self.nodes[target].data, Data::Directory);
+            if target_directory != directory {
+                return Err(if target_directory {
+                    IS_DIRECTORY
+                } else {
+                    NOT_DIRECTORY
+                });
+            }
+            if target_directory {
+                if cwd_references.contains(&target) {
+                    return Err(BUSY);
+                }
+                if self.nodes.iter().any(|n| n.linked && n.parent == target)
+                    || self
+                        .disk
+                        .as_mut()
+                        .ok_or(IO_ERROR)?
+                        .next_entry(self.nodes[target].inode.unwrap(), 0)?
+                        .is_some()
+                {
+                    return Err(NOT_EMPTY);
+                }
+                if self.nodes.iter().enumerate().any(|(child, n)| {
+                    n.parent == target
+                        && matches!(n.data, Data::Directory)
+                        && self
+                            .opens
+                            .iter()
+                            .flatten()
+                            .any(|o| matches!(o.target, Target::Node(k) if k == child))
+                }) {
+                    return Err(BUSY);
+                }
+            }
         }
         if mount == Mount::Persistent {
             self.disk.as_mut().ok_or(IO_ERROR)?.rename(
@@ -900,13 +975,7 @@ impl<'a> Vfs<'a> {
                     .as_ref()
                     .is_some_and(MappedFile::active)
             {
-                if let Some(inode) = self.nodes[target].inode.take() {
-                    self.disk
-                        .as_mut()
-                        .ok_or(IO_ERROR)?
-                        .release_unlinked(inode)?;
-                }
-                self.nodes[target].data = Data::Mutable(Vec::new());
+                self.mapping_cache = true;
             }
         }
         let n = &mut self.nodes[node];
@@ -914,6 +983,14 @@ impl<'a> Vfs<'a> {
         n.name.fill(0);
         n.name[..name.len()].copy_from_slice(name.as_bytes());
         n.len = name.len();
+        self.touch_node(node, false);
+        self.touch_node(old_parent, true);
+        self.touch_node(parent, true);
+        if let Err(error) = self.collect_mappings()
+            && error != NO_MEMORY
+        {
+            return Err(error);
+        }
         Ok(())
     }
     /// Advisory locks belong to open descriptions, survive dup/fork and disappear on final close.
@@ -1258,35 +1335,43 @@ impl<'a> Vfs<'a> {
         self.mapping_cache = true;
         Ok(self.nodes[node].mapping.as_ref().unwrap().clone())
     }
-    /// Drop unreferenced caches and reclaim unlinked inodes after their last mapping disappears.
+    /// Namespace publication succeeded; deferred allocation-only reclamation cannot turn it into failure.
+    fn reap_after_unlink(&mut self, node: usize) -> Result<(), i64> {
+        match self.reap_node(node) {
+            Err(NO_MEMORY) => Ok(()),
+            result => result,
+        }
+    }
+    /// Keep an orphan's identity pinned if fallible final-close reclamation needs a later retry.
+    fn reap_node(&mut self, node: usize) -> Result<(), i64> {
+        if let Some(inode) = self.nodes[node].inode {
+            if let Err(error) = self.disk.as_mut().ok_or(IO_ERROR)?.release_unlinked(inode) {
+                self.mapping_cache = true;
+                return Err(error);
+            }
+            self.nodes[node].inode = None;
+        }
+        self.nodes[node].data = Data::Mutable(Vec::new());
+        Ok(())
+    }
+    /// Drop inactive maps and retry orphan reclamation after allocation failures or final unmap.
     pub fn collect_mappings(&mut self) -> Result<(), i64> {
         if !self.mapping_cache {
             return Ok(());
         }
         self.mapping_cache = false;
         for node in 0..self.nodes.len() {
-            let Some(mapping) = &self.nodes[node].mapping else {
-                continue;
-            };
-            if mapping.active() {
+            if self.nodes[node]
+                .mapping
+                .as_ref()
+                .is_some_and(MappedFile::active)
+            {
                 self.mapping_cache = true;
                 continue;
             }
             self.nodes[node].mapping = None;
-            if !self.nodes[node].linked
-                && !self
-                    .opens
-                    .iter()
-                    .flatten()
-                    .any(|o| matches!(o.target, Target::Node(n) if n == node) && o.refs != 0)
-            {
-                if let Some(inode) = self.nodes[node].inode.take() {
-                    self.disk
-                        .as_mut()
-                        .ok_or(IO_ERROR)?
-                        .release_unlinked(inode)?;
-                }
-                self.nodes[node].data = Data::Mutable(Vec::new());
+            if !self.nodes[node].linked && !self.held(node) {
+                self.reap_node(node)?;
             }
         }
         Ok(())
@@ -1491,6 +1576,7 @@ impl<'a> Vfs<'a> {
                         Mount::Persistent,
                     )?;
                     self.nodes[node].inode = Some(inode);
+                    self.touch_node(parent, true);
                     node
                 } else {
                     self.insert(parent, name, Data::Mutable(Vec::new()), Mount::Tmpfs)?
@@ -1614,10 +1700,7 @@ impl<'a> Vfs<'a> {
                         .as_ref()
                         .is_some_and(MappedFile::active)
                     {
-                        if let Some(number) = self.nodes[n].inode.take() {
-                            cleanup = self.disk.as_mut().ok_or(IO_ERROR)?.release_unlinked(number);
-                        }
-                        self.nodes[n].data = Data::Mutable(Vec::new());
+                        cleanup = self.reap_node(n);
                     }
                 }
                 _ => {}

@@ -158,7 +158,7 @@ pub fn verify(root: &Path) -> Result<()> {
 }
 
 /// Hash sorted first-party source/configuration bytes; documentation is recorded after acceptance.
-fn source_identity(root: &Path) -> Result<String> {
+pub(super) fn source_identity(root: &Path) -> Result<String> {
     let output = Command::new("git")
         .current_dir(root)
         .args([

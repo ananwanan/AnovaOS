@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Read a deliberately restricted ext4 extent profile without issuing any device writes or flushes.
-//! Validate group metadata, allocated references and bounded trees; reject replay and unknown features.
+//! Read checked ext4 extents and optionally stage bounded, non-journal mutations before disk I/O.
+//! Default mounts remain readonly; writable admission additionally audits allocation and namespace ownership.
+mod audit;
+mod directory;
+mod write;
 use crate::{
     BlockDevice, SECTOR, check_range,
     filesystem::{Capabilities, Entry, Filesystem, Format, Metadata},
@@ -19,6 +22,12 @@ fn u16_at(b: &[u8], at: usize) -> u16 {
 }
 fn u32_at(b: &[u8], at: usize) -> u32 {
     u32::from_le_bytes(b[at..at + 4].try_into().unwrap())
+}
+fn put16(b: &mut [u8], at: usize, value: u16) {
+    b[at..at + 2].copy_from_slice(&value.to_le_bytes());
+}
+fn put32(b: &mut [u8], at: usize, value: u32) {
+    b[at..at + 4].copy_from_slice(&value.to_le_bytes());
 }
 fn buffer() -> Result<Box<[u8; BLOCK]>, i64> {
     let mut bytes = Vec::new();
@@ -66,7 +75,9 @@ struct Extent {
 }
 struct Cached {
     info: Metadata,
+    raw: [u8; 256],
     extents: Vec<Extent>,
+    tree: Vec<u32>,
 }
 
 pub struct Ext4 {
@@ -79,6 +90,12 @@ pub struct Ext4 {
     bitmap: Box<[u8; BLOCK]>,
     bitmap_number: Option<u32>,
     cached: Option<Cached>,
+    writable: bool,
+    dirty: bool,
+    failed: bool,
+    clock: u32,
+    orphans: Vec<u32>,
+    transaction: Option<write::Transaction>,
 }
 
 impl Ext4 {
@@ -194,6 +211,12 @@ impl Ext4 {
             bitmap: buffer()?,
             bitmap_number: None,
             cached: None,
+            writable: false,
+            dirty: false,
+            failed: false,
+            clock: 0,
+            orphans: Vec::new(),
+            transaction: None,
         };
         for i in 0..fs.groups.len() {
             let g = fs.groups[i];
@@ -212,8 +235,15 @@ impl Ext4 {
         Ok(fs)
     }
     fn read_block(&mut self, n: u32, output: &mut [u8; BLOCK]) -> Result<(), i64> {
+        if self.failed {
+            return Err(IO_ERROR);
+        }
         if n >= self.blocks {
             return Err(INVALID_FILESYSTEM);
+        }
+        if let Some(change) = self.transaction.as_ref().and_then(|t| t.find(n)) {
+            output.copy_from_slice(&change.bytes[..]);
+            return Ok(());
         }
         read_block(&mut *self.device, n, output)
     }
@@ -223,7 +253,11 @@ impl Ext4 {
         }
         if self.bitmap_number != Some(bitmap) {
             self.bitmap_number = None;
-            read_block(&mut *self.device, bitmap, &mut self.bitmap)?;
+            if let Some(change) = self.transaction.as_ref().and_then(|t| t.find(bitmap)) {
+                self.bitmap.copy_from_slice(&change.bytes[..]);
+            } else {
+                read_block(&mut *self.device, bitmap, &mut self.bitmap)?;
+            }
             self.bitmap_number = Some(bitmap);
         }
         Ok(self.bitmap[bit as usize / 8] & (1 << (bit % 8)) != 0)
@@ -253,6 +287,9 @@ impl Ext4 {
         Ok(())
     }
     fn load(&mut self, number: u32) -> Result<Metadata, i64> {
+        if self.failed {
+            return Err(IO_ERROR);
+        }
         if let Some(cached) = &self.cached
             && cached.info.number == number
         {
@@ -275,8 +312,8 @@ impl Ext4 {
         let size = u32_at(raw, 4) as usize;
         let links = u16_at(raw, 26);
         if (!directory && mode & 0xf000 != 0x8000)
-            || links == 0
-            || !directory && links != 1
+            || links == 0 && !self.is_orphan(number)
+            || !directory && links > 1
             || u32_at(raw, 20) != 0
             || u32_at(raw, 32) != 0x80000
             || u32_at(raw, 104) != 0
@@ -335,7 +372,13 @@ impl Ext4 {
         if allocated * 8 != u64::from(u32_at(raw, 28)) {
             return Err(INVALID_FILESYSTEM);
         }
-        self.cached = Some(Cached { info, extents });
+        let raw = raw.try_into().unwrap();
+        self.cached = Some(Cached {
+            info,
+            raw,
+            extents,
+            tree: visited,
+        });
         Ok(info)
     }
     fn tree(
@@ -444,13 +487,16 @@ impl Ext4 {
     }
 }
 impl Filesystem for Ext4 {
+    fn directory_moves(&self) -> bool {
+        self.writable
+    }
     fn capabilities(&self) -> Capabilities {
         Capabilities {
             format: Format::Ext4,
             root: 2,
             max_file: MAX_FILE,
             timestamp_nanos: 1_000_000_000,
-            read_only: true,
+            read_only: !self.writable,
         }
     }
     fn inode(&mut self, number: u32) -> Result<Metadata, i64> {
@@ -536,12 +582,50 @@ impl Filesystem for Ext4 {
         Ok(None)
     }
     fn sync(&mut self) -> Result<(), i64> {
-        Ok(())
+        self.flush_writable()
     }
     fn shutdown(&mut self) -> Result<(), i64> {
-        Ok(())
+        self.shutdown_writable()
     }
     fn stop_device(&mut self) -> Result<(), i64> {
         self.device.stop()
+    }
+    fn set_clock(&mut self, seconds: u32) {
+        self.clock = seconds;
+    }
+    fn write(&mut self, n: u32, offset: usize, input: &[u8]) -> Result<usize, i64> {
+        self.mutate(|s| s.write_inner(n, offset, input))
+    }
+    fn resize(&mut self, n: u32, length: usize) -> Result<(), i64> {
+        self.mutate(|s| s.resize_inner(n, length))
+    }
+    fn set_executable(&mut self, n: u32) -> Result<(), i64> {
+        self.mutate(|s| s.executable_inner(n))
+    }
+    fn set_permissions(&mut self, n: u32, permissions: u16) -> Result<(), i64> {
+        self.mutate(|s| s.permissions_inner(n, permissions))
+    }
+    fn set_times(
+        &mut self,
+        n: u32,
+        accessed: Option<u32>,
+        modified: Option<u32>,
+    ) -> Result<(), i64> {
+        self.mutate(|s| s.times_inner(n, accessed, modified))
+    }
+    fn create(&mut self, p: u32, name: &str, directory: bool) -> Result<u32, i64> {
+        self.mutate(|s| s.create_inner(p, name, directory))
+    }
+    fn unlink(&mut self, p: u32, name: &str) -> Result<u32, i64> {
+        self.mutate(|s| s.unlink_inner(p, name, false))
+    }
+    fn rmdir(&mut self, p: u32, name: &str) -> Result<u32, i64> {
+        self.mutate(|s| s.unlink_inner(p, name, true))
+    }
+    fn rename(&mut self, p: u32, name: &str, d: u32, new: &str) -> Result<(), i64> {
+        self.mutate(|s| s.rename_inner(p, name, d, new))
+    }
+    fn release_unlinked(&mut self, n: u32) -> Result<(), i64> {
+        self.mutate(|s| s.release_inner(n))
     }
 }

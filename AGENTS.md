@@ -119,7 +119,8 @@ budgets; preserve ext2 images while separately validating ext4 read-only, writes
 journal recovery and fresh-disk migration. The planning commit implemented none of M16–M18. The current M16 delivery now implements
 backend/cache isolation and controlled ext4 readonly access; see [M16 evidence](docs/en/validation/M16.md).
 Preserve `cargo xtask foundation-test` and `python3 ports/gcc/test_fetch.py` with all prior gates.
-M16 writes, JBD2 recovery/migration, complete budgets/remote CI and M17/M18 remain pending. Use existing guest compilers for M17; full compiler bootstrap, SMP, physical
+M16.4 adds explicit non-journal ext4 write-v1; preserve `cargo xtask foundation-write-test` and read [M16.4](docs/en/validation/M16.4.md).
+JBD2 recovery/migration, complete budgets/remote CI and M17/M18 remain pending. Use existing guest compilers for M17; full compiler bootstrap, SMP, physical
 drivers and a new filesystem format are not its prerequisites. Keep serial/host
 recovery independent of the desktop and retain all accepted regression gates.
 

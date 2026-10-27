@@ -10,7 +10,8 @@ source transport fallback/cache admission, a filesystem backend boundary, on-dem
 directories, reclaimable persistent file nodes and the controlled ext4 readonly-v1
 profile. See [M16 validation](../validation/M16.md) for exact scope and checks.
 The default ext2 image, 16 MiB heap, 32 task/fd and 2,048 cache-slot bounds remain.
-Ext4 writes, JBD2 recovery, fresh-work-disk adoption and full M16 acceptance are pending;
+Opt-in non-journal ext4 write-v1 is implemented; see [M16.4](../validation/M16.4.md).
+JBD2 recovery, fresh-work-disk adoption and full M16 acceptance are pending;
 remote CI remains separate from the local results.
 
 Plan reviewed 2026-10-26 (Asia/Shanghai) on synchronized `dev` at `05a5fb1`,
@@ -42,7 +43,7 @@ its unimplemented status. M17/M18 and the remaining M16 stages retain their plan
 
 | Plan | Scope | Next prerequisite |
 | --- | --- | --- |
-| [M16 foundation](../milestones/M16_FOUNDATION.md) | CI/budgets, backend isolation and resources, ext4 read-only, writes, JBD2 recovery and new-work-disk adoption | Finish remote CI/budgets, then writable ext4 and journal recovery |
+| [M16 foundation](../milestones/M16_FOUNDATION.md) | CI/budgets, backend isolation and resources, ext4 read-only, writes, JBD2 recovery and new-work-disk adoption | Finish remote CI/budgets, then JBD2 recovery and work-disk adoption |
 | [M17 desktop](../milestones/M17_DESKTOP.md) | Supervised session, PTY terminal, files/editor, diagnostics and all-GUI C/C++/Rust workflow | Accepted M16 workspace/resources; use inherited guest compilers |
 | [M18 self-hosting](../ROADMAP.md#m18-conditional-self-hosting) | Separate compiler component stages, guest-only image generation and repeated recovery | Per-component tools, source closure, stage0/dependencies and measured capacity after M16/M17 |
 

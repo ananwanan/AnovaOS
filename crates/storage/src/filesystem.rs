@@ -6,12 +6,25 @@ use alloc::boxed::Box;
 use anova_abi::{INVALID_FILESYSTEM, READ_ONLY};
 
 /// Select by an explicit on-disk extent feature; never reinterpret a failed ext4 mount as ext2.
-pub fn mount(mut device: Box<dyn crate::BlockDevice>) -> Result<Box<dyn Filesystem>, i64> {
+pub fn mount(device: Box<dyn crate::BlockDevice>) -> Result<Box<dyn Filesystem>, i64> {
+    mount_with_ext4_writes(device, false)
+}
+
+/// Writable ext4 is a separate admission policy; a read-only device always retains readonly access.
+pub fn mount_with_ext4_writes(
+    mut device: Box<dyn crate::BlockDevice>,
+    writable: bool,
+) -> Result<Box<dyn Filesystem>, i64> {
     let mut superblock = [0; crate::SECTOR];
     device.read_sector(2, &mut superblock)?;
     let incompat = u32::from_le_bytes(superblock[96..100].try_into().unwrap());
     if incompat & 0x40 != 0 {
-        Ok(crate::try_box(crate::ext4::Ext4::mount(device)?)?)
+        let fs = if writable && !device.read_only() {
+            crate::ext4::Ext4::mount_writable(device)?
+        } else {
+            crate::ext4::Ext4::mount(device)?
+        };
+        Ok(crate::try_box(fs)?)
     } else {
         Ok(crate::try_box(Ext2::mount(device)?)?)
     }
@@ -53,6 +66,9 @@ pub struct Entry {
 /// Cursors are backend byte positions, independent of the VFS node cache and native wire ABI.
 pub trait Filesystem {
     fn capabilities(&self) -> Capabilities;
+    fn directory_moves(&self) -> bool {
+        false
+    }
     fn inode(&mut self, number: u32) -> Result<Metadata, i64>;
     fn read(&mut self, number: u32, offset: usize, output: &mut [u8]) -> Result<usize, i64>;
     fn next_entry(&mut self, number: u32, cursor: u64) -> Result<Option<(Entry, u64)>, i64>;

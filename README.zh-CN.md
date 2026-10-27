@@ -29,13 +29,13 @@
 | M15.3–M15.4 | GCC 和 Rust/LLVM/Cargo 独立源码审计与实际 guest 前置依赖探测；编译器重建仍被阻塞 |
 | M15.5 | 使用继承工具和目标库在系统内编译真实内核；保留 ELF 后由宿主辅助打包，验证启动身份与恢复 |
 | M15.6 | bzip2 和内核各进行两轮独立干净构建，最终产物逐字节一致，归档证据与全部 12 次启动/拒绝/恢复会话通过 |
-| M16（部分） | 受检源码回退/缓存、文件系统后端、按需目录、可回收文件节点和受控 ext4 只读；可写/日志/迁移阶段待完成 |
+| M16（部分） | 受检源码回退/缓存、文件系统后端、按需目录、可回收文件节点和受控 ext4 只读与显式启用的无日志写入；日志/迁移阶段待完成 |
 
-证据按阶段收录在[验收索引](docs/zh-CN/index.md#验收记录)。本次文档整理未重新运行这些
-系统内验收。已配置 CI、远端 CI 实际结果和本地验收是分别记录的事实。
+证据按阶段收录在[验收索引](docs/zh-CN/index.md#验收记录)，各记录明确实际运行的检查。
+已配置 CI、远端 CI 实际结果和本地验收是分别记录的事实。
 
 系统当前为单 BSP、32 个进程/线程槽、内核不可抢占、固定 16 MiB 堆；外设 IRQ 保持屏蔽，
-设备 I/O 采用轮询。ext2 可写文件上限 4 MiB，受控 ext4 只读文件上限 256 MiB，tmpfs 和只读共享文件缓存上限仍为 1 MiB。
+设备 I/O 采用轮询。ext2 可写文件上限 4 MiB，受控 ext4 文件上限 256 MiB，tmpfs 和只读共享文件缓存上限仍为 1 MiB。
 ext2 没有日志或断电恢复。通用 Linux/glibc、SMP、USB/实机支持、原生 Rust `std`、
 编译器源码重建及完全由 guest 生成启动镜像仍未验证。详见
 [当前状态](docs/zh-CN/guides/STATUS.md)和[兼容范围](docs/zh-CN/COMPATIBILITY.md)。
@@ -43,12 +43,12 @@ ext2 没有日志或断电恢复。通用 Linux/glibc、SMP、USB/实机支持�
 ## 下一步开发
 
 项目所有者确定的顺序为 **M16 资源/VFS/ext4 → M17 开发桌面 → M18 有条件的编译器及镜像自举**。
-M16 已实现并本地验证后端/缓存与受控 ext4 只读部分；可写、日志恢复和迁移仍待完成。
+M16 已实现后端/缓存、受控 ext4 只读与显式启用的无日志写入；日志恢复和迁移仍待完成。
 M17/M18 仍为计划。
 
 1. [M16 基础能力](docs/zh-CN/milestones/M16_FOUNDATION.md)：完成远端 CI/资源预算验收，
-   继续 ext4 可写、JBD2 恢复和新镜像迁移。后端解耦、按需目录、可回收文件节点和受控
-   ext4 只读访问已实现，详见[本地证据](docs/zh-CN/validation/M16.md)。
+   继续 JBD2 恢复和新镜像迁移。后端解耦、按需目录、可回收文件节点和受控
+   ext4 只读访问已实现，可写范围见 [M16.4](docs/zh-CN/validation/M16.4.md)，既有证据见 [M16](docs/zh-CN/validation/M16.md)。
 2. [M17 开发桌面](docs/zh-CN/milestones/M17_DESKTOP.md)：提供真正的 PTY 终端、可靠编辑、
    文件浏览与诊断，利用现有工具在桌面完成 C/C++/Rust 编辑、构建、运行、修错和重启保留。
 3. [M18 后续自举](docs/zh-CN/ROADMAP.md#m18有条件的自举)：满足实测前置条件后，分别重新评估
@@ -99,6 +99,7 @@ UEFI/Limine、四级页表，并分别配置内核/用户态编译参数。
 | 显示/输入/合成器 | `cargo xtask graphics-test`、`input-test`、`gui-test`；交互使用 `run --graphics` 或 `run --gui` |
 | GUI runtime | `cargo xtask gui-sdk`、`gui-sdk-image`、`gui-sdk-test`、`gui-sdk-replay`；`run --gui-sdk` 配合原生数据盘 |
 | GPU | `cargo xtask gpu-test` 需要经确认的硬件 GL renderer；`gpu-fallback-test` 不需要图形显示 |
+| ext4 可写（显式启用） | `cargo xtask foundation-write-test`；`ext4-image [--linux] build/disks/work.ext4`，再用 `run --ext4-write [--toolchain] --disk build/disks/work.ext4`；[配置与证据](docs/zh-CN/validation/M16.4.md) |
 | 文件系统基础 | `cargo xtask foundation-test`：受控 ext4 只读、10,001 项目录、20 MiB 文件、200 MiB 稀疏文件、盘上执行、重启和拒绝测试 |
 | 源码重建 | `cargo xtask bootstrap-prepare`、`bootstrap-test`、`bootstrap-gcc-test`、`bootstrap-rust-test`、`bootstrap-kernel-test`、`bootstrap-repeat-test` |
 

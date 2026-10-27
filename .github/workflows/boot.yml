@@ -136,6 +136,8 @@ jobs:
         run: cargo xtask toolchain-build
       - name: Verify guest C/C++, incremental make, negative builds and reboot retention
         run: cargo xtask toolchain-test
+      - name: Verify opt-in ext4 writes, guest builds, exhaustion, reboot and real disk failures
+        run: cargo xtask foundation-write-test
       - name: Assess locked GCC source capacity and guest prerequisite blockers
         run: cargo xtask bootstrap-gcc-test
       - name: Prepare locked upstream Rust musl tools and offline vendor
@@ -184,4 +186,5 @@ jobs:
             build/rust/stage.sha256
             build/rust/archive.sha256
             build/gui-sdk/
+            build/foundation/
           if-no-files-found: ignore

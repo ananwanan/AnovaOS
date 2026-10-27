@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Prepare isolated PCI handoffs for polled storage/network, optional GPU rendering and PS/2.
+//! Prepare polled devices and explicitly opt into audited non-journal ext4 writes by kernel feature.
 #[cfg(feature = "gpu")]
 pub mod gpu;
 #[cfg(feature = "graphics")]
@@ -47,7 +47,7 @@ pub fn attach(fs: &mut Vfs<'_>) -> Result<(), i64> {
     };
     let mut device = virtio::Block::new(config, timer)?;
     device.verify_boundaries()?;
-    let disk = filesystem::mount(Box::new(device))?;
+    let disk = filesystem::mount_with_ext4_writes(Box::new(device), cfg!(feature = "ext4-write"))?;
     let caps = disk.capabilities();
     fs.mount_backend(disk)?;
     serial::write(format_args!(
@@ -60,8 +60,10 @@ pub fn attach(fs: &mut Vfs<'_>) -> Result<(), i64> {
         if caps.read_only { "ro" } else { "rw" },
         if caps.format == Format::Ext2 {
             "4k-single-group"
-        } else {
+        } else if caps.read_only {
             "4k-extents-readonly"
+        } else {
+            "4k-extents-write-v1"
         }
     ));
     Ok(())

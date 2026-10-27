@@ -30,6 +30,7 @@ anova-storage = { path = "../crates/storage" }
 smoltcp = { version = "=0.12.0", default-features = false, features = ["alloc", "medium-ethernet", "proto-ipv4", "socket-tcp", "socket-udp"] }
 
 [features]
+ext4-write = []
 bootstrap-metrics = []
 graphics = ["dep:anova-graphics", "dep:anova-input"]
 gui = ["graphics", "dep:anova-gui"]

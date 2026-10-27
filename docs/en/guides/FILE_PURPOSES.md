@@ -66,7 +66,7 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `crates/sched/src/lib.rs` | Bounded BSP scheduling policy and parent/child lifecycle without hardware or allocation. The kernel owns contexts/resources; this policy never switches stacks or takes locks. |
 | `crates/storage/Cargo.toml` | Declare the no_std checked sector/ext2 crate and its native error dependency. |
 | `crates/storage/src/ext2.rs` | Implement the declared ext2 profile, checked allocation, retained modes/timestamps, ordered writes and clean shutdown. |
-| `crates/storage/src/ext4.rs` | Read the controlled non-journal ext4 extent profile with checked geometry, allocation and bounded trees. |
+| `crates/storage/src/ext4.rs` | Read controlled ext4 extents and dispatch explicit audited non-journal writes with bounded allocation ownership. |
 | `crates/storage/src/filesystem.rs` | Define persistent backend capabilities, stable metadata and bounded directory cursor operations. |
 | `crates/storage/src/lib.rs` | Define owned synchronous sector devices, read-only/flush/stop contracts and checked ranges. |
 | `crates/storage/tests/ext2.rs` | Verify on-disk ext2 bytes, indirection, sparse data, exhaustion, reboot and injected I/O failures. |
@@ -449,3 +449,12 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `xtask/src/terminal.rs` | Drive ordinary UART editing/EOF, dynamic musl launch, real Ctrl+C interruption and volatile reboot checks. |
 | `xtask/src/toolchain.rs` | Build/package the optional development ISO and verify guest editing, compilation, make, failures and reboot hashes. |
 | `xtask/src/transcript.rs` | Capture ordered guest stdout, preserve UART evidence and match raw bytes independently of filesystem snapshots or partial UTF-8. |
+
+| `crates/storage/src/ext4/audit.rs` | Audit writable bitmap/counter, global block ownership and rooted directory/link invariants. |
+| `crates/storage/src/ext4/directory.rs` | Stage ext4 directory growth, rename replacement/moves, parent links and orphan namespace changes. |
+| `crates/storage/src/ext4/write.rs` | Stage bounded ext4 allocation/data/extent mutations, fail closed on publication errors and flush clean shutdown. |
+| `crates/storage/tests/ext4_write.rs` | Verify real writable ext4 images, exhaustive preflight allocation failures, ENOSPC, metadata and I/O boundaries. |
+| `user/linux/ext4_write.c` | Exercise actual musl ext4 writes, directory/cwd moves, orphan/mapping/fork lifetimes, metadata and disk-full reuse. |
+| `xtask/src/foundation_write.rs` | Create opt-in ext4 work images and retain six QEMU write/build/reboot/virtio-failure sessions and host checks. |
+| `docs/en/validation/M16.4.md` | Specify the controlled ext4 write-v1 contract, failures and independently checked local evidence. |
+| `docs/zh-CN/validation/M16.4.md` | Translate the controlled ext4 write-v1 contract and exact local acceptance boundaries. |
