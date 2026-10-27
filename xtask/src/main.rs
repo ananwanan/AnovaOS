@@ -212,6 +212,9 @@ fn execute() -> Result<()> {
             | "app-run"
             | "terminal-image"
             | "desktop-pty-test"
+            | "ext4-journal-image"
+            | "ext4-image"
+            | "ext4-migrate"
     ) && args.len() > 1
     {
         return Err("Unexpected arguments; run cargo xtask help".into());
