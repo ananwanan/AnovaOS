@@ -361,4 +361,20 @@ The owner explicitly defers M16 remote CI closeout and authorizes starting M17. 
 
 ## M17.2 continuing acceptance
 
-The real native PTY terminal and separately configured interactive Linux-musl ash now have a bounded local profile. Preserve `cargo xtask desktop-pty-test`, `anova-terminal` host tests and the original independent `terminal-test`/`desktop-test`. Read [M17 PTY](docs/en/milestones/M17_PTY.md) and [M17.2 evidence](docs/en/validation/M17.2.md). Retain explicit archive/disk personalities, immutable markers, exact creator/session checks, failed-copy data/status retention, tagged-family cleanup across setsid, real WUNTRACED notifications and asynchronous input/PTY/upload turns. START failures must roll back private masters/children; shell replacement resets an incomplete ANSI producer state. The original GUI/native v1 and main-push-only policy remain unchanged. M17.3 reliable files/editing is next; full three-language GUI workflows, compiler-load latency, broad job control, remote CI and hardware remain separate.
+The real native PTY terminal and separately configured interactive Linux-musl ash now have a bounded local profile. Preserve `cargo xtask desktop-pty-test`, `anova-terminal` host tests and the original independent `terminal-test`/`desktop-test`. Read [M17 PTY](docs/en/milestones/M17_PTY.md) and [M17.2 evidence](docs/en/validation/M17.2.md). Retain explicit archive/disk personalities, immutable markers, exact creator/session checks, failed-copy data/status retention, tagged-family cleanup across setsid, real WUNTRACED notifications and asynchronous input/PTY/upload turns. START failures must roll back private masters/children; shell replacement resets an incomplete ANSI producer state. The original GUI/native v1 and main-push-only policy remain unchanged. M17.3 now implements the minimal file/editor loop below; full three-language GUI workflows, compiler-load latency, broad job control, remote CI and hardware remain separate.
+
+## M17.3 minimum implemented workflow
+
+The bounded native Files client shares `/persist` with the real PTY; use launcher
+`f` and preserve `cargo xtask desktop-files-test` plus the no_std `anova-editor`
+host fault matrix in `test-host`. Read [M17 files](docs/en/milestones/M17_FILES.md)
+and [M17.3 validation](docs/en/validation/M17.3.md). Save/close errors retain dirty
+bytes, baseline conflicts require explicit overwrite, and recovery siblings are
+never silently truncated. Experimental file publication `0x103` is separate from
+frozen native v1; all request/path data is copied before mutation. The preflight
+baseline check does not lock out concurrent writers across all save operations.
+Retain actual file/editor and PTY scanouts, exact stopped-disk bytes and clean
+reboot tests. Full GUI-level inode/disk-full/write/flush acceptance is pending;
+host model faults and earlier M16 tests are not substitutes. Preserve M17.1/M17.2
+regressions and main-push-only CI without raising capacities or claiming abrupt
+power-loss guarantees. M17.4/M17.5 remain independent follow-up work.

@@ -159,6 +159,10 @@ pub fn prepare(root: &Path) -> Result<PathBuf> {
     anova_elf::parse(&bytes).map_err(|error| format!("Desktop supervisor: {error:?}"))?;
     toolchain::append(&mut archive, 4, "/bin/desktop", &bytes);
     inventory.push_str(&format!("desktop_sha256={:x}\n", Sha256::digest(bytes)));
+    let files = fs::read(root.join("build/user-target/x86_64-unknown-linux-gnu/release/files"))?;
+    anova_elf::parse(&files).map_err(|error| format!("Desktop files: {error:?}"))?;
+    toolchain::append(&mut archive, 4, "/bin/files", &files);
+    inventory.push_str(&format!("files_sha256={:x}\n", Sha256::digest(files)));
     for name in ["c", "cpp", "rust"] {
         toolchain::append(
             &mut archive,

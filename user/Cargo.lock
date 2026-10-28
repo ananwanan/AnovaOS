@@ -7,6 +7,13 @@ name = "anova-abi"
 version = "0.1.0"
 
 [[package]]
+name = "anova-editor"
+version = "0.1.0"
+dependencies = [
+ "anova-abi",
+]
+
+[[package]]
 name = "anova-graphics"
 version = "0.1.0"
 
@@ -63,6 +70,17 @@ dependencies = [
 name = "edit"
 version = "0.1.0"
 dependencies = [
+ "anova-rt",
+]
+
+[[package]]
+name = "files"
+version = "0.1.0"
+dependencies = [
+ "anova-editor",
+ "anova-gui",
+ "anova-gui-runtime",
+ "anova-gui-user",
  "anova-rt",
 ]
 

@@ -661,3 +661,23 @@ closure and complete retained logs before applying these figures to another reci
 Desktop archives now also build/admit the native terminal and a separate pinned ash with foreground job control. Keep its generated `busybox-terminal-1.36.1-source.tar.gz` redistribution bundle. Focus the launcher and press `t`; F4 closes, F5 starts a new shell, Shift-PgUp/PgDn browses history. A terminal replaces the third GUI client, keeping four windows. `run --desktop` includes shell-only support; `terminal-image --toolchain` or `run --desktop --toolchain --disk build/disks/pty-work.ext4` adds the verified existing M11 tools. Create that work disk explicitly with `ext4-journal-image --linux`; immutable personality markers still govern executable admission.
 
 `cargo xtask desktop-pty-test` requires the completed source-built M11 stage and runs the actual graphical C compilation plus all PTY failure/reboot checks. `--without-toolchain` selects a smaller terminal/runtime-only gate and cannot establish compiler acceptance. Results, UART/TCP-QMP transcripts, real PPM captures and exact stopped-disk dumps are under `build/desktop-pty-test/`. `terminal-test` remains the independent UART gate. See [PTY contract](../milestones/M17_PTY.md) and [M17.2 evidence](../validation/M17.2.md). M17.3 reliable files/editing is next; M17.5 retains full three-language graphical workflow and compiler-load latency acceptance.
+
+## Minimal graphical source editing
+
+The opt-in desktop includes Files. Focus the launcher and press `f`; browse or
+open `/persist` paths, edit and save with F5/Ctrl+S. The graphical PTY (`t`) reads
+those exact paths from the same mounted VFS. Create a fresh Linux-personality
+work disk when compiler outputs will be executed. See [M17 files](../milestones/M17_FILES.md)
+for bounds, unsaved/overwrite prompts and recovery-copy handling.
+
+```sh
+cargo xtask desktop-image
+cargo xtask ext4-journal-image --linux build/disks/editor-work.ext4
+cargo xtask run --desktop --disk build/disks/editor-work.ext4
+cargo xtask desktop-files-test
+```
+
+`cargo xtask test-host` includes the allocation-free editor fault matrix. The
+main-push-only workflow preserves existing desktop/PTY gates and then runs the
+new file/editor gate; no feature-branch or manual trigger is added. Actual local
+checks and incomplete storage-fault acceptance are recorded in [M17.3](../validation/M17.3.md).

@@ -3,6 +3,7 @@
 //! Native Rust CRT, startup arguments and checked process/file/durability syscall wrappers.
 //! Built with the x86_64 user ABI and SSE2, without libc, allocation or Linux calls.
 pub use anova_abi as abi;
+pub mod files;
 mod memory;
 pub mod process;
 pub mod pty;

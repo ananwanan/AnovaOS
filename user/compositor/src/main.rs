@@ -96,6 +96,9 @@ fn request(core: &mut Compositor<'_>, envelope: &t::Envelope, desktop: bool) -> 
         if request.width == 312 {
             request.x = 450;
             request.y = 20;
+        } else if request.width == 318 {
+            request.x = 270;
+            request.y = 250;
         } else if request.width == 320 {
             request.x = 20;
             request.y = 20;

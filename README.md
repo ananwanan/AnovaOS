@@ -42,6 +42,7 @@ claim of a complete desktop OS or complete self-hosting.
 | M16 (bounded local profile) | Verified inputs, backend/cache isolation, controlled ext4 readonly/writes and JBD2 recovery; fresh-disk bzip2/UART acceptance and actual kernel reconstruction after heap/VFS/fd/task/disk exhaustion; remote CI tracked separately |
 | M17.1 | Supervised desktop, simultaneous C/C++/Rust input/windows, actual client/compositor faults, bounded restart, resource reuse and five persistence/fallback boots |
 | M17.2 | Real Linux-musl PTY, bounded ANSI/history, Ctrl+C/resize, actual GCC compilation, exhaustion cleanup and exact reboot bytes |
+| M17.3 (minimal implementation) | File browsing, bounded source editing, checked saves and unsaved/overwrite protection on the PTY work disk; exact two-boot retention passed, full storage-fault acceptance pending |
 
 Evidence is recorded per stage in the [validation index](docs/en/index.md#validation).
 Each record identifies its executed checks. Configured CI, actual remote CI execution
@@ -64,7 +65,7 @@ real resource exhaustion/recovery. The actual kernel build used 9,494,480 heap b
 
 The owner-approved order is **M16 resources/VFS/ext4 → M17 development desktop →
 M18 conditional compiler and image self-hosting**. M16 now has a locally verified backend/cache and
-controlled ext4 readonly/writes, JBD2 recovery and opt-in migration/build acceptance. M17.1 now has local five-boot acceptance for supervised sessions, physical input, actual client/compositor faults, resource reuse and persisted work. M17.2 now has local real-PTY shell/build/reboot acceptance; M17.3–M17.5 and M18 remain planned.
+controlled ext4 readonly/writes, JBD2 recovery and opt-in migration/build acceptance. M17.1 now has local five-boot acceptance for supervised sessions, physical input, actual client/compositor faults, resource reuse and persisted work. M17.2 now has local real-PTY shell/build/reboot acceptance; M17.3 now has a minimal implemented file/editor loop; its full storage-fault acceptance, M17.4–M17.5 and M18 remain pending.
 
 1. [M16 foundation](docs/en/milestones/M16_FOUNDATION.md): remote CI acceptance is paused by owner request; the declared kernel capacity profile passed locally.
    Broader workload sizing remains independent. JBD2 and fresh-image migration now have separate
@@ -83,7 +84,7 @@ SMP, device IRQ/async I/O, physical hardware and a new filesystem format remain
 separate work. [STATUS](docs/en/guides/STATUS.md) records the observed failed
 toolchain dependency download separately from local acceptance.
 
-The owner deferred M16 remote closeout and authorized M17 development on `feat/m17-desktop`. `cargo xtask desktop-build` builds the launcher and existing host-built C/C++/Rust clients, plus an explicit Linux boundary fixture; `cargo xtask run --desktop [--disk build/disks/work.ext4]` selects the opt-in session. `cargo xtask desktop-test` verifies the accepted bounded profile. See [M17.1 local acceptance](docs/en/validation/M17.1.md). M17.2 adds the real PTY terminal: focus the launcher and press `t`; use `F5` for a new shell and `F4` to close. `cargo xtask run --desktop --toolchain --disk build/disks/pty-work.ext4` adds the verified M11 tools to an explicitly Linux-personality work disk. See [PTY contract](docs/en/milestones/M17_PTY.md) and [M17.2 evidence](docs/en/validation/M17.2.md). M17.3 files/reliable editing is next.
+The owner deferred M16 remote closeout and authorized M17 development on `feat/m17-desktop`. `cargo xtask desktop-build` builds the launcher and existing host-built C/C++/Rust clients, plus an explicit Linux boundary fixture; `cargo xtask run --desktop [--disk build/disks/work.ext4]` selects the opt-in session. `cargo xtask desktop-test` verifies the accepted bounded profile. See [M17.1 local acceptance](docs/en/validation/M17.1.md). M17.2 adds the real PTY terminal: focus the launcher and press `t`; use `F5` for a new shell and `F4` to close. `cargo xtask run --desktop --toolchain --disk build/disks/pty-work.ext4` adds the verified M11 tools to an explicitly Linux-personality work disk. See [PTY contract](docs/en/milestones/M17_PTY.md) and [M17.2 evidence](docs/en/validation/M17.2.md). M17.3 adds the [bounded file/editor loop](docs/en/milestones/M17_FILES.md); see its [validation scope](docs/en/validation/M17.3.md).
 
 ## Build and boot
 

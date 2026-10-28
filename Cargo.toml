@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Defines kernel/host packages and shared metadata; user binaries have a separate workspace.
 [workspace]
-members = ["kernel", "xtask", "crates/platform", "crates/memory", "crates/abi", "crates/elf", "crates/sched", "crates/vfs", "crates/storage", "crates/graphics", "crates/input", "crates/gui", "crates/gui-runtime", "crates/terminal"]
+members = ["kernel", "xtask", "crates/platform", "crates/memory", "crates/abi", "crates/elf", "crates/sched", "crates/vfs", "crates/storage", "crates/graphics", "crates/input", "crates/gui", "crates/gui-runtime", "crates/terminal", "crates/editor"]
 exclude = ["user"]
 default-members = ["xtask"]
 resolver = "3"

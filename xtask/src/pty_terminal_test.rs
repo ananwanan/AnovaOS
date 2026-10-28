@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Drive real physical GUI input through the PTY, validate actual scanout and retain reboot evidence.
+//! Physical input/font helpers are also used by the minimal graphical file/editor gate.
 //! Independent UART/QMP channels and fixed budgets distinguish UI output from diagnostic logs.
 
 use super::*;
@@ -18,6 +19,9 @@ pub fn verify(root: &Path, compiler: bool) -> Result<()> {
     let mut evidence = format!(
         "profile=M17.2-q35-tcg-1BSP-3GiB-800x600\ncompiler={compiler}\ninteraction_budget_ms=5000\nheap_budget_bytes=12582912\nframe_budget=131072\ntask_budget=32\nfd_budget=32\nvfs_budget=2048\nscrollback_lines=256\n"
     );
+    if compiler {
+        evidence.push_str("compiler_scanout_interval_ms=500\ncompiler_scanout_deadline_ms=35000\n");
+    }
     let outcome = (|| -> Result<()> {
         let iso = pty_terminal::image(root, compiler)?;
         evidence.push_str(&format!(
@@ -182,7 +186,10 @@ fn scenario(d: &mut Driver, work: &Path, compiler: bool, evidence: &mut String) 
     screenshot(d, work, "stopped-child", &["JOBS-OK"], evidence)?;
     type_text(d, "/linux/echo EDIT-X")?;
     d.key("backspace")?;
-    type_command(d, "Y > /persist/pty-work.txt")?;
+    type_command(d, "Y > /persist/pty-work.txt; /linux/echo REDIRECT-$?")?;
+    // Physical Enter only queues PTY input. Wait for a subsequent command's actual
+    // expanded status on scanout before COM1 independently reads the completed write.
+    screenshot(d, work, "redirection-complete", &["REDIRECT-0"], evidence)?;
     d.command("cat /persist/pty-work.txt", 0)?;
     if !d.output.text().contains("\r\nEDIT-Y\r\n") {
         return Err("PTY backspace or redirection did not execute".into());
@@ -275,7 +282,16 @@ fn compile_run(d: &mut Driver, work: &Path, reboot: bool, evidence: &mut String)
             d,
             "/bin/gcc /etc/terminal-hello.c -o /persist/pty-app; /linux/echo BUILD-$?",
         )?;
-        screenshot(d, work, "compiled", &["BUILD-0"], evidence)?;
+        // A full scanout copies 1.4 MiB through QMP and the host filesystem. Sample
+        // compiler completion less often without changing its 35-second deadline.
+        screenshot_with_interval(
+            d,
+            work,
+            "compiled",
+            &["BUILD-0"],
+            evidence,
+            Duration::from_millis(500),
+        )?;
     }
     type_command(d, "/persist/pty-app; /linux/echo RUN-$?")?;
     screenshot(
@@ -288,12 +304,12 @@ fn compile_run(d: &mut Driver, work: &Path, reboot: bool, evidence: &mut String)
     Ok(())
 }
 
-fn type_command(d: &mut Driver, command: &str) -> Result<()> {
+pub(super) fn type_command(d: &mut Driver, command: &str) -> Result<()> {
     type_text(d, command)?;
     d.key("ret")
 }
 
-fn type_text(d: &mut Driver, text: &str) -> Result<()> {
+pub(super) fn type_text(d: &mut Driver, text: &str) -> Result<()> {
     // Every byte becomes physical make/break input. Small batches stay below the PS/2
     // queue bound; no UART or file injection substitutes for terminal keyboard input.
     for byte in text.bytes() {
@@ -309,6 +325,29 @@ fn type_text(d: &mut Driver, text: &str) -> Result<()> {
             b'>' => ("dot".into(), true),
             b'$' => ("4".into(), true),
             b'?' => ("slash".into(), true),
+            b'\n' => ("ret".into(), false),
+            b'\t' => ("tab".into(), false),
+            b'_' => ("minus".into(), true),
+            b'=' => ("equal".into(), false),
+            b'+' => ("equal".into(), true),
+            b'(' => ("9".into(), true),
+            b')' => ("0".into(), true),
+            b'[' => ("bracket_left".into(), false),
+            b']' => ("bracket_right".into(), false),
+            b'{' => ("bracket_left".into(), true),
+            b'}' => ("bracket_right".into(), true),
+            b'<' => ("comma".into(), true),
+            b',' => ("comma".into(), false),
+            b':' => ("semicolon".into(), true),
+            b'\"' => ("apostrophe".into(), true),
+            b'\'' => ("apostrophe".into(), false),
+            b'!' => ("1".into(), true),
+            b'#' => ("3".into(), true),
+            b'&' => ("7".into(), true),
+            b'*' => ("8".into(), true),
+            b'%' => ("5".into(), true),
+            b'|' => ("backslash".into(), true),
+            b'\\' => ("backslash".into(), false),
             _ => return Err(format!("Unsupported PTY test input byte {byte}").into()),
         };
         let mut events = Vec::new();
@@ -332,7 +371,7 @@ fn key_event(key: &str, down: bool) -> serde_json::Value {
     json!({"type":"key","data":{"down":down,"key":{"type":"qcode","data":key}}})
 }
 
-fn chord(d: &mut Driver, modifier: &str, key: &str) -> Result<()> {
+pub(super) fn chord(d: &mut Driver, modifier: &str, key: &str) -> Result<()> {
     d.qmp.command(
         "input-send-event",
         json!({"events":[key_event(modifier, true)]}),
@@ -345,12 +384,23 @@ fn chord(d: &mut Driver, modifier: &str, key: &str) -> Result<()> {
     Ok(())
 }
 
-fn screenshot(
+pub(super) fn screenshot(
     d: &mut Driver,
     work: &Path,
     name: &str,
     expected: &[&str],
     evidence: &mut String,
+) -> Result<()> {
+    screenshot_with_interval(d, work, name, expected, evidence, Duration::from_millis(30))
+}
+
+fn screenshot_with_interval(
+    d: &mut Driver,
+    work: &Path,
+    name: &str,
+    expected: &[&str],
+    evidence: &mut String,
+    interval: Duration,
 ) -> Result<()> {
     // Keep the real hardware cursor outside the glyph samples; it can otherwise
     // legitimately cover a successful command's text during a scanout comparison.
@@ -368,17 +418,23 @@ fn screenshot(
             return Err("PTY scanout dimensions changed".into());
         }
         let found = expected.iter().all(|text| contains(image.rgb, text));
+        if began.elapsed() > Duration::from_secs(35) {
+            return Err(format!("PTY scanout missing {expected:?} in {name}").into());
+        }
         if found {
             evidence.push_str(&format!(
                 "{name}_scanout_sha256={:x}\n",
                 Sha256::digest(bytes)
             ));
+            if name == "compiled" {
+                evidence.push_str(&format!(
+                    "compiler_scanout_elapsed_ms={}\n",
+                    began.elapsed().as_millis()
+                ));
+            }
             return Ok(());
         }
-        if began.elapsed() > Duration::from_secs(35) {
-            return Err(format!("PTY scanout missing {expected:?} in {name}").into());
-        }
-        thread::sleep(Duration::from_millis(30));
+        thread::sleep(interval);
     }
 }
 
@@ -425,7 +481,7 @@ fn contains(rgb: &[u8], text: &str) -> bool {
     false
 }
 
-fn glyph(byte: u8) -> [u8; 7] {
+pub(super) fn glyph(byte: u8) -> [u8; 7] {
     match byte {
         b'A' => [14, 17, 17, 31, 17, 17, 17],
         b'B' => [30, 17, 17, 30, 17, 17, 30],

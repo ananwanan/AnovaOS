@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Pump one acknowledged GUI upload at a time while the terminal keeps polling input/PTY I/O.
+//! Pump one acknowledged GUI upload at a time for the terminal and bounded files client.
 //! Raster snapshots stay immutable until PRESENT; geometry invalidates an in-flight frame.
 //! This raw checked GUI protocol client leaves the shared C/C++/Rust runtime ABI unchanged.
 
@@ -40,15 +40,18 @@ pub(super) struct Window {
 }
 
 impl Window {
-    pub fn create() -> Result<Self, Error> {
+    pub fn create_at(x: i32, y: i32, width: u32, height: u32) -> Result<Self, Error> {
+        if !(32..=320).contains(&width) || !(24..=240).contains(&height) {
+            return Err(Error::Limit);
+        }
         assert!(!CLAIMED.swap(true, Ordering::AcqRel));
         let session = gui::connect().map_err(error)?;
         let mut request = Request::new(op::CREATE, session);
         request.sequence = 1;
-        request.x = 450;
-        request.y = 20;
-        request.width = 312;
-        request.height = 232;
+        request.x = x;
+        request.y = y;
+        request.width = width;
+        request.height = height;
         request.flags = 1;
         gui::send(&request, &[]).map_err(error)?;
         let reply = loop {
@@ -72,8 +75,8 @@ impl Window {
             session,
             handle: reply.window,
             sequence: 1,
-            width: 312,
-            height: 232,
+            width,
+            height,
             pixels,
             pending: None,
             active: false,

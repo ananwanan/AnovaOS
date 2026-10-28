@@ -3,7 +3,7 @@
 
 **English** | [简体中文](../../zh-CN/milestones/M17_DESKTOP.md)
 
-**Status: M17.1 locally accepted for its bounded five-boot profile. M17.2 is locally accepted within its declared PTY/GCC profile; M17.3–M17.5 remain planned.** This proposal follows the
+**Status: M17.1 locally accepted for its bounded five-boot profile. M17.2 is locally accepted within its declared PTY/GCC profile; M17.3 now has a minimal implemented file/editor loop; its full storage-fault acceptance and M17.4–M17.5 remain pending.** This proposal follows the
 [M16 foundation](M16_FOUNDATION.md). The [roadmap](../ROADMAP.md) defines ordering;
 [current status](../guides/STATUS.md) records implemented capabilities and evidence.
 The owner deferred M16 remote closeout on 2026-10-27 and authorized M17 development. See [M17.1 acceptance](../validation/M17.1.md) for `desktop-test`, actual input/fault/reboot evidence, budgets and remaining limits. All stage exits below still apply.
@@ -71,6 +71,10 @@ PTY/task/descriptor exhaustion recovery and a responsive independent COM1 shell.
 An echo/pwd demonstration alone cannot satisfy this stage.
 
 ## M17.3: files and reliable source editing
+
+The minimum file/editor loop is now implemented; see [M17 files](M17_FILES.md)
+and [its local validation scope](../validation/M17.3.md). The complete storage-fault
+exit below remains pending and is not inferred from this minimum delivery.
 
 Provide directory navigation, file open/create/rename/delete and a source editor
 with dirty-buffer state, explicit save failure and overwrite/unsaved-work checks.

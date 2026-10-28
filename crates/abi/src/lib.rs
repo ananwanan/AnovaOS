@@ -3,6 +3,7 @@
 //! Native v1 constants, checked addresses and layouts; Linux translations live in a distinct module.
 //! Top-level syscall constants are native AnovaOS interfaces, never Linux syscall numbers.
 
+pub mod files;
 pub mod linux;
 pub mod process;
 pub mod pty;

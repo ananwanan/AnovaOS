@@ -506,3 +506,17 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `docs/en/validation/M17.2.md` | 记录真实 PTY/GCC/重启验收、固定预算、保留字节和故障修复。 |
 | `docs/zh-CN/validation/M17.2.md` | 翻译 PTY 验收范围、测量、恢复证据和剩余工作。 |
 | `docs/assets/validation/M17_PTY_LOCAL.json` | 保存准确 PTY 源码/工具/输入身份、原始成功/失败日志和压缩真实画面；JSON 以 purpose 字段说明用途。 |
+| `crates/abi/src/files.rs` | Define the checked experimental regular-file rename/replace wire separately from frozen native v1. |
+| `crates/editor/Cargo.toml` | Package the bounded allocation-free source editor and checked publication policy for guest and host tests. |
+| `crates/editor/src/lib.rs` | Own source bytes, exact disk baselines, dirty protection and conservative temporary/backup save transactions. |
+| `crates/editor/src/tests.rs` | Inject required save phase failures, bound paths/buffers and verify exact prior-copy retention. |
+| `user/files/Cargo.toml` | Build the native graphical file browser and source editor using the shared model and runtime. |
+| `user/files/src/main.rs` | Implement bounded directory navigation, path/confirmation dialogs, editing and checked native save adapters. |
+| `user/rt/src/files.rs` | Wrap the versioned native no-clobber rename and explicit replacement syscall with exact request records. |
+| `xtask/src/desktop_files_test.rs` | Drive physical graphical editing and protected saves, shared PTY reads and exact two-boot source retention. |
+| `docs/en/milestones/M17_FILES.md` | Define file/editor controls, bounds, shared work namespace and exact prior-copy/save guarantees. |
+| `docs/zh-CN/milestones/M17_FILES.md` | Translate file/editor controls, bounds, namespace sharing and actual save guarantees. |
+| `docs/en/validation/M17.3.md` | Record the minimal graphical files/editor reproduction, executed evidence and pending storage-fault acceptance. |
+| `docs/zh-CN/validation/M17.3.md` | Translate minimal files/editor verification and unexecuted end-to-end storage fault boundaries. |
+| `user/files/src/fs.rs` | Adapt bounded editor reads, exclusive complete writes, file/parent sync and rename to the native shared VFS. |
+| `docs/assets/validation/M17_FILES_LOCAL.json` | Retain compressed exact source snapshots, genuine editor/PTY scanouts, transcripts, saved bytes, host checks and regression observations; purpose is a JSON field. |

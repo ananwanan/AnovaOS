@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Bridge checked user buffers to memory/disk VFS, durability calls and the polled terminal.
+//! Bridge checked user buffers to shared memory/disk VFS, file publication, durability and terminal.
 //! Calls run on the BSP at IF=0; blocking retains only a copied syscall frame, never a lock.
 use crate::{
     arch::x86_64::traps::TrapFrame,
@@ -45,6 +45,30 @@ pub fn syscall(
 ) -> Option<i64> {
     let value = (|| -> Result<i64, i64> {
         Ok(match frame.rax {
+            anova_abi::files::SYSCALL => {
+                use anova_abi::files::{REPLACE, Request, decode};
+                let operation = decode(frame.rdi).ok_or(UNSUPPORTED)?;
+                if frame.rdx != size_of::<Request>() as u64 {
+                    return Err(INVALID_ARGUMENT);
+                }
+                let mut bytes = [0; 40];
+                uaccess::from_user(space, UserAddr(frame.rsi), &mut bytes)?;
+                let request = Request::from_bytes(bytes);
+                if !request.valid() {
+                    return Err(INVALID_ARGUMENT);
+                }
+                let mut from = [0; 128];
+                let mut to = [0; 128];
+                let from_length = path(space, request.from, request.from_length, &mut from)?;
+                let to_length = path(space, request.to, request.to_length, &mut to)?;
+                vfs.rename_file(
+                    *cwd,
+                    core::str::from_utf8(&from[..from_length]).unwrap(),
+                    core::str::from_utf8(&to[..to_length]).unwrap(),
+                    operation == REPLACE,
+                )?;
+                0
+            }
             SYS_WRITE | SYS_READ => {
                 let writing = frame.rax == SYS_WRITE;
                 let device = vfs.device(files, frame.rdi, writing)?;
@@ -158,7 +182,8 @@ pub fn syscall(
     })();
     if matches!(
         frame.rax,
-        SYS_WRITE
+        anova_abi::files::SYSCALL
+            | SYS_WRITE
             | SYS_READ
             | SYS_OPEN
             | SYS_MKDIR

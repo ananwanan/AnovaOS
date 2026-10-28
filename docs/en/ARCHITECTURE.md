@@ -7,7 +7,7 @@ This describes implemented boundaries through the accepted M15.6 reconstruction 
 separately scoped future architecture. Guest toolchains, native SDKs and bounded Rust GUI/GPU
 profiles are implemented; full compiler reconstruction, guest-only image generation, SMP and
 physical hardware remain separate. M16 now implements the backend/cache boundary and a
-controlled ext4 profiles, explicit JBD2 recovery and opt-in migration/build acceptance; M17.1 has bounded local session/input/fault/reboot acceptance; M17.2 adds the locally accepted PTY terminal; M17.3–M17.5 remain pending. Current evidence is in [STATUS](guides/STATUS.md).
+controlled ext4 profiles, explicit JBD2 recovery and opt-in migration/build acceptance; M17.1 has bounded local session/input/fault/reboot acceptance; M17.2 adds the locally accepted PTY terminal; M17.3 adds the minimal file/editor loop; full storage-fault acceptance and M17.4–M17.5 remain pending. Current evidence is in [STATUS](guides/STATUS.md).
 
 ## 1. Overall structure
 
@@ -716,3 +716,20 @@ The separate experimental `0x101` native process-control call validates version 
 ## M17.2 PTY boundary
 
 The native terminal owns experimental `0x102` sessions with private masters. Its admitted Linux shell receives only slave stdio, its own SID/PGID and inherited cwd. An immutable process-family tag survives fork/clone/exec/setsid; owner exit/fault/stop closes/reaps exactly that family. READ/STATUS retain data/status after failed usercopy. `/dev/tty` resolves by controlling session and real WUNTRACED notifications are copied before consumption. A fixed ANSI/history model and immutable raster snapshots feed one asynchronous upload at a time, with bounded PTY and GUI work between acknowledgements. The low-level Rust Canvas is reusable without changing the GUI C ABI. See [contract](milestones/M17_PTY.md) and [acceptance](validation/M17.2.md); resource capacities, main-only Actions, COM1 recovery and later M17 stages retain their boundaries.
+
+## M17.3 file/editor boundary
+
+The native Files GUI and Linux PTY share VFS `/persist`; filesystem data access
+does not grant GUI or Linux executable authority. The no_std editor model owns
+bounded bytes, baseline/dirty/confirmation state and publication policy. The
+native client owns path prompts, directory rendering and incremental GUI uploads.
+The kernel supplies only checked file primitives.
+
+Experimental native syscall `0x103` is separate from frozen native v1: RDI is
+`(1 << 32) | operation` (0 no-clobber rename, 1 explicit regular-file replace),
+RSI points to an exact 40-byte record, RDX is 40. Five little-endian u64 fields are
+source address/length, destination address/length and zero reserved. Paths are
+nonempty UTF-8 without NUL, at most 128 bytes; both paths are copied and checked
+before mutation. Directories and symlinks are rejected. Rename does not imply
+flush. The editor combines this with existing fsync and the documented prior-copy
+policy; see [M17 files](milestones/M17_FILES.md).

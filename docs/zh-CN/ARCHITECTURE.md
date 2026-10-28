@@ -4,7 +4,7 @@
 [English](../en/ARCHITECTURE.md) | **简体中文**
 
 本文覆盖至 M15.6 已验收重建及 M16 后端/缓存、受控 ext4 只读配置的实现边界。
-M16 已增加显式 JBD2 恢复和可选迁移/构建验收；M17.1 会话已完成有界输入/故障/重启本地验收，M17.2 的 PTY 终端已本地验收，M17.3–M17.5 待完成。guest 工具链、原生 SDK、
+M16 已增加显式 JBD2 恢复和可选迁移/构建验收；M17.1 会话已完成有界输入/故障/重启本地验收，M17.2 的 PTY 终端已本地验收，M17.3 已实现最小文件/编辑闭环；完整存储故障验收及 M17.4–M17.5 待完成。guest 工具链、原生 SDK、
 有界 Rust GUI/GPU 均已实现；完整编译器重建、guest 独立镜像生成、SMP 和实机另计。
 当前能力与证据见 [STATUS](guides/STATUS.md)。
 
@@ -420,3 +420,16 @@ bootstrap 诊断在设备分离前捕获最终孤儿回收。这不增加原生 
 ## M17.2 PTY 边界
 
 原生终端持有实验性 `0x102` 会话及私有 master。准入的 Linux shell 只获得 slave 标准 I/O、独立 SID/PGID 和继承 cwd。不变的进程族标签跨 fork/clone/exec/setsid 保留；创建者退出/故障/停止时只关闭并回收该进程族。READ/STATUS 用户复制失败保留数据/状态，`/dev/tty` 按控制会话解析，真实 WUNTRACED 通知成功复制后才消费。固定 ANSI/回滚模型和不变像素快照一次异步上传一块，在确认之间处理有界 PTY/GUI 工作。底层 Rust Canvas 可复用，不改变 GUI C ABI。详见[契约](milestones/M17_PTY.md)及[验收](validation/M17.2.md)。资源限额、仅 main Actions、COM1 恢复和后续 M17 阶段边界不变。
+
+## M17.3 文件/编辑器边界
+
+原生 Files GUI 与 Linux PTY 共享 VFS `/persist`；文件数据访问不授予 GUI 或
+Linux 可执行权限。no_std 编辑器模型负责有界字节、基线/脏状态/确认和发布策略；
+原生客户端负责路径提示、目录显示和分块 GUI 上传。内核只提供受检文件原语。
+
+实验原生 syscall `0x103` 独立于冻结的 native v1：RDI 为 `(1 << 32) | operation`
+（0 为目标存在时拒绝的 rename，1 为显式普通文件替换），RSI 指向恰好 40 字节的
+记录，RDX 为 40。五个小端 u64 字段为源地址/长度、目标地址/长度、保留零值。
+路径为不含 NUL 的非空 UTF-8，最多 128 字节；全部输入复制检查成功后才修改。
+拒绝目录和符号链接，rename 不隐含 flush。编辑器结合既有 fsync 与声明的旧副本
+策略，见 [M17 文件](milestones/M17_FILES.md)。

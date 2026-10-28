@@ -2,7 +2,7 @@
 #![no_std]
 #![no_main]
 //! Supervise a compositor and three admitted GUI clients alongside an independent COM1 shell.
-//! Bound restarts, reap every owned child and retain persisted files across session replacement.
+//! Bound restarts, reap owned children and protect the files client's explicit close dialog.
 
 mod checks;
 
@@ -18,9 +18,23 @@ struct Session {
     server: u64,
     clients: [Option<u64>; 3],
     terminal_running: bool,
+    files_running: bool,
 }
 
 impl Session {
+    fn files(&mut self) -> Result<(), i64> {
+        if self.files_running {
+            return Err(BUSY);
+        }
+        if self.clients[1].is_some() {
+            self.toggle(1)?;
+        }
+        let pid = rt::spawn("/bin/files", "")?;
+        self.clients[1] = Some(pid);
+        self.files_running = true;
+        gui::log(format_args!("[DESKTOP:FILES] pid={pid}\n"));
+        Ok(())
+    }
     fn terminal(&mut self) -> Result<(), i64> {
         if self.clients[2].is_some() {
             self.toggle(2)?;
@@ -44,6 +58,11 @@ impl Session {
     }
 
     fn toggle(&mut self, index: usize) -> Result<(), i64> {
+        // Only the file client can resolve its unsaved/failed-save dialog. Explicit
+        // launcher stop/restart/quit must not bypass that cooperative close path.
+        if index == 1 && self.files_running {
+            return Err(BUSY);
+        }
         if index == 2 {
             self.terminal_running = false;
         }
@@ -70,6 +89,9 @@ impl Session {
                 *slot = None;
                 if index == 2 {
                     self.terminal_running = false;
+                }
+                if index == 1 {
+                    self.files_running = false;
                 }
             }
         }
@@ -114,11 +136,24 @@ fn render(window: &mut Window, session: &Session, event: Option<&GuiEvent>) -> R
     window.clear(0x182838)?;
     window.text(12, 24, "ANOVA DESKTOP", 0xffffff)?;
     window.text(12, 44, "1/2/3 launch or stop; r restart", 0xffffff)?;
-    window.text(12, 62, "t terminal; q exit; saved files retained", 0xffffff)?;
+    window.text(
+        12,
+        62,
+        if session.files_running {
+            "Close Files with F4 before stop/restart/exit"
+        } else {
+            "f files; t terminal; q exit"
+        },
+        0xffffff,
+    )?;
     let mut action = 0;
     for (index, name) in [
         "C client",
-        "C++ client",
+        if session.files_running {
+            "Files"
+        } else {
+            "C++ client"
+        },
         if session.terminal_running {
             "Terminal"
         } else {
@@ -166,6 +201,7 @@ fn run(test: bool) -> Result<(), i64> {
             server: rt::spawn("compositor", if test { "desktop-test" } else { "desktop" })?,
             clients: [None; 3],
             terminal_running: false,
+            files_running: false,
         };
         let outcome = (|| -> Result<bool, i64> {
             let identity = gui::connect()?;
@@ -197,8 +233,13 @@ fn run(test: bool) -> Result<(), i64> {
                 if event.kind == 2 && event.state == 1 {
                     match event.codepoint {
                         49..=51 => action = event.codepoint - 48,
-                        114 => return Ok(true),
-                        113 => return Ok(false),
+                        114 if !session.files_running => return Ok(true),
+                        113 if !session.files_running => return Ok(false),
+                        102 if !test => {
+                            if let Err(error) = session.files() {
+                                gui::log(format_args!("[DESKTOP:LAUNCH_ERROR] error={error}\n"));
+                            }
+                        }
                         116 => {
                             if let Err(error) = session.terminal() {
                                 gui::log(format_args!("[DESKTOP:LAUNCH_ERROR] error={error}\n"));

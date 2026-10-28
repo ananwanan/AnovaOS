@@ -174,7 +174,7 @@ fn run() -> Result<(), Error> {
     // not expose aliases. The 44 KiB cell store remains outside the small user stack.
     let screen = unsafe { &mut *STORAGE.0.get() };
     screen.resize(26, 50);
-    let mut window = Window::create()?;
+    let mut window = Window::create_at(450, 20, 312, 232)?;
     let mut session = start(screen);
     let mut input = Input {
         bytes: [0; 256],
