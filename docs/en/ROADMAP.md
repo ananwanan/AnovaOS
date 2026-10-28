@@ -37,7 +37,7 @@ still requires corresponding drivers. See [STATUS](guides/STATUS.md),
 | M14 | Rust GUI/C/C++/Rust SDKs | M9/M13 and individual prerequisites | Five stages locally accepted; GPU scope bounded |
 | M15 | Optional source/kernel bootstrap | M11–M13 and measured resources | bzip2/kernel/repeats accepted; compiler assessment complete, reconstruction blocked |
 | M16 | Resources, backend-independent VFS and controlled ext4 | Existing storage/runtime; restored CI and measured budgets | Partial: backend/cache and controlled ext4 readonly verified locally; opt-in writes, JBD2 and migration/build/UART gates accepted locally; ext4 kernel capacity/recovery accepted locally; complete remote CI pending |
-| M17 | Usable development desktop and GUI-only app workflow | M16 accepted workspace/resources; M9/M14 and inherited tools | M17.1/M17.2 locally accepted; M17.3 minimal files/editor is implemented; full storage-fault acceptance is pending; full compiler bootstrap is not required |
+| M17 | Usable development desktop and GUI-only app workflow | M16 accepted workspace/resources; M9/M14 and inherited tools | M17.1–M17.3 locally accepted within declared profiles, including real GUI storage faults; M17.4–M17.5 pending; full compiler bootstrap is not required |
 | M18 | Conditional compiler reconstruction and guest-only images | Measured component prerequisites after M16/M17 | Planned; each component accepted independently |
 
 Independent work may proceed in parallel, without skipping actual prerequisites.
@@ -455,7 +455,7 @@ data survives a crash. Record local acceptance and remote CI separately.
 
 ## M17: development desktop
 
-M17.1 is locally accepted: three-language input/windows, quota/task/FD reuse, actual client/compositor faults, bounded replacement and five clean persistence/fallback boots. M17.2 now has bounded real-PTY shell/GCC/status/interrupt/resize/scrollback/exhaustion/reboot acceptance; see [M17.2](validation/M17.2.md) and [PTY contract](milestones/M17_PTY.md). M17.3 now has a minimal implemented file/editor loop; its full storage-fault acceptance and M17.4–M17.5 remain pending. See [M17 desktop](milestones/M17_DESKTOP.md) and [M17.1 evidence](validation/M17.1.md).
+M17.1 is locally accepted: three-language input/windows, quota/task/FD reuse, actual client/compositor faults, bounded replacement and five clean persistence/fallback boots. M17.2 now has bounded real-PTY shell/GCC/status/interrupt/resize/scrollback/exhaustion/reboot acceptance; see [M17.2](validation/M17.2.md) and [PTY contract](milestones/M17_PTY.md). M17.3 now has local file/editor and real GUI storage-fault acceptance; M17.4–M17.5 remain pending. See [M17 desktop](milestones/M17_DESKTOP.md) and [M17.1 evidence](validation/M17.1.md).
 Implement after the M16 workspace/resource contract, using the accepted guest GCC/G++ and
 Rust/Cargo seeds. Compiler source reconstruction is not a prerequisite.
 

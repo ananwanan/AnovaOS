@@ -3,6 +3,7 @@
 #![no_main]
 //! Browse the shared work volume and edit bounded ASCII sources with explicit save/leave checks.
 //! One acknowledged raster chunk per turn keeps physical keyboard input independently polled.
+//! Error diagnostics observe complete buffer fingerprints and bounded short-buffer hex bytes.
 
 mod fs;
 #[path = "../../terminal/src/window.rs"]
@@ -131,6 +132,29 @@ impl Ui {
             "[FILES:ERROR] error={error:?} dirty={}\n",
             editor.dirty()
         ));
+        let bytes = editor.bytes();
+        let fingerprint = bytes.iter().fold(0xcbf29ce484222325u64, |state, byte| {
+            (state ^ u64::from(*byte)).wrapping_mul(0x100000001b3)
+        });
+        let mut hex = [0; 128];
+        let exact = if bytes.len() <= 64 {
+            const DIGITS: &[u8; 16] = b"0123456789abcdef";
+            for (index, byte) in bytes.iter().enumerate() {
+                hex[index * 2] = DIGITS[usize::from(byte >> 4)];
+                hex[index * 2 + 1] = DIGITS[usize::from(byte & 15)];
+            }
+            // The generated hexadecimal digits are ASCII and fit the fixed output.
+            core::str::from_utf8(&hex[..bytes.len() * 2]).unwrap()
+        } else {
+            "-"
+        };
+        gui::log(format_args!(
+            "[FILES:BUFFER] path={} bytes={} cursor={} dirty={} fnv64={fingerprint:016x} hex={exact}\n",
+            editor.path(),
+            bytes.len(),
+            editor.cursor(),
+            editor.dirty()
+        ));
     }
     fn refresh(&mut self) -> Result<(), EditError> {
         let fd = rt::open(self.cwd.text(), OPEN_READ | OPEN_DIRECTORY).map_err(EditError::Io)?;
@@ -239,20 +263,26 @@ impl Ui {
             Ok(outcome) => {
                 self.dialog = Dialog::None;
                 self.notice.set(if outcome.backup_retained {
-                    "Saved; backup retained: cleanup failed"
+                    "Saved; backup cleanup failed: inspect storage"
                 } else {
                     "Saved: file sync + publication + volume sync"
                 });
                 gui::log(format_args!(
-                    "[FILES:SAVED] path={} bytes={} dirty={}\n",
+                    "[FILES:SAVED] path={} bytes={} dirty={} backup_cleanup_failed={}\n",
                     editor.path(),
                     editor.bytes().len(),
-                    editor.dirty()
+                    editor.dirty(),
+                    outcome.backup_retained
                 ));
                 if let Some(action) = self.pending.take() {
                     return self.perform(action, editor, true);
                 }
-                self.refresh()?;
+                // A cleanup error may have failed the mount closed after the required
+                // save completed. Keep its explicit success/cleanup-error notice visible;
+                // a redundant browser refresh must not turn that outcome into an error.
+                if !outcome.backup_retained {
+                    self.refresh()?;
+                }
                 Ok(false)
             }
             Err(EditError::Conflict) => {

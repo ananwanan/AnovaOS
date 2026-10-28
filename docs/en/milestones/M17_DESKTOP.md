@@ -3,7 +3,7 @@
 
 **English** | [简体中文](../../zh-CN/milestones/M17_DESKTOP.md)
 
-**Status: M17.1 locally accepted for its bounded five-boot profile. M17.2 is locally accepted within its declared PTY/GCC profile; M17.3 now has a minimal implemented file/editor loop; its full storage-fault acceptance and M17.4–M17.5 remain pending.** This proposal follows the
+**Status: M17.1 locally accepted for its bounded five-boot profile. M17.2 is locally accepted within its declared PTY/GCC profile; M17.3 now has local bounded file/editor and real GUI storage-fault acceptance; M17.4–M17.5 remain pending.** This proposal follows the
 [M16 foundation](M16_FOUNDATION.md). The [roadmap](../ROADMAP.md) defines ordering;
 [current status](../guides/STATUS.md) records implemented capabilities and evidence.
 The owner deferred M16 remote closeout on 2026-10-27 and authorized M17 development. See [M17.1 acceptance](../validation/M17.1.md) for `desktop-test`, actual input/fault/reboot evidence, budgets and remaining limits. All stage exits below still apply.
@@ -18,7 +18,7 @@ source is independent work and is not a prerequisite for this desktop.
 The current [GUI runtime](M14_RUNTIME.md) proves bounded native GUI clients and an
 echo/pwd terminal. That historical terminal accepts only those commands and captures at most
 128 output bytes; it is not an existing graphical shell for running compilers.
-M17.2 now provides the separate [real PTY terminal](M17_PTY.md); reliable graphical source editing and the all-GUI workflow remain M17.3/M17.5.
+M17.2 provides the separate [real PTY terminal](M17_PTY.md); M17.3 accepts reliable graphical source editing within its bounded storage profile. The full all-GUI compiler workflow remains M17.5.
 
 Begin with M16's declared resource, VFS and ext4 work-disk profile and preserve
 the existing ext2 profile. Measure the selected desktop/build workload first.
@@ -72,9 +72,10 @@ An echo/pwd demonstration alone cannot satisfy this stage.
 
 ## M17.3: files and reliable source editing
 
-The minimum file/editor loop is now implemented; see [M17 files](M17_FILES.md)
-and [its local validation scope](../validation/M17.3.md). The complete storage-fault
-exit below remains pending and is not inferred from this minimum delivery.
+The bounded file/editor loop and real GUI storage-fault exit are locally accepted;
+see [M17 files](M17_FILES.md) and [executed local validation](../validation/M17.3.md).
+The acceptance below is scoped to those retained cases; arbitrary power-loss
+durability remains unverified.
 
 Provide directory navigation, file open/create/rename/delete and a source editor
 with dirty-buffer state, explicit save failure and overwrite/unsaved-work checks.

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Verify supervised desktop input, actual fault/restart lifetimes and saved bytes across reboot.
 //! Keep independent UART/QMP evidence, fixed budgets and explicit ext2/device-fallback coverage.
+//! Optional blkdebug configuration is installed before disk attachment and retained with each boot.
 
 use super::*;
 use graphics::{Qmp, parse_ppm, read_ppm};
@@ -474,11 +475,67 @@ impl Driver {
         work: &Path,
         name: &str,
     ) -> Result<(Self, Temporary)> {
+        Self::boot_configured(root, iso, disk, work, name, None)
+    }
+    /// Keep storage-fault rules outside the guest and install them before creating its device.
+    pub(super) fn boot_fault(
+        root: &Path,
+        iso: &Path,
+        disk: &Path,
+        work: &Path,
+        name: &str,
+        configuration: &str,
+    ) -> Result<(Self, Temporary)> {
+        Self::boot_configured(root, iso, disk, work, name, Some(configuration))
+    }
+    fn boot_configured(
+        root: &Path,
+        iso: &Path,
+        disk: &Path,
+        work: &Path,
+        name: &str,
+        configuration: Option<&str>,
+    ) -> Result<(Self, Temporary)> {
         let vars = Temporary::new(root, "desktop-pty")?;
+        if let Some(configuration) = configuration {
+            let retained = work.join(format!("{name}.blkdebug.conf"));
+            output_path(&retained)?;
+            fs::write(retained, configuration)?;
+            fs::write(vars.0.join("blkdebug.conf"), configuration)?;
+        }
         let port = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))?
             .local_addr()?
             .port();
         let mut cmd = qemu_disk(root, iso, &vars.0, false, Some(disk), false)?;
+        if configuration.is_some() {
+            // Stable names let QMP arm a fresh external blkdebug filter after mount.
+            cmd.args([
+                "-set",
+                "drive.anovadisk.node-name=m17-root",
+                "-set",
+                "drive.anovadisk.file.node-name=m17-boot-filter",
+                "-set",
+                "drive.anovadisk.file.image.node-name=m17-file",
+            ]);
+            if env::var_os("ANOVA_M17_BLK_TRACE").is_some() {
+                // Opt-in observer diagnostics interleave actual serial bytes with virtio
+                // completions so changed phase counts can be audited without guest hooks.
+                cmd.args([
+                    "-trace",
+                    "enable=virtio_blk_req_complete",
+                    "-trace",
+                    "enable=virtio_blk_handle_read",
+                    "-trace",
+                    "enable=virtio_blk_handle_write",
+                    "-trace",
+                    "enable=serial_write",
+                ]);
+                cmd.arg("-trace").arg(format!(
+                    "file={}",
+                    work.join(format!("{name}.device-trace.log")).display()
+                ));
+            }
+        }
         cmd.args(["-m", "3G", "-vga", "std", "-serial", "stdio", "-qmp"])
             .arg(format!("tcp:127.0.0.1:{port},server=on,wait=off"))
             .stdin(Stdio::piped())
@@ -780,7 +837,7 @@ fn check_guest(text: &str, timed_out: bool, allowed: &[u64]) -> Result<()> {
     Ok(())
 }
 
-fn validate_resources(text: &str) -> Result<()> {
+pub(super) fn validate_resources(text: &str) -> Result<()> {
     let line = last_line(text, "[M15:RESOURCES]")?;
     for (name, limit) in [
         ("heap_peak_bytes", 12 * 1024 * 1024),

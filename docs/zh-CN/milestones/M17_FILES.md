@@ -5,8 +5,8 @@
 
 本实现推进 [M17](M17_DESKTOP.md) 的最小文件/编辑闭环，接续已验收的
 [PTY 图形终端](M17_PTY.md)。实现与已执行的本地检查分别记录于
-[M17.3 验证](../validation/M17.3.md)。完整 M17.3 存储故障验收和 M17.5
-全图形编译流程仍是独立工作。
+[M17.3 验证](../validation/M17.3.md)。有界真实 GUI 存储故障配置已本地验收，
+M17.5 全图形编译流程仍独立处理。
 
 ## 共享工作盘与启动
 
@@ -21,6 +21,9 @@ cargo xtask desktop-image
 cargo xtask ext4-journal-image --linux build/disks/editor-work.ext4
 cargo xtask run --desktop --disk build/disks/editor-work.ext4
 cargo xtask desktop-files-test
+cargo xtask desktop-files-fault-test
+# 单独复现一个故障用例。
+cargo xtask desktop-files-fault-test --case postpublish-fsync
 # 可选：复用已有且经过验证的 M11 客体编译器种子。
 cargo xtask run --desktop --toolchain --disk build/disks/editor-work.ext4
 ```
@@ -31,7 +34,7 @@ cargo xtask run --desktop --toolchain --disk build/disks/editor-work.ext4
 ## 操作
 
 聚焦启动器按 `f`；Files 替换 C++ 示例槽，PTY 终端仍由 `t` 启动。Files 初始窗口
-位置为 (20,260)，尺寸 320×240。
+位置为 (270,250)，尺寸 318×240，聚焦位置依据实际窗口记录。
 
 | 按键 | 操作 |
 | --- | --- |
@@ -72,12 +75,15 @@ cargo xtask run --desktop --toolchain --disk build/disks/editor-work.ext4
 持久化父目录。准备好的临时文件通过 rename 替换目标，再 fsync 父目录。只有全部
 必要操作成功才清除脏状态。
 
-发布前失败保留旧目标；替换后失败保留备份与脏缓冲区，因为命名空间发布或持久化
-结果可能不确定。已有事务/恢复文件会引发明确错误，绝不静默截断。成功后的备份
-清理为尽力操作，清理错误可能留下可用副本。重试前先检查这些文件，再明确删除。
+发布前失败保留旧目标；替换后的必要保存操作失败会保留备份与脏缓冲区，因为发布或持久化
+结果可能不确定。已有事务/恢复文件会引发明确错误，绝不静默截断。
+所需保存操作成功后的备份清理仅尽力执行。清理错误可能留下可用旧副本，也可能
+在已经删除副本后才报告错误；应检查实际目录内容。缓冲区保持干净状态，GUI 显示
+`Saved; backup cleanup failed: inspect storage` 并记录 `backup_cleanup_failed=true`，
+不再因多余目录刷新失败而覆盖这一明确结果。只有确认实际保留的副本后才删除。
 
-不确定的保存失败后，先在图形 PTY 查看两个兄弟文件，把选定字节恢复到另一个
-路径，再清理证据：
+挂载仍可用，或在独立副本上完成普通挂载恢复后，先在图形 PTY 查看两个同级
+文件，把选定字节恢复到另一个路径，再清理证据：
 
 ```sh
 /linux/cat /persist/src/main.c.m17-bak
@@ -98,6 +104,14 @@ rm /persist/src/main.c.m17-bak
 COM1 原生 `rm`。兄弟文件不存在会报告普通文件缺失，不能假定每个失败阶段都
 创建了两个文件。
 
+存储分配耗尽与设备完成结果不确定的恢复边界不同。解除真实 inode/块压力后，
+先检查并明确删除本次事务的同级文件，再重试仍为脏状态的缓冲区。设备写入或
+flush 返回完成错误后，日志后端会主动封闭当前挂载的写入；解除外部故障不会
+清除该状态，同一次挂载中的重试仍报告错误，并保留缓冲区及此前的脏/干净状态。
+普通挂载恢复需要重新启动。故障门禁保留原始失败镜像，在独立副本上启动，并明确重新输入已
+观测到的待保存字节后重试，不声称未保存缓冲区具备崩溃恢复能力。
+
 这些仅是已实现 ext2/ext4 后端的检查型 syscall 保证。rename/fsync 成功不代表任意
-原子持久化或断电恢复。正常关机/重启后的字节保持须独立实测；突然断电、块设备失败
-及所有容量耗尽点也需要独立证据。本工作不重复或替代 M16 文件系统验收。
+原子持久化或断电恢复。声明的 GUI 故障及 ACPI 正常关机/新 QEMU 进程启动同一盘
+已有独立[实际证据](../validation/M17.3.md)，没有新增客体内 reboot 命令。保存中断电
+及矩阵以外的故障点仍未验证。本工作不重复或替代 M16 文件系统验收。

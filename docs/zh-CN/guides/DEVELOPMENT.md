@@ -463,7 +463,7 @@ bzip2、中断/重启保留和宿主测量的前台 UART 预算。见 [M16.5](..
 
 桌面归档现在还构建并准入原生终端及单独固定版本、启用前台作业控制的 ash。分发时保留生成的 `busybox-terminal-1.36.1-source.tar.gz` 源码包。聚焦启动器按 `t`；F4 关闭，F5 重开 shell，Shift-PgUp/PgDn 查看历史。终端替换第三个 GUI 客户端，保持四窗口。`run --desktop` 提供 shell；`terminal-image --toolchain` 或 `run --desktop --toolchain --disk build/disks/pty-work.ext4` 加入已验证的 M11 工具。用 `ext4-journal-image --linux` 显式创建该工作盘；不可变 personality 标记继续决定可执行准入。
 
-`cargo xtask desktop-pty-test` 需要完成源码构建的 M11 安装树，执行实际图形 C 编译及 PTY 故障/重启检查；`--without-toolchain` 仅运行较小终端/运行时门禁，不能代替编译器验收。结果、UART/TCP-QMP、真实 PPM 和停盘精确转储位于 `build/desktop-pty-test/`。原 `terminal-test` 仍为独立 UART 门禁。详见 [PTY 契约](../milestones/M17_PTY.md)及 [M17.2 证据](../validation/M17.2.md)。下一步 M17.3 可靠文件/编辑器；M17.5 仍需完整三语言图形开发流程和编译负载响应验收。
+`cargo xtask desktop-pty-test` 需要完成源码构建的 M11 安装树，执行实际图形 C 编译及 PTY 故障/重启检查；`--without-toolchain` 仅运行较小终端/运行时门禁，不能代替编译器验收。结果、UART/TCP-QMP、真实 PPM 和停盘精确转储位于 `build/desktop-pty-test/`。原 `terminal-test` 仍为独立 UART 门禁。详见 [PTY 契约](../milestones/M17_PTY.md)及 [M17.2 证据](../validation/M17.2.md)。M17.3 有界文件/编辑器及真实 GUI 存储故障已本地验收；M17.5 仍需完整三语言图形开发流程和编译负载响应验收。
 
 ## 最小图形源码编辑
 
@@ -477,8 +477,19 @@ cargo xtask desktop-image
 cargo xtask ext4-journal-image --linux build/disks/editor-work.ext4
 cargo xtask run --desktop --disk build/disks/editor-work.ext4
 cargo xtask desktop-files-test
+cargo xtask desktop-files-fault-test
+# 单独复现一个故障用例。
+cargo xtask desktop-files-fault-test --case postpublish-fsync
 ```
 
 `cargo xtask test-host` 包含无分配编辑器故障矩阵。仅 main 推送的 workflow 保留
 现有桌面/PTY 门禁，再运行新文件/编辑器门禁，没有新增功能分支或手动触发。
-实际本地检查及未完成的存储故障验收见 [M17.3](../validation/M17.3.md)。
+实际本地检查及有界真实 GUI 存储故障验收见 [M17.3](../validation/M17.3.md)。
+
+`desktop-files-fault-test` 是独立的端到端存储入口，在 `build/disks/` 准备独立
+普通镜像，真实分配 ext4 inode/块以形成压力，并在挂载后通过 QMP 配置 blkdebug
+写入/flush 故障。客体仍使用普通图形编辑器、VFS、ext4/JBD2 及 virtio-blk 路径。
+`build/desktop-files-fault-test/latest.txt` 指向按时间戳保留的运行目录，各用例保留
+夹具脚本/计数、UART/QMP、真实截图、原始失败磁盘、恢复策略及精确文件转储/哈希。
+失败尝试保留为 `result=Err`；只有实际运行成功的结果才代表验收。用例列表和
+实际结果见 [M17.3 验证](../validation/M17.3.md)。

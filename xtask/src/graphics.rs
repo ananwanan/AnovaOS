@@ -286,7 +286,11 @@ impl Qmp {
     pub(super) fn connect_tcp(port: u16, log: &Path, start: Instant) -> Result<Self> {
         let stream = loop {
             match TcpStream::connect((std::net::Ipv4Addr::LOCALHOST, port)) {
-                Ok(stream) => break stream,
+                Ok(stream) => {
+                    // Small bounded QMP turns must not incur Nagle/delayed-ACK latency.
+                    stream.set_nodelay(true)?;
+                    break stream;
+                }
                 Err(error)
                     if error.kind() == std::io::ErrorKind::ConnectionRefused
                         && start.elapsed() < Duration::from_secs(5) =>
@@ -340,14 +344,18 @@ impl Qmp {
     }
 
     pub(super) fn command(&mut self, name: &str, arguments: Value) -> Result<()> {
+        self.command_value(name, arguments).map(|_| ())
+    }
+
+    pub(super) fn command_value(&mut self, name: &str, arguments: Value) -> Result<Value> {
         self.id += 1;
         let value = json!({ "execute": name, "arguments": arguments, "id": self.id });
-        let encoded = serde_json::to_vec(&value)?;
+        let mut encoded = serde_json::to_vec(&value)?;
         self.log.write_all(b"-> ")?;
         self.log.write_all(&encoded)?;
         self.log.write_all(b"\n")?;
+        encoded.extend_from_slice(b"\r\n");
         self.stream.write_all(&encoded)?;
-        self.stream.write_all(b"\r\n")?;
         let start = Instant::now();
         loop {
             let reply = self.message(start)?;
@@ -360,10 +368,10 @@ impl Qmp {
             if let Some(error) = reply.get("error") {
                 return Err(format!("QMP {name} failed: {error}").into());
             }
-            if reply.get("return").is_none() {
-                return Err("QMP response has neither return nor error".into());
-            }
-            return Ok(());
+            return reply
+                .get("return")
+                .cloned()
+                .ok_or_else(|| "QMP response has neither return nor error".into());
         }
     }
 }

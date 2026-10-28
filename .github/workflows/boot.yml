@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Run retained runtime, desktop files/PTY, SDK, toolchain and ext4 gates only for main pushes.
+# Run retained runtime, GUI storage faults, files/PTY, SDK, toolchain and ext4 gates only for main pushes.
 name: Bare-metal boot
 
 on:
@@ -120,6 +120,49 @@ jobs:
             build/foundation/
           if-no-files-found: ignore
 
+
+  desktop-storage:
+    needs: boot
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Install ordinary desktop and storage test utilities
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 xorriso curl dpkg-dev gcc g++ binutils make musl-tools qemu-user e2fsprogs openssl python3
+      - name: Load the pinned Rust toolchain
+        run: rustup show active-toolchain
+      - name: Cache checksum-verified boot inputs
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: build/cache/
+          key: boot-inputs-${{ runner.os }}-${{ hashFiles('boot/dependencies.toml') }}
+      - name: Fetch verified boot inputs
+        run: cargo xtask fetch
+      - name: Check prerequisites
+        run: cargo xtask doctor
+      - name: Verify real graphical editor bounds, storage faults, recovery and reboot
+        run: |
+          mkdir -p build/desktop-files-fault-test
+          set -o pipefail
+          cargo xtask desktop-files-fault-test 2>&1 | tee build/desktop-files-fault-test/ci.log
+      - name: Upload graphical storage fault evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-storage-evidence
+          path: |
+            build/desktop-files-fault-test/
+            build/disks/m17-files-*.ext4
+            build/desktop/inputs.txt
+            build/terminal/inputs.txt
+            build/terminal/manifest.toml
+            build/compat-terminal/busybox.config
+            build/images/busybox-terminal-1.36.1-source.tar.gz
+          compression-level: 6
+          retention-days: 7
+          if-no-files-found: warn
 
   guest-toolchain:
     needs: boot

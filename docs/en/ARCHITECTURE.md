@@ -7,7 +7,7 @@ This describes implemented boundaries through the accepted M15.6 reconstruction 
 separately scoped future architecture. Guest toolchains, native SDKs and bounded Rust GUI/GPU
 profiles are implemented; full compiler reconstruction, guest-only image generation, SMP and
 physical hardware remain separate. M16 now implements the backend/cache boundary and a
-controlled ext4 profiles, explicit JBD2 recovery and opt-in migration/build acceptance; M17.1 has bounded local session/input/fault/reboot acceptance; M17.2 adds the locally accepted PTY terminal; M17.3 adds the minimal file/editor loop; full storage-fault acceptance and M17.4–M17.5 remain pending. Current evidence is in [STATUS](guides/STATUS.md).
+controlled ext4 profiles, explicit JBD2 recovery and opt-in migration/build acceptance; M17.1 has bounded local session/input/fault/reboot acceptance; M17.2 adds the locally accepted PTY terminal; M17.3 has local bounded file/editor and real GUI storage-fault acceptance; M17.4–M17.5 remain pending. Current evidence is in [STATUS](guides/STATUS.md).
 
 ## 1. Overall structure
 
@@ -732,4 +732,10 @@ source address/length, destination address/length and zero reserved. Paths are
 nonempty UTF-8 without NUL, at most 128 bytes; both paths are copied and checked
 before mutation. Directories and symlinks are rejected. Rename does not imply
 flush. The editor combines this with existing fsync and the documented prior-copy
-policy; see [M17 files](milestones/M17_FILES.md).
+policy; see [M17 files](milestones/M17_FILES.md). Native adapter `FILES:IO_BEGIN`
+and `FILES:IO_END` records identify actual create/write/fsync/close, publication,
+parent synchronization and recovery-cleanup results. They observe the existing
+syscalls without pausing a save or substituting storage responses. After an error,
+`FILES:BUFFER` records path, length, cursor, dirty state and an FNV-1a64 fingerprint;
+buffers up to 64 bytes additionally record every byte in hexadecimal. Exact disk
+dumps and SHA-256 remain separate from these buffer observations.

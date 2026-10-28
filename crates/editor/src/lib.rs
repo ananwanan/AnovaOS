@@ -26,7 +26,8 @@ pub enum Error {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SaveOutcome {
-    /// The data and publication flushes succeeded; only recovery-file cleanup failed.
+    /// Required data/publication flushes succeeded, but recovery-file cleanup reported
+    /// an error. Inspect siblings: removal may already have completed before that error.
     pub backup_retained: bool,
 }
 

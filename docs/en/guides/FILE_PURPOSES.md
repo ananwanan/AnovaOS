@@ -487,7 +487,7 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `docs/zh-CN/validation/M17.1.md` | Translate accepted desktop scope, process boundary, measurements, failure evidence and remaining work. |
 | `tests/guest/desktop/linux-park.S` | Execute real Linux nanosleep/exit to verify native supervision rejects live Linux children. |
 | `user/desktop/src/checks.rs` | Exhaust and reuse real child/task/FD resources while checking nonchild and Linux boundaries. |
-| `xtask/src/desktop_test.rs` | Drive five desktop boots, physical input/scanout, actual faults, bounded recovery and exact persisted bytes. |
+| `xtask/src/desktop_test.rs` | Drive desktop boots, physical input/scanout, actual faults and exact persisted bytes; share bounded ordinary/fault-configured QEMU startup. |
 | `docs/assets/validation/M17_DESKTOP_LOCAL.json` | Retain desktop source/input identities, predeclared budgets, raw UART/QMP/failure logs and compressed exact screenshots; JSON uses its purpose field instead of a comment. |
 | `crates/abi/src/pty.rs` | Define the separate versioned native PTY wire contract, ownership and checked transfer/geometry bounds. |
 | `crates/terminal/Cargo.toml` | Package the allocation-free terminal cell/history model for native and host tests. |
@@ -513,12 +513,16 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `crates/editor/src/lib.rs` | Own source bytes, exact disk baselines, dirty protection and conservative temporary/backup save transactions. |
 | `crates/editor/src/tests.rs` | Inject required save phase failures, bound paths/buffers and verify exact prior-copy retention. |
 | `user/files/Cargo.toml` | Build the native graphical file browser and source editor using the shared model and runtime. |
-| `user/files/src/main.rs` | Implement bounded directory navigation, path/confirmation dialogs, editing and checked native save adapters. |
+| `user/files/src/main.rs` | Implement bounded directory navigation, path/confirmation dialogs, editing and observed buffer/error diagnostics. |
 | `user/rt/src/files.rs` | Wrap the versioned native no-clobber rename and explicit replacement syscall with exact request records. |
 | `xtask/src/desktop_files_test.rs` | Drive physical graphical editing and protected saves, shared PTY reads and exact two-boot source retention. |
+| `xtask/src/desktop_files_fault_test.rs` | Drive real GUI boundary and storage-fault saves, exact recovery copies, retry and clean-reboot checks with retained evidence. |
+| `xtask/src/desktop_files_fixtures.rs` | Build isolated ordinary-disk fixtures using real ext4 inode/block allocations, exact boundary bytes and retained preparation audits. |
+| `xtask/src/desktop_files_device.rs` | Configure real QMP blkdebug write/flush errors, byte-identical flush-generation control and exact phase-specific artifact checks. |
 | `docs/en/milestones/M17_FILES.md` | Define file/editor controls, bounds, shared work namespace and exact prior-copy/save guarantees. |
 | `docs/zh-CN/milestones/M17_FILES.md` | Translate file/editor controls, bounds, namespace sharing and actual save guarantees. |
-| `docs/en/validation/M17.3.md` | Record the minimal graphical files/editor reproduction, executed evidence and pending storage-fault acceptance. |
-| `docs/zh-CN/validation/M17.3.md` | Translate minimal files/editor verification and unexecuted end-to-end storage fault boundaries. |
-| `user/files/src/fs.rs` | Adapt bounded editor reads, exclusive complete writes, file/parent sync and rename to the native shared VFS. |
+| `docs/en/validation/M17.3.md` | Record bounded graphical files/editor, actual storage-fault/recovery acceptance, exact evidence and retained failures. |
+| `docs/zh-CN/validation/M17.3.md` | Translate actual files/editor storage-fault/recovery acceptance, evidence and remaining durability boundaries. |
+| `user/files/src/fs.rs` | Adapt bounded editor reads, exclusive complete writes, file/parent sync and rename to the native shared VFS; trace actual syscall phase/results. |
 | `docs/assets/validation/M17_FILES_LOCAL.json` | Retain compressed exact source snapshots, genuine editor/PTY scanouts, transcripts, saved bytes, host checks and regression observations; purpose is a JSON field. |
+| `docs/assets/validation/M17_FILES_FAULT_LOCAL.json` | Retain actual GUI fault/regression records, genuine scanouts, exact dumps, source/tool identities and failed attempts; purpose is a JSON field. |

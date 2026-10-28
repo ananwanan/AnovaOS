@@ -119,7 +119,7 @@ fn sources() -> [(&'static str, &'static str); 3] {
     ]
 }
 
-fn launch_files(d: &mut Driver) -> Result<()> {
+pub(super) fn launch_files(d: &mut Driver) -> Result<()> {
     d.click(35, 60)?;
     let from = d.output.position();
     d.key("f")?;
@@ -128,7 +128,7 @@ fn launch_files(d: &mut Driver) -> Result<()> {
     focus_files(d)
 }
 
-fn focus_files(d: &mut Driver) -> Result<()> {
+pub(super) fn focus_files(d: &mut Driver) -> Result<()> {
     let text = d.output.text();
     let record = text
         .lines()
@@ -226,7 +226,7 @@ fn launch_terminal(d: &mut Driver) -> Result<()> {
     d.click(470, 90)
 }
 
-fn prompt(d: &mut Driver, key: &str, path: &str) -> Result<()> {
+pub(super) fn prompt(d: &mut Driver, key: &str, path: &str) -> Result<()> {
     d.key(key)?;
     type_text(d, path)?;
     d.key("ret")
@@ -236,7 +236,7 @@ fn save(d: &mut Driver, path: &str, bytes: &str) -> Result<()> {
     let from = d.output.position();
     d.key("f5")?;
     d.wait_since(from, "[FILES:SAVED]")?;
-    check_record(&d.output.text(), "[FILES:SAVED]", path, bytes.len())
+    wait_record(d, from, "[FILES:SAVED]", path, bytes.len())
 }
 
 fn create(d: &mut Driver, path: &str, bytes: &str) -> Result<()> {
@@ -331,7 +331,31 @@ fn scenario(d: &mut Driver) -> Result<()> {
     )
 }
 
-fn check_record(text: &str, marker: &str, path: &str, bytes: usize) -> Result<()> {
+pub(super) fn wait_record(
+    d: &mut Driver,
+    from: usize,
+    marker: &str,
+    path: &str,
+    bytes: usize,
+) -> Result<()> {
+    let began = Instant::now();
+    loop {
+        d.poll()?;
+        if began.elapsed() >= Duration::from_secs(5) {
+            return Err(format!("Incomplete file operation record: {marker}").into());
+        }
+        let text = d.output.text();
+        if let Some(record) = text[from..]
+            .split_inclusive('\n')
+            .find(|line| line.ends_with('\n') && line.contains(marker))
+        {
+            return check_record(record, marker, path, bytes);
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+}
+
+pub(super) fn check_record(text: &str, marker: &str, path: &str, bytes: usize) -> Result<()> {
     let record = text
         .lines()
         .rev()
@@ -350,7 +374,7 @@ fn check_record(text: &str, marker: &str, path: &str, bytes: usize) -> Result<()
     Ok(())
 }
 
-fn serial_exact(d: &mut Driver, path: &str, expected: &str) -> Result<()> {
+pub(super) fn serial_exact(d: &mut Driver, path: &str, expected: &str) -> Result<()> {
     let from = d.output.position();
     d.command(&format!("cat {path}"), 0)?;
     let rendered = expected.replace('\n', "\r\n");

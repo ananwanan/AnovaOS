@@ -5,8 +5,9 @@
 
 This implements the minimal file/editor loop in [M17](M17_DESKTOP.md), following the
 accepted [PTY terminal](M17_PTY.md). Implementation and executed local checks are
-recorded separately in [M17.3 validation](../validation/M17.3.md). Full M17.3
-storage-fault acceptance and M17.5 graphical compiler workflows remain separate.
+recorded separately in [M17.3 validation](../validation/M17.3.md). The bounded real
+GUI storage-fault profile is locally accepted; M17.5 graphical compiler workflows
+remain separate.
 
 ## Shared work disk and launch
 
@@ -22,6 +23,9 @@ cargo xtask desktop-image
 cargo xtask ext4-journal-image --linux build/disks/editor-work.ext4
 cargo xtask run --desktop --disk build/disks/editor-work.ext4
 cargo xtask desktop-files-test
+cargo xtask desktop-files-fault-test
+# Reproduce one fault case independently.
+cargo xtask desktop-files-fault-test --case postpublish-fsync
 # Optional: reuse the existing verified M11 guest compiler seed.
 cargo xtask run --desktop --toolchain --disk build/disks/editor-work.ext4
 ```
@@ -87,15 +91,20 @@ fsyncs a `.m17-bak` copy of the exact current bytes and persists the parent befo
 publication. The fully prepared temporary file is renamed over the target, then
 the parent is fsynced. Only success of the required operations clears dirty state.
 
-An error before publication preserves the old target. An error after replacement
-retains the backup and dirty buffer because namespace publication or persistence
+An error before publication preserves the old target. A required-save error after
+replacement retains the backup and dirty buffer because publication or persistence
 may be uncertain. Existing transaction/recovery files cause an explicit error;
 they are never silently truncated. After success, backup cleanup is best effort;
-a cleanup error can leave the usable recovery copy. Inspect retained artifacts
-before explicitly removing them and retrying.
+a cleanup error can leave the usable recovery copy, or removal may already have
+completed before a later error. The buffer stays clean because required save
+operations completed; the GUI reports `Saved; backup cleanup failed: inspect storage`
+and logs `backup_cleanup_failed=true`. It keeps that outcome visible instead of
+replacing it with an error from an unnecessary directory refresh. Inspect actual
+artifacts before explicitly removing any retained copies and retrying.
 
-To recover after an uncertain save, inspect both siblings in the graphical PTY;
-restore the selected bytes to a different path before removing any evidence:
+On a usable mount, or after ordinary mount recovery on a separate copy, inspect
+both siblings in the graphical PTY. Restore selected bytes to a different path
+before removing evidence:
 
 ```sh
 /linux/cat /persist/src/main.c.m17-bak
@@ -116,8 +125,19 @@ The selected graphical BusyBox profile has no `rm` or `mv`; recovery uses existi
 `cat`/shell redirection and the native COM1 `rm` command. An absent sibling is an
 ordinary missing-file error; do not infer that every failed phase created both.
 
+Allocation exhaustion and uncertain device completion have different recovery
+boundaries. Once real inode/block pressure is released, inspect and explicitly
+remove this transaction's siblings before retrying the still-dirty buffer. After
+a completed device write/flush error, the journal backend deliberately fails the
+mount closed. Removing an external fault does not clear that mount state; a
+same-mount retry still reports an error and preserves the buffer and its prior
+dirty/clean state. Ordinary mount recovery requires a fresh boot. The fault gate preserves the failed image,
+boots a separate copy and explicitly re-enters the observed pending bytes before
+retrying. It does not claim crash recovery of an unsaved editor buffer.
+
 These are checked syscall guarantees on the implemented ext2/ext4 backends.
 Rename/fsync success does not establish arbitrary atomic durability or power-loss
-recovery. Clean shutdown/reboot retention is a separate executed test; abrupt
-power loss, a failed block device and every storage exhaustion point require
-separate evidence. This does not repeat or supersede M16's filesystem gates.
+recovery. The declared GUI fault cases and clean ACPI shutdown/fresh QEMU boot
+of the same disk have separate [executed evidence](../validation/M17.3.md).
+No in-guest reboot command is added. In-save power cuts and failure points beyond
+that matrix remain unverified. This does not repeat or supersede M16's gates.
