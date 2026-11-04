@@ -500,6 +500,7 @@ impl Kernel {
         let result = match f.rax {
             anova_abi::process::SYSCALL => self.process_control(i, &f),
             anova_abi::pty::SYSCALL => self.pty_control(i, &f).unwrap_or_else(|e| e),
+            anova_abi::build::SYSCALL => self.build_control(i, &f).unwrap_or_else(|e| e),
             #[cfg(feature = "gui")]
             anova_gui::transport::SYS_GUI => {
                 let pid = self.policy.entry(i).pid;

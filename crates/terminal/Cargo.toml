@@ -1,7 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
-# Package an allocation-free, stream-oriented ANSI subset and bounded terminal history.
+# Package bounded terminal history/ANSI parsing and independent controlled-build log records.
 [package]
 name = "anova-terminal"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+
+[dependencies]
+anova-abi = { path = "../abi" }

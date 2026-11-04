@@ -493,3 +493,20 @@ cargo xtask desktop-files-fault-test --case postpublish-fsync
 夹具脚本/计数、UART/QMP、真实截图、原始失败磁盘、恢复策略及精确文件转储/哈希。
 失败尝试保留为 `result=Err`；只有实际运行成功的结果才代表验收。用例列表和
 实际结果见 [M17.3 验证](../validation/M17.3.md)。
+
+## 受控构建诊断
+
+使用 M11 工具配置与 Linux 工作盘，聚焦启动器按 `b`，再按 `g`，通过固定受控
+GCC 配方编译已保存的 `/persist/build.c`。界面显示命令、准确任务身份、生命周期、
+合并 stdout/stderr、真实退出 reason/code 和发布错误。`[`/`]` 选择四条 8 KiB
+记录之一，PgUp/PgDn 滚动，Esc 返回。成功产物为 `/persist/build-app`，正常关机前
+另行同步。已有临时文件必须检查，不会直接截断。缺少编译器或资源限额均显示为
+启动失败；释放对应容量后重试。
+
+`cargo xtask desktop-build-test` 执行真实 Files/GCC/PTY 修复闭环及独立准入 Linux
+故障输出镜像，保持 5 秒交互、35 秒构建和 500 ms 编译观察界限。带时间戳证据位于
+`build/desktop-build-test/`；`latest.txt` 指向本轮，`result.txt` 保留成功或失败。
+断言包括真实显示、旧产物精确字节、重启保留、真实 SIGILL、长输出截断、共享
+PTY/任务/FD 耗尽、用户复制保留、进程族清理和旧身份拒绝。见 [M17.4 契约](../milestones/M17_BUILD.md)
+及[验证](../validation/M17.4.md)。仅 main 推送触发的工具链任务加入本门禁；CI 配置
+不等于已执行的远端验收。保留所有原有桌面、PTY、文件和存储故障门禁。

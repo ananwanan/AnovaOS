@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Bridge exact native creators to private PTY masters and explicitly admitted Linux shells.
+//! Bridge exact native creators to private PTY masters and admitted Linux shells/compiler jobs.
 //! Transfers never block. Session tags survive Linux fork/exec/setsid; creator death closes
 //! the master and kills/reaps tagged descendants without granting authority over peer tasks.
 
@@ -10,6 +10,7 @@ use anova_vfs::Device;
 pub(super) struct Session {
     owner: u64,
     id: u64,
+    build: bool,
     files: Descriptors,
     device: Device,
     pending: [u8; pty::MAX_TRANSFER],
@@ -28,24 +29,68 @@ impl Kernel {
         if !request.valid(operation) {
             return Err(INVALID_ARGUMENT);
         }
+        self.pty_request(caller, frame, operation, request, false)
+    }
+
+    pub(super) fn build_control(&mut self, caller: usize, frame: &TrapFrame) -> Result<i64, i64> {
+        use anova_abi::build as b;
+        let operation = b::decode(frame.rdi).ok_or(INVALID_ARGUMENT)?;
+        let space = self.process(caller).image.as_ref().unwrap().space.share();
+        let mut bytes = [0; 32];
+        space.with_active(|| mm::uaccess::from_user(&space, UserAddr(frame.rdx), &mut bytes))?;
+        let request = b::Request::from_bytes(bytes);
+        if !request.valid(operation) {
+            return Err(INVALID_ARGUMENT);
+        }
+        let op = match operation {
+            b::START => pty::START,
+            b::READ => pty::READ,
+            b::STATUS => pty::STATUS,
+            b::CLOSE => pty::CLOSE,
+            _ => return Err(INVALID_ARGUMENT),
+        };
+        self.pty_request(
+            caller,
+            frame,
+            op,
+            Request {
+                buffer: request.buffer,
+                length: request.length,
+                rows: if op == pty::START { 26 } else { 0 },
+                columns: if op == pty::START { 50 } else { 0 },
+                reserved: 0,
+            },
+            true,
+        )
+    }
+
+    fn pty_request(
+        &mut self,
+        caller: usize,
+        frame: &TrapFrame,
+        operation: u32,
+        request: Request,
+        build: bool,
+    ) -> Result<i64, i64> {
+        let space = self.process(caller).image.as_ref().unwrap().space.share();
         let owner = self.policy.entry(caller).pid;
         if operation == pty::START {
             if frame.rsi != 0 {
                 return Err(INVALID_ARGUMENT);
             }
-            return self.pty_start(caller, request).map(|id| id as i64);
+            return self.pty_start(caller, request, build).map(|id| id as i64);
         }
         let slot = self
             .ptys
             .iter()
             .position(|s| {
                 s.as_ref()
-                    .is_some_and(|s| s.owner == owner && s.id == frame.rsi)
+                    .is_some_and(|s| s.owner == owner && s.id == frame.rsi && s.build == build)
             })
             .ok_or(NO_CHILD)?;
         match operation {
             pty::CLOSE => {
-                self.pty_close(slot);
+                self.pty_close(slot)?;
                 Ok(0)
             }
             pty::RESIZE => {
@@ -113,7 +158,10 @@ impl Kernel {
         }
     }
 
-    fn pty_start(&mut self, caller: usize, request: Request) -> Result<u64, i64> {
+    fn pty_start(&mut self, caller: usize, request: Request, build: bool) -> Result<u64, i64> {
+        if build && self.ptys.iter().flatten().any(|s| s.build) {
+            return Err(BUSY);
+        }
         #[cfg(feature = "bootstrap-metrics")]
         let baseline = (
             mm::heap_used(),
@@ -126,14 +174,28 @@ impl Kernel {
             .position(Option::is_none)
             .ok_or(FILE_LIMIT)?;
         // This is executable admission, not a privilege inferred from an ELF or pathname.
-        if !self.fs.linux_executable(ROOT, "/linux/sh")? {
+        let executable = if build { "/bin/gcc" } else { "/linux/sh" };
+        if !self.fs.linux_executable(ROOT, executable)? {
             return Err(PERMISSION_DENIED);
         }
-        let bytes = self.fs.load_executable(ROOT, "/linux/sh")?;
+        let bytes = self.fs.load_executable(ROOT, executable)?;
         let owner = self.policy.entry(caller).pid;
         let mut files = Descriptors::default();
         let mut child = None;
+        let mut staging = false;
         let result = (|| -> Result<(u64, Device), i64> {
+            if build {
+                // Reserve only a new regular staging file. Never truncate a prior output
+                // or silently adopt a recovery file from an earlier creator/system boot.
+                self.fs.open(
+                    &mut files,
+                    ROOT,
+                    anova_abi::build::STAGING,
+                    OPEN_WRITE | OPEN_CREATE | OPEN_EXCLUSIVE,
+                )?;
+                staging = true;
+                self.fs.close(&mut files, 0)?;
+            }
             self.fs
                 .open(&mut files, ROOT, "/dev/ptmx", OPEN_READ | OPEN_WRITE)?;
             let Some(device @ Device::PtyMaster(n)) = self.fs.device(&files, 0, false)? else {
@@ -143,7 +205,17 @@ impl Kernel {
             self.fs.pty_lock(n, false);
             let process = self.add_environment(
                 &bytes,
-                &["/linux/sh", "-i"],
+                if build {
+                    &[
+                        "/bin/gcc",
+                        "-fdiagnostics-color=never",
+                        anova_abi::build::SOURCE,
+                        "-o",
+                        anova_abi::build::STAGING,
+                    ]
+                } else {
+                    &["/linux/sh", "-i"]
+                },
                 owner,
                 anova_abi::linux::PERSONALITY,
                 &[
@@ -178,6 +250,7 @@ impl Kernel {
                 self.ptys[slot] = Some(Session {
                     owner,
                     id,
+                    build,
                     files,
                     device,
                     pending: [0; pty::MAX_TRANSFER],
@@ -193,6 +266,12 @@ impl Kernel {
                     self.reap(child);
                 }
                 self.fs.clear(&mut files);
+                if staging {
+                    let cleanup = self.fs.unlink(ROOT, anova_abi::build::STAGING);
+                    serial::write(format_args!(
+                        "[BUILD:ROLLBACK] staging={cleanup:?} start_error={error}\n"
+                    ));
+                }
                 Err(error)
             }
         }
@@ -201,14 +280,14 @@ impl Kernel {
     pub(super) fn pty_close_owner(&mut self, owner: u64) {
         for slot in 0..self.ptys.len() {
             if self.ptys[slot].as_ref().is_some_and(|s| s.owner == owner) {
-                self.pty_close(slot);
+                let _ = self.pty_close(slot);
             }
         }
     }
 
-    fn pty_close(&mut self, slot: usize) {
+    fn pty_close(&mut self, slot: usize) -> Result<(), i64> {
         let Some(mut session) = self.ptys[slot].take() else {
-            return;
+            return Ok(());
         };
         self.fs.clear(&mut session.files);
         // Terminate the complete tagged family before reaping, so scheduler reparenting
@@ -229,6 +308,21 @@ impl Kernel {
                 self.reap(i);
             }
         }
+        let cleanup = if session.build {
+            // Successful publication already renamed this path; otherwise remove this
+            // job's reserved partial output. Persistent I/O faults may require recovery.
+            let result = self.fs.unlink(ROOT, anova_abi::build::STAGING);
+            serial::write(format_args!(
+                "[BUILD:CLEANUP] id={} staging={result:?}\n",
+                session.id
+            ));
+            match result {
+                Ok(()) | Err(NOT_FOUND) => Ok(()),
+                Err(error) => Err(error),
+            }
+        } else {
+            Ok(())
+        };
         let (owner, id) = (session.owner, session.id);
         #[cfg(feature = "bootstrap-metrics")]
         let baseline = session.baseline;
@@ -257,6 +351,7 @@ impl Kernel {
                 baseline == current
             ));
         }
+        cleanup
     }
 }
 

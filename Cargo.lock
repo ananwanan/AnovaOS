@@ -85,6 +85,9 @@ dependencies = [
 [[package]]
 name = "anova-terminal"
 version = "0.1.0"
+dependencies = [
+ "anova-abi",
+]
 
 [[package]]
 name = "anova-vfs"

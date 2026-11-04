@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Pump one acknowledged GUI upload at a time for the terminal and bounded files client.
+//! Pump one acknowledged GUI upload at a time for terminal, files and desktop diagnostics.
 //! Raster snapshots stay immutable until PRESENT; geometry invalidates an in-flight frame.
 //! This raw checked GUI protocol client leaves the shared C/C++/Rust runtime ABI unchanged.
 
@@ -26,7 +26,7 @@ struct Pending {
 }
 
 pub(super) struct Window {
-    session: u64,
+    pub(super) session: u64,
     handle: u64,
     sequence: u64,
     width: u32,
@@ -44,7 +44,7 @@ impl Window {
         if !(32..=320).contains(&width) || !(24..=240).contains(&height) {
             return Err(Error::Limit);
         }
-        assert!(!CLAIMED.swap(true, Ordering::AcqRel));
+        assert!(!CLAIMED.load(Ordering::Acquire));
         let session = gui::connect().map_err(error)?;
         let mut request = Request::new(op::CREATE, session);
         request.sequence = 1;
@@ -68,6 +68,9 @@ impl Window {
         {
             return Err(Error::Transport);
         }
+        // Claim only after fallible connection/creation succeeds, so a failed
+        // constructor does not poison a launcher's next compositor replacement.
+        assert!(!CLAIMED.swap(true, Ordering::AcqRel));
         // SAFETY: CLAIMED establishes sole ownership for the lifetime of this window.
         // The process is single-threaded, never forks, and no other reference is formed.
         let pixels = unsafe { &mut *PIXELS.0.get() };
@@ -236,6 +239,7 @@ impl Window {
 impl Drop for Window {
     fn drop(&mut self) {
         let _ = self.close();
+        CLAIMED.store(false, Ordering::Release);
     }
 }
 

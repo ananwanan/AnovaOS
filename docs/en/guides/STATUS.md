@@ -3,6 +3,22 @@
 
 **English** | [简体中文](../../zh-CN/guides/STATUS.md)
 
+## M17.4 first-batch build diagnostics (2026-11-05)
+
+The dedicated four-boot `desktop-build-test` passes the controlled GCC syntax-error,
+repair, executable run, prior-output retention and real task status loop. Independent
+Linux fixtures cover SIGILL, detached writers, 220,000-byte output with explicit
+8 KiB truncation, actual peer/COM1 response, active-job session replacement,
+copy failures, resource exhaustion/reclamation and stale identity rejection.
+Four bounded records live in the existing launcher window. See
+[contract](../milestones/M17_BUILD.md) and [executed checks, original storage failure and limits](../validation/M17.4.md).
+The five required regression gates and final strict dedicated profile passed;
+this completes only the first diagnostic batch. Global
+resources, general task controls, broader service recovery and M17.5 remain pending.
+Remote CI and hardware are unverified; main-push-only Actions and the deferred M16
+remote result remain.
+
+
 ## M17.3 files/editor and storage-fault local acceptance (2026-10-28)
 
 `desktop-files-test` passed the original two ordinary editor/PTY boots, and
@@ -24,7 +40,7 @@ bytes without replacing filesystem or device results.
 Device errors keep the existing journal mount fail-closed after external fault
 removal. Recovery uses an independently copied image and ordinary fresh mount,
 explicit pending-byte re-entry and graphical retry; unsaved-buffer crash recovery
-and in-save power cuts are unverified. M17.4–M17.5, all-GUI three-language compiler
+and in-save power cuts are unverified. remaining M17.4/M17.5, all-GUI three-language compiler
 workflows, compiler-load latency, remote CI and physical hardware remain separate.
 Resource quotas and main-push-only Actions policy are unchanged.
 ## M17.2 real PTY terminal locally accepted (2026-10-27)
@@ -37,7 +53,7 @@ The graphical shell compiles the selected C source with existing source-built GC
 
 The owner deferred M16 remote closeout and authorized M17 on `feat/m17-desktop`. `desktop-test` now passes five QEMU boots: three existing host-built C/C++/Rust GUI clients with physical input/focus/movement, close/relaunch, quotas, actual client/compositor UD2 faults, fresh-session reconnection and the shared three-replacement limit. Direct-child/Linux rejection, real task/FD exhaustion/reuse, independent COM1 restart, exact ext4/reboot/ext2 bytes and missing-device recovery pass. A disconnection-during-render restart defect was found and fixed.
 
-Declared 5,000 ms interaction bounds passed: selected C/C++/Rust gestures took 2,360/1,763/2,988 ms through verified scanout; COM1 recovery peaked at 72 ms. Boundary samples peaked at 625,952 heap bytes, 4,533 additional frames, 52 VFS slots and deliberate 32-task/32-FD pressure. No quotas were raised. See [M17.1](../validation/M17.1.md) for complete retained evidence and limits. Remote CI and hardware remain unverified. M17.2 is now locally accepted as described above; M17.3 now has local bounded file/editor and real GUI storage-fault acceptance; M17.4–M17.5 remain pending.
+Declared 5,000 ms interaction bounds passed: selected C/C++/Rust gestures took 2,360/1,763/2,988 ms through verified scanout; COM1 recovery peaked at 72 ms. Boundary samples peaked at 625,952 heap bytes, 4,533 additional frames, 52 VFS slots and deliberate 32-task/32-FD pressure. No quotas were raised. See [M17.1](../validation/M17.1.md) for complete retained evidence and limits. Remote CI and hardware remain unverified. M17.2 is now locally accepted as described above; M17.3 now has local bounded file/editor and real GUI storage-fault acceptance; M17.4 batch one has bounded local build-diagnostic acceptance; remaining M17.4 and M17.5 stay pending.
 
 ## M16 foundation progress (2026-10-27)
 
@@ -94,7 +110,7 @@ Remote CI and publication are separate from local acceptance.
 
 The owner selected **resources/VFS/ext4 → usable development desktop → conditional
 compiler/image self-hosting**. That planning-only change had no implementation; the M16 progress above supersedes
-its unimplemented status. M17.1 has since passed its bounded local acceptance as described above; M17.3 now has local bounded file/editor and real GUI storage-fault acceptance; M17.4–M17.5/M18 remain pending and M16 remote CI is pending.
+its unimplemented status. M17.1 has since passed its bounded local acceptance as described above; M17.3 now has local bounded file/editor and real GUI storage-fault acceptance; M17.4 batch one is locally accepted; remaining M17.4, M17.5 and M18 stay pending and M16 remote CI is pending.
 
 | Plan | Scope | Next prerequisite |
 | --- | --- | --- |
@@ -349,7 +365,7 @@ bounds recorded here. Native limits remain separate.
 
 ## Next task
 
-The next task is M17.4 observations and controlled recovery, followed by M17.5 all-GUI compiler workflows. M17.1–M17.3 passed their bounded local profiles; M16 remote CI remains paused by owner request.
+M17.4 first-batch build diagnostics has its own validation above. Next are global resource inspection, general task controls and broader service recovery, followed by M17.5 all-GUI compiler workflows. M17.1–M17.3 passed their bounded local profiles; M16 remote CI remains paused by owner request.
 
 The independently deferred compiler route starts with the measured POSIX build-utility,
 arithmetic dependency and storage/inode/VFS capacity blockers, followed by a

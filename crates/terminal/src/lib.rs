@@ -2,8 +2,10 @@
 //! Parse a bounded ANSI subset into an ASCII cell grid and a fixed 256-line history.
 //! Chunk boundaries never affect parsing. Resize clips/pads without reflow, unsupported
 //! control strings are consumed without allocation, and non-ASCII text uses '?' cells.
+//! Independent build_log records retain raw merged compiler output and exact task identities.
 
 #![no_std]
+pub mod build_log;
 
 pub const COLUMNS: usize = 52;
 pub const ROWS: usize = 26;

@@ -388,3 +388,19 @@ concurrent writers across all save operations. Preserve M17.1/M17.2, ext2 and
 independent COM1 recovery gates. Keep the PTY compiler observer at 500 ms, its
 35,000 ms deadline, 5,000 ms interaction budget, existing capacities and main-push-only
 CI. M17.4/M17.5, remote CI, hardware and arbitrary atomic durability remain separate.
+
+## M17.4 first-batch continuing contract
+
+The first build-diagnostic batch uses the launcher's existing window and independent
+native build v1 `0x104`, preserving frozen native/GUI ABIs, explicit compiler
+personality, exact creator ownership and shared PTY-family cleanup. Read
+[M17 build](docs/en/milestones/M17_BUILD.md) and [executed checks](docs/en/validation/M17.4.md).
+Preserve `cargo xtask desktop-build-test`, bounded raw merged-output records,
+copy-before-consume status/data, staging reservation and failed-build prior outputs.
+Keep 16 GUI events/4 KiB reads/one acknowledged upload per turn, four 8 KiB records,
+the existing capacities, 500 ms compiler observer, 35 s build deadline, 5 s
+interaction ceilings and the shared three-replacement limit. CLOSE errors must not
+prevent descriptor/task reclamation; report staging uncertainty. Keep Files dirty
+protection and independent COM1. Global resource inspection, general task controls,
+broader service recovery and M17.5 remain later work; this is not all of M17.4.
+Main-push-only Actions, deferred M16 remote closeout and untested hardware remain.

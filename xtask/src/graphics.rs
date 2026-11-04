@@ -2,6 +2,7 @@
 //! Compare QEMU's actual standard-VGA scanout with the software reference and prove COM1 recovery.
 //! Bound QMP/PPM input, retain evidence, and require clean ACPI shutdown with or without a display.
 //! Share bounded Unix-socket and loopback-TCP QMP transports with the desktop gate.
+//! Retry only empty TCP startup resets within five seconds; partial/protocol/command failures remain fatal.
 use super::*;
 use anova_graphics::Surface;
 use serde_json::{Value, json};
@@ -279,17 +280,49 @@ impl Qmp {
                 Err(error) => return Err(format!("Cannot connect QMP: {error}").into()),
             }
         };
-        Self::handshake(Box::new(stream), log)
+        Self::handshake(Box::new(stream), log, Instant::now())
     }
 
     /// Loopback only: no public bind, remote endpoint or change to QMP reply validation.
     pub(super) fn connect_tcp(port: u16, log: &Path, start: Instant) -> Result<Self> {
-        let stream = loop {
-            match TcpStream::connect((std::net::Ipv4Addr::LOCALHOST, port)) {
+        loop {
+            let remaining = Duration::from_secs(5)
+                .checked_sub(start.elapsed())
+                .filter(|d| !d.is_zero())
+                .ok_or("QMP startup exceeded five seconds")?;
+            match TcpStream::connect_timeout(
+                &((std::net::Ipv4Addr::LOCALHOST, port).into()),
+                remaining,
+            ) {
                 Ok(stream) => {
                     // Small bounded QMP turns must not incur Nagle/delayed-ACK latency.
                     stream.set_nodelay(true)?;
-                    break stream;
+                    match Self::handshake(Box::new(stream), log, start) {
+                        Ok(qmp) => return Ok(qmp),
+                        Err(error) => {
+                            let empty_reset =
+                                error.downcast_ref::<std::io::Error>().is_some_and(|e| {
+                                    matches!(
+                                        e.kind(),
+                                        std::io::ErrorKind::ConnectionReset
+                                            | std::io::ErrorKind::UnexpectedEof
+                                    )
+                                }) && fs::metadata(log).is_ok_and(|m| m.len() == 0);
+                            if !empty_reset || start.elapsed() >= Duration::from_secs(5) {
+                                return Err(error);
+                            }
+                            let mut retry = fs::OpenOptions::new()
+                                .create(true)
+                                .append(true)
+                                .open(log.with_extension("startup.log"))?;
+                            writeln!(
+                                retry,
+                                "empty_greeting_retry elapsed_ms={} error={error}",
+                                start.elapsed().as_millis()
+                            )?;
+                            thread::sleep(Duration::from_millis(20));
+                        }
+                    }
                 }
                 Err(error)
                     if error.kind() == std::io::ErrorKind::ConnectionRefused
@@ -299,18 +332,17 @@ impl Qmp {
                 }
                 Err(error) => return Err(format!("Cannot connect loopback QMP: {error}").into()),
             }
-        };
-        Self::handshake(Box::new(stream), log)
+        }
     }
 
-    fn handshake(stream: Box<dyn QmpStream>, log: &Path) -> Result<Self> {
+    fn handshake(stream: Box<dyn QmpStream>, log: &Path, start: Instant) -> Result<Self> {
         stream.write_timeout(Duration::from_secs(5))?;
         let mut qmp = Self {
             stream,
             log: File::create(log)?,
             id: 0,
         };
-        if qmp.message(Instant::now())?.get("QMP").is_none() {
+        if qmp.message(start)?.get("QMP").is_none() {
             return Err("Missing QMP greeting".into());
         }
         qmp.command("qmp_capabilities", json!({}))?;
@@ -326,7 +358,13 @@ impl Qmp {
                 .ok_or("QMP reply exceeded five seconds")?;
             self.stream.read_timeout(remaining)?;
             let mut byte = [0];
-            self.stream.read_exact(&mut byte)?;
+            if let Err(error) = self.stream.read_exact(&mut byte) {
+                // Retain incomplete input too. In particular, a partial greeting
+                // must never be mistaken for an empty startup connection and retried.
+                self.log.write_all(&bytes)?;
+                self.log.flush()?;
+                return Err(error.into());
+            }
             bytes.push(byte[0]);
             if bytes.len() > QMP_LIMIT {
                 return Err("QMP message exceeds 64 KiB".into());
@@ -493,6 +531,54 @@ fn verify_pattern(bytes: &[u8]) -> Result<u64> {
 mod tests {
     use super::*;
     use std::io::{BufRead, BufReader};
+
+    #[test]
+    fn tcp_qmp_retries_only_empty_startup_and_preserves_partial_or_command_failures() {
+        for mode in ["empty", "partial", "command"] {
+            let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+            let temp = Temporary::new(root, "qmp-tcp-startup").unwrap();
+            let log = temp.0.join("qmp.log");
+            let listener = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).unwrap();
+            let port = listener.local_addr().unwrap().port();
+            let worker = thread::spawn(move || {
+                let (mut stream, _) = listener.accept().unwrap();
+                if mode == "partial" {
+                    stream.write_all(b"{").unwrap();
+                    return;
+                }
+                if mode == "empty" {
+                    drop(stream);
+                    stream = listener.accept().unwrap().0;
+                }
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(5)))
+                    .unwrap();
+                stream.write_all(b"{\"QMP\":{}}\r\n").unwrap();
+                let mut reader = BufReader::new(stream);
+                let mut line = String::new();
+                reader.read_line(&mut line).unwrap();
+                let request: Value = serde_json::from_str(&line).unwrap();
+                assert_eq!(request["execute"], "qmp_capabilities");
+                if mode == "empty" {
+                    reader
+                        .get_mut()
+                        .write_all(b"{\"return\":{},\"id\":1}\r\n")
+                        .unwrap();
+                }
+            });
+            let result = Qmp::connect_tcp(port, &log, Instant::now());
+            assert_eq!(result.is_ok(), mode == "empty");
+            drop(result);
+            worker.join().unwrap();
+            let transcript = fs::read(&log).unwrap();
+            if mode == "partial" {
+                assert_eq!(transcript, b"{");
+            }
+            assert_eq!(log.with_extension("startup.log").exists(), mode == "empty");
+            assert!(Qmp::connect_tcp(port, &log, Instant::now() - Duration::from_secs(6)).is_err());
+            temp.cleanup().unwrap();
+        }
+    }
 
     fn qmp_reply(reply: &[u8]) -> Result<()> {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();

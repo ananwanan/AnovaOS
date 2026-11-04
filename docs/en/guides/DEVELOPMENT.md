@@ -695,3 +695,25 @@ scanouts, original failed disks, recovery policy and exact file dumps/hashes.
 A failed attempt remains recorded as `result=Err`; only an executed successful
 result establishes acceptance. The case list and actual run results are in
 [M17.3 validation](../validation/M17.3.md).
+
+## Controlled build diagnostics
+
+With the M11 profile and Linux work disk, focus the launcher, press `b`, then `g`
+to compile saved `/persist/build.c` through the fixed controlled GCC recipe. The
+view displays the command, exact task identity, lifecycle, merged stdout/stderr,
+real exit reason/code and publication errors. `[`/`]` selects one of four 8 KiB
+records, PgUp/PgDn scrolls, Esc returns. Successful output is `/persist/build-app`;
+synchronize separately before normal shutdown. Existing staging files require
+explicit inspection instead of truncation. Missing compiler/resource limits are
+visible start failures; release the indicated capacity and retry.
+
+`cargo xtask desktop-build-test` runs the real Files/GCC/PTY repair loop and a
+separate admitted Linux fault-producer ISO, with 5 s interaction, 35 s build and
+500 ms compiler-observer bounds. Timestamped evidence is under
+`build/desktop-build-test/`; `latest.txt` selects the run and `result.txt` preserves
+success or failure. It asserts genuine scanout, exact prior artifact bytes,
+reboot retention, actual SIGILL, long-output truncation, shared PTY/task/FD
+exhaustion, usercopy retention, family cleanup and stale identity rejection.
+See [M17.4 contract](../milestones/M17_BUILD.md) and [validation](../validation/M17.4.md).
+The main-push-only toolchain job includes this gate; configured CI is not executed
+remote acceptance. Preserve all original desktop/PTY/files/storage-fault gates.

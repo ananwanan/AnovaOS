@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Run retained runtime, GUI storage faults, files/PTY, SDK, toolchain and ext4 gates only for main pushes.
+# Run retained runtime, build diagnostics, GUI storage faults, files/PTY, SDK and toolchain gates only for main pushes.
 name: Bare-metal boot
 
 on:
@@ -199,6 +199,8 @@ jobs:
         run: cargo xtask toolchain-test
       - name: Verify real graphical PTY compilation, interruption, resize, exhaustion and reboot
         run: cargo xtask desktop-pty-test
+      - name: Verify controlled build diagnostics, actual status, bounded logs and job recovery
+        run: cargo xtask desktop-build-test
       - name: Verify opt-in ext4 writes, guest builds, exhaustion, reboot and real disk failures
         run: cargo xtask foundation-write-test
       - name: Verify JBD2 sector cuts, checksum rejection and actual virtio recovery
@@ -259,6 +261,7 @@ jobs:
             build/gui-sdk/
             build/terminal/
             build/desktop-pty-test/
+            build/desktop-build-test/
             build/compat-terminal/busybox.config
             build/images/busybox-terminal-1.36.1-source.tar.gz
             build/foundation/

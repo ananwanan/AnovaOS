@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Exercise graphical source editing, protected saves and the shared PTY work disk across clean reboot.
 //! Physical QMP input, independent UART reads and stopped-disk dumps provide separate observations.
+//! Consume only newline-complete operation records, including reopen and overwrite confirmation.
 
 use super::*;
 use desktop_test::Driver;
@@ -42,9 +43,10 @@ pub fn verify(root: &Path) -> Result<()> {
             launch_files(&mut d)?;
             if reboot {
                 for (path, bytes) in sources() {
+                    let from = d.output.position();
                     prompt(&mut d, "f1", path)?;
                     d.wait("[FILES:OPEN]")?;
-                    check_record(&d.output.text(), "[FILES:OPEN]", path, bytes.len())?;
+                    wait_record(&mut d, from, "[FILES:OPEN]", path, bytes.len())?;
                 }
             } else {
                 scenario(&mut d)?;
@@ -274,11 +276,7 @@ fn scenario(d: &mut Driver) -> Result<()> {
     let from = d.output.position();
     d.key("f5")?;
     d.wait_since(from, "[FILES:ERROR]")?;
-    let text = d.output.text();
-    let error = text[from..]
-        .lines()
-        .find(|s| s.contains("[FILES:ERROR]"))
-        .ok_or("Missing failed-save record")?;
+    let error = wait_line(d, from, "[FILES:ERROR]")?;
     if !error.contains("dirty=true") {
         return Err("Failed editor save falsely cleared dirty state".into());
     }
@@ -302,8 +300,9 @@ fn scenario(d: &mut Driver) -> Result<()> {
     d.wait_since(from, "[FILES:CONFLICT]")?;
     d.key("y")?;
     d.wait_since(from, "[FILES:SAVED]")?;
-    check_record(
-        &d.output.text(),
+    wait_record(
+        d,
+        from,
         "[FILES:SAVED]",
         "/persist/src/main.c",
         C_FINAL.len(),
@@ -321,10 +320,12 @@ fn scenario(d: &mut Driver) -> Result<()> {
     let from = d.output.position();
     d.key("backspace")?;
     d.wait_since(from, "[FILES:BROWSE] cwd=/persist")?;
+    let from = d.output.position();
     prompt(d, "f1", "/persist/src/renamed.c")?;
     d.wait("[FILES:OPEN]")?;
-    check_record(
-        &d.output.text(),
+    wait_record(
+        d,
+        from,
         "[FILES:OPEN]",
         "/persist/src/renamed.c",
         C_FINAL.len(),
@@ -338,6 +339,16 @@ pub(super) fn wait_record(
     path: &str,
     bytes: usize,
 ) -> Result<()> {
+    check_record(&wait_line(d, from, marker)?, marker, path, bytes)
+}
+
+fn complete_record<'a>(text: &'a str, from: usize, marker: &str) -> Option<&'a str> {
+    text.get(from..)?
+        .split_inclusive('\n')
+        .find(|line| line.ends_with('\n') && line.contains(marker))
+}
+
+fn wait_line(d: &mut Driver, from: usize, marker: &str) -> Result<String> {
     let began = Instant::now();
     loop {
         d.poll()?;
@@ -345,11 +356,8 @@ pub(super) fn wait_record(
             return Err(format!("Incomplete file operation record: {marker}").into());
         }
         let text = d.output.text();
-        if let Some(record) = text[from..]
-            .split_inclusive('\n')
-            .find(|line| line.ends_with('\n') && line.contains(marker))
-        {
-            return check_record(record, marker, path, bytes);
+        if let Some(record) = complete_record(&text, from, marker) {
+            return Ok(record.to_string());
         }
         thread::sleep(Duration::from_millis(10));
     }
@@ -419,4 +427,29 @@ fn inspect(disk: &Path, work: &Path, name: &str, evidence: &mut String) -> Resul
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn uart_fragments_do_not_complete_or_bypass_file_assertions() {
+        let prior = "[FILES:SAVED] path=/old bytes=1 dirty=false\r\n";
+        let partial = format!("{prior}[FILES:SAVED] pat");
+        assert!(complete_record(&partial, prior.len(), "[FILES:SAVED]").is_none());
+        let full = format!("{prior}[FILES:SAVED] path=/new bytes=76 dirty=false\r\n");
+        let record = complete_record(&full, prior.len(), "[FILES:SAVED]").unwrap();
+        assert!(check_record(record, "[FILES:SAVED]", "/new", 76).is_ok());
+        assert!(check_record(record, "[FILES:SAVED]", "/new", 75).is_err());
+        assert!(check_record(record, "[FILES:SAVED]", "/old", 76).is_err());
+        assert!(
+            check_record(
+                &record.replace("dirty=false", "dirty=true"),
+                "[FILES:SAVED]",
+                "/new",
+                76
+            )
+            .is_err()
+        );
+    }
 }

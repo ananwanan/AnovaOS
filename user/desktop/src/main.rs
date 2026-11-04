@@ -3,13 +3,18 @@
 #![no_main]
 //! Supervise a compositor and three admitted GUI clients alongside an independent COM1 shell.
 //! Bound restarts, reap owned children and protect the files client's explicit close dialog.
+//! Pump controlled build diagnostics and acknowledged GUI uploads in bounded turns.
 
+mod build_checks;
 mod checks;
+mod diagnostics;
+#[path = "../../terminal/src/window.rs"]
+mod window;
 
-use anova_gui::transport as t;
-use anova_gui_runtime::{Error, GuiEvent, GuiRect, GuiWindowDesc, Window};
+use anova_gui_runtime::{Error, GuiRect};
 use anova_gui_user as gui;
 use anova_rt::{self as rt, abi::*};
+use window::Window;
 
 const APPLICATIONS: [&str; 3] = ["/bin/desktop-c", "/bin/desktop-cpp", "/bin/desktop-rust"];
 const RESTARTS: usize = 3;
@@ -132,7 +137,7 @@ fn stop(pid: u64) -> Result<(), i64> {
     Ok(())
 }
 
-fn render(window: &mut Window, session: &Session, event: Option<&GuiEvent>) -> Result<u32, Error> {
+fn render(window: &mut Window, session: &Session) -> Result<(), Error> {
     window.clear(0x182838)?;
     window.text(12, 24, "ANOVA DESKTOP", 0xffffff)?;
     window.text(12, 44, "1/2/3 launch or stop; r restart", 0xffffff)?;
@@ -142,11 +147,10 @@ fn render(window: &mut Window, session: &Session, event: Option<&GuiEvent>) -> R
         if session.files_running {
             "Close Files with F4 before stop/restart/exit"
         } else {
-            "f files; t terminal; q exit"
+            "f files; t terminal; b builds; q exit"
         },
         0xffffff,
     )?;
-    let mut action = 0;
     for (index, name) in [
         "C client",
         if session.files_running {
@@ -165,27 +169,27 @@ fn render(window: &mut Window, session: &Session, event: Option<&GuiEvent>) -> R
     {
         let y = 88 + index as i32 * 30;
         window.text(12, y + 5, name, 0xffffff)?;
-        if window.button(
+        window.rect(
             GuiRect {
                 x: 160,
                 y,
                 width: 140,
                 height: 24,
             },
+            0x304860,
+        )?;
+        window.text(
+            164,
+            y + 5,
             if session.clients[index].is_some() {
                 "Stop"
             } else {
                 "Launch"
             },
-            event,
-        )? {
-            action = index as u32 + 1;
-        }
+            0xffffff,
+        )?;
     }
-    match window.present() {
-        Ok(()) | Err(Error::WouldBlock) => Ok(action),
-        Err(error) => Err(error),
-    }
+    Ok(())
 }
 
 fn gui_error(error: Error) -> i64 {
@@ -196,6 +200,7 @@ fn gui_error(error: Error) -> i64 {
 }
 
 fn run(test: bool) -> Result<(), i64> {
+    let mut diagnostics = diagnostics::Diagnostics::new();
     for generation in 0..=RESTARTS {
         let mut session = Session {
             server: rt::spawn("compositor", if test { "desktop-test" } else { "desktop" })?,
@@ -204,58 +209,91 @@ fn run(test: bool) -> Result<(), i64> {
             files_running: false,
         };
         let outcome = (|| -> Result<bool, i64> {
-            let identity = gui::connect()?;
-            gui::scalar(t::CLOSE)?;
             // Drop the launcher window before replacing its compositor/session.
-            let mut window =
-                Window::create(GuiWindowDesc::new(20, 20, 320, 200)).map_err(gui_error)?;
+            let mut window = Window::create_at(20, 20, 320, 200).map_err(gui_error)?;
+            let identity = window.session;
             for index in 0..3 {
                 session.toggle(index)?;
             }
-            render(&mut window, &session, None).map_err(gui_error)?;
+            let mut dirty = true;
             gui::log(format_args!(
                 "[DESKTOP:READY] generation={generation} session={identity} clients=3 quota=4\n"
             ));
             loop {
+                let old_clients = session.clients;
                 if !session.observe()? {
                     return Ok(true);
                 }
-                let event = match window.poll() {
-                    Ok(event) => event,
-                    Err(Error::WouldBlock) => {
-                        rt::sleep(1)?;
+                dirty |= old_clients != session.clients;
+                for _ in 0..16 {
+                    let event = match window.poll() {
+                        Ok(event) => event,
+                        Err(Error::WouldBlock) => {
+                            break;
+                        }
+                        Err(Error::Disconnected) => return Ok(true),
+                        Err(_) => return Err(IO_ERROR),
+                    };
+                    dirty |= event.kind != 0;
+                    if diagnostics.visible {
+                        diagnostics.event(&event);
                         continue;
                     }
-                    Err(Error::Disconnected) => return Ok(true),
-                    Err(_) => return Err(IO_ERROR),
-                };
-                let mut action = render(&mut window, &session, Some(&event)).map_err(gui_error)?;
-                if event.kind == 2 && event.state == 1 {
-                    match event.codepoint {
-                        49..=51 => action = event.codepoint - 48,
-                        114 if !session.files_running => return Ok(true),
-                        113 if !session.files_running => return Ok(false),
-                        102 if !test => {
-                            if let Err(error) = session.files() {
-                                gui::log(format_args!("[DESKTOP:LAUNCH_ERROR] error={error}\n"));
+                    let mut action = 0;
+                    if event.kind == 3
+                        && event.changed & event.buttons & 1 != 0
+                        && (160..300).contains(&event.x)
+                    {
+                        for index in 0..3 {
+                            if (88 + index * 30..112 + index * 30).contains(&event.y) {
+                                action = index as u32 + 1;
                             }
                         }
-                        116 => {
-                            if let Err(error) = session.terminal() {
-                                gui::log(format_args!("[DESKTOP:LAUNCH_ERROR] error={error}\n"));
-                            }
-                        }
-                        102 if test => session.probe(2, "red")?,
-                        98 if test => session.probe(1, "blue")?,
-                        _ => {}
                     }
-                }
-                if (1..=3).contains(&action) {
-                    if let Err(error) = session.toggle(action as usize - 1) {
+                    if event.kind == 2 && event.state == 1 {
+                        match event.codepoint {
+                            49..=51 => action = event.codepoint - 48,
+                            114 if !session.files_running => return Ok(true),
+                            113 if !session.files_running => return Ok(false),
+                            102 if !test => {
+                                if let Err(error) = session.files() {
+                                    gui::log(format_args!(
+                                        "[DESKTOP:LAUNCH_ERROR] error={error}\n"
+                                    ));
+                                }
+                            }
+                            116 => {
+                                if let Err(error) = session.terminal() {
+                                    gui::log(format_args!(
+                                        "[DESKTOP:LAUNCH_ERROR] error={error}\n"
+                                    ));
+                                }
+                            }
+                            102 if test => session.probe(2, "red")?,
+                            98 if test => session.probe(1, "blue")?,
+                            98 => diagnostics.visible = true,
+                            _ => {}
+                        }
+                    }
+                    if (1..=3).contains(&action)
+                        && let Err(error) = session.toggle(action as usize - 1)
+                    {
                         gui::log(format_args!("[DESKTOP:LAUNCH_ERROR] error={error}\n"));
                     }
-                    render(&mut window, &session, None).map_err(gui_error)?;
                 }
+                dirty |= diagnostics.turn();
+                if dirty && window.idle() {
+                    if diagnostics.visible {
+                        diagnostics.render(&mut window)
+                    } else {
+                        render(&mut window, &session)
+                    }
+                    .map_err(gui_error)?;
+                    window.begin();
+                    dirty = false;
+                }
+                window.advance().map_err(gui_error)?;
+                rt::sleep(1)?;
             }
         })();
         session.cleanup()?;
@@ -314,6 +352,24 @@ unsafe extern "C" fn anova_main(argc: usize, argv: *const *const u8) -> u32 {
     }
     if argument == b"check" {
         control_check();
+        return 0;
+    }
+    if argument == b"build-check" {
+        build_checks::run();
+        return 0;
+    }
+    if argument == b"connect-full" {
+        assert_eq!(gui::connect(), Err(NO_SPACE));
+        rt::write(b"[DESKTOP:CONNECT_FULL_PASS] quota=4 error_retained=true\n");
+        return 0;
+    }
+    if argument == b"connect-release" {
+        gui::connect().unwrap();
+        gui::scalar(anova_gui::transport::CLOSE).unwrap();
+        gui::log(format_args!(
+            "[DESKTOP:CONNECT_RELEASE_PASS] pid={}\n",
+            rt::info().unwrap().process_id
+        ));
         return 0;
     }
     match run(argument == b"test") {

@@ -3,7 +3,7 @@
 
 **English** | [简体中文](../../zh-CN/milestones/M17_DESKTOP.md)
 
-**Status: M17.1 locally accepted for its bounded five-boot profile. M17.2 is locally accepted within its declared PTY/GCC profile; M17.3 now has local bounded file/editor and real GUI storage-fault acceptance; M17.4–M17.5 remain pending.** This proposal follows the
+**Status: M17.1 locally accepted for its bounded five-boot profile. M17.2 is locally accepted within its declared PTY/GCC profile; M17.3 now has local bounded file/editor and real GUI storage-fault acceptance; M17.4 batch one has bounded local build-diagnostic acceptance; remaining M17.4 and M17.5 stay pending.** This proposal follows the
 [M16 foundation](M16_FOUNDATION.md). The [roadmap](../ROADMAP.md) defines ordering;
 [current status](../guides/STATUS.md) records implemented capabilities and evidence.
 The owner deferred M16 remote closeout on 2026-10-27 and authorized M17 development. See [M17.1 acceptance](../validation/M17.1.md) for `desktop-test`, actual input/fault/reboot evidence, budgets and remaining limits. All stage exits below still apply.
@@ -97,6 +97,12 @@ and exact saved contents after clean shutdown/reboot; separately label any
 unexecuted abrupt-power-loss behavior.
 
 ## M17.4: observations and controlled recovery
+
+The first bounded build/status batch has [its own contract](M17_BUILD.md) and
+[local validation](../validation/M17.4.md). Global resource inspection, general
+task termination and broader service recovery below are still pending. The first
+batch does not complete this whole stage.
+
 
 Expose build logs, command exit/fault status and available global disk, inode,
 memory, task and descriptor observations with their units and sampling scope.

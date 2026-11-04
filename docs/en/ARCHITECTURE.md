@@ -7,7 +7,7 @@ This describes implemented boundaries through the accepted M15.6 reconstruction 
 separately scoped future architecture. Guest toolchains, native SDKs and bounded Rust GUI/GPU
 profiles are implemented; full compiler reconstruction, guest-only image generation, SMP and
 physical hardware remain separate. M16 now implements the backend/cache boundary and a
-controlled ext4 profiles, explicit JBD2 recovery and opt-in migration/build acceptance; M17.1 has bounded local session/input/fault/reboot acceptance; M17.2 adds the locally accepted PTY terminal; M17.3 has local bounded file/editor and real GUI storage-fault acceptance; M17.4–M17.5 remain pending. Current evidence is in [STATUS](guides/STATUS.md).
+controlled ext4 profiles, explicit JBD2 recovery and opt-in migration/build acceptance; M17.1 has bounded local session/input/fault/reboot acceptance; M17.2 adds the locally accepted PTY terminal; M17.3 has local bounded file/editor and real GUI storage-fault acceptance; M17.4 batch one has bounded local build-diagnostic acceptance; remaining M17.4 and M17.5 stay pending. Current evidence is in [STATUS](guides/STATUS.md).
 
 ## 1. Overall structure
 
@@ -739,3 +739,21 @@ syscalls without pausing a save or substituting storage responses. After an erro
 `FILES:BUFFER` records path, length, cursor, dirty state and an FNV-1a64 fingerprint;
 buffers up to 64 bytes additionally record every byte in hexadecimal. Exact disk
 dumps and SHA-256 remain separate from these buffer observations.
+
+## M17.4 controlled-build boundary
+
+The launcher integrates diagnostics in its existing window and pumps the same
+acknowledged asynchronous transport as Files/terminal. Separate experimental
+`0x104` starts a fixed explicitly admitted Linux GCC leader, sharing the existing
+PTY pool and tagged-family ownership. Exact wait status is independent of the
+interactive shell. Four fixed 8 KiB raw merged-output records use attempt numbers
+and never-reused job PIDs, retain completed logs across compositor/session
+replacement in the same launcher, and explicitly report byte/record eviction.
+Only a successful compiler with complete capture requests staging-file publication; failed/cut builds preserve
+the earlier executable. CLOSE reaps/closes even if staging cleanup reports an
+error. PTY write/poll/wakeup predicates share exact CRLF/echo room and EOF
+checks to prevent a false-ready writer from starving the nonpreemptible kernel.
+Kernel block failures now report queue/completion/timeout metadata without
+changing the existing deadline or fail-closed policy. See [build contract](milestones/M17_BUILD.md)
+and [actual first-batch validation](validation/M17.4.md). Global resources,
+general task termination, broader recovery and M17.5 remain independent.
