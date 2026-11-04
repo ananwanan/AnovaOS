@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #![no_std]
 #![no_main]
-//! Exercise VFS/ext2/ext4 syscalls, real heap exhaustion, offsets, exec/cwd, reboot and pipes.
+//! Exercise VFS/ext2/ext4 syscalls, checked file publication, exhaustion, offsets and pipes.
 //! Child modes validate resources after fork/exec; shell-check reads files produced by its script.
 use anova_rt::{self as rt, abi::*};
 mod disk;
@@ -28,6 +28,7 @@ fn content(path: &str, expected: &[u8]) {
     rt::close(fd).unwrap();
 }
 fn files() {
+    file_publication();
     assert_eq!(rt::open("/etc/motd", OPEN_WRITE), Err(READ_ONLY));
     assert_eq!(rt::open("/absent", OPEN_READ), Err(NOT_FOUND));
     assert_eq!(rt::open("/etc/motd/../motd", OPEN_READ), Err(NOT_DIRECTORY));
@@ -101,6 +102,89 @@ fn files() {
     assert_eq!(required, 7, "Missing console companion or PTY device");
     rt::close(d).unwrap();
     rt::write(b"[FS:CASE] paths-copy-offset-fork-exec-cwd passed=true\n");
+}
+
+fn file_publication() {
+    use rt::abi::files::{self, Request};
+    let source = "/tmp/publish-source";
+    let target = "/tmp/publish-target";
+    for (path, bytes) in [(source, b"new"), (target, b"old")] {
+        let fd = rt::open(path, OPEN_CREATE | OPEN_WRITE | OPEN_EXCLUSIVE).unwrap();
+        rt::write_all(fd, bytes).unwrap();
+        rt::close(fd).unwrap();
+    }
+    let request = Request {
+        from: source.as_ptr() as u64,
+        from_length: source.len() as u64,
+        to: target.as_ptr() as u64,
+        to_length: target.len() as u64,
+        reserved: 0,
+    };
+    let call = |operation, request: Request| {
+        let bytes = request.bytes();
+        // SAFETY: The complete initialized request is live. Deliberately invalid path
+        // pointers below must be rejected after both inputs are copied, before mutation.
+        unsafe {
+            rt::raw(
+                files::SYSCALL,
+                files::command(operation),
+                bytes.as_ptr() as u64,
+                bytes.len() as u64,
+            )
+        }
+    };
+    // SAFETY: Unknown versions and wrong record lengths must reject before pointer access;
+    // a null record address with the correct size must return BAD_ADDRESS without mutation.
+    unsafe {
+        assert_eq!(rt::raw(files::SYSCALL, 0, 0, 40), UNSUPPORTED);
+        assert_eq!(
+            rt::raw(files::SYSCALL, files::command(files::RENAME), 0, 39),
+            INVALID_ARGUMENT
+        );
+        assert_eq!(
+            rt::raw(files::SYSCALL, files::command(files::RENAME), 0, 40),
+            BAD_ADDRESS
+        );
+    }
+    for invalid in [
+        Request {
+            reserved: 1,
+            ..request
+        },
+        Request {
+            from_length: 0,
+            ..request
+        },
+        Request {
+            to_length: 129,
+            ..request
+        },
+    ] {
+        assert_eq!(call(files::REPLACE, invalid), INVALID_ARGUMENT);
+    }
+    assert_eq!(
+        call(files::REPLACE, Request { to: 0, ..request }),
+        BAD_ADDRESS
+    );
+    assert_eq!(
+        call(files::REPLACE, Request { from: 0, ..request }),
+        BAD_ADDRESS
+    );
+    assert_eq!(rt::files::rename(source, target), Err(ALREADY_EXISTS));
+    content(source, b"new");
+    content(target, b"old");
+    assert_eq!(rt::files::replace("/tmp", target), Err(IS_DIRECTORY));
+    assert_eq!(rt::files::replace(source, "/tmp"), Err(IS_DIRECTORY));
+    content(source, b"new");
+    content(target, b"old");
+    rt::files::replace(source, target).unwrap();
+    assert_eq!(rt::open(source, OPEN_READ), Err(NOT_FOUND));
+    content(target, b"new");
+    rt::files::rename(target, source).unwrap();
+    assert_eq!(rt::open(target, OPEN_READ), Err(NOT_FOUND));
+    content(source, b"new");
+    rt::unlink(source).unwrap();
+    rt::write(b"[FS:PUBLICATION] checked inputs; no-clobber and replacement passed\n");
 }
 fn pipes() {
     let [r, w] = rt::pipe().unwrap();

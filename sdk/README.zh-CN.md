@@ -46,3 +46,12 @@ Rust 安全封装，共享同一语义。协议协商、句柄生命周期/错�
 见 [GUI SDK](gui/README.zh-CN.md)与 [runtime 范围](../docs/zh-CN/milestones/M14_RUNTIME.md)。
 
 源码导出和校验清单同时包含 `README.md`、`README.zh-CN.md`，导出的 SDK 也可切换语言。
+
+## 实验性桌面接口
+
+`anova-rt::process`（`0x101`）和 `anova-rt::pty`（`0x102`）是单独版本化的桌面实验接口，不改变冻结的 SDK/native-v1 调用记录。PTY 句柄要求准确创建者、有界非阻塞传输，并由内核清理准入的 Linux 进程族。GUI C/C++/Rust ABI 仍为 1.0；可复用的底层 Rust Canvas 不授予传输权限。详见 [PTY 契约](../docs/zh-CN/milestones/M17_PTY.md)。
+
+`anova-rt::build`（`0x104`）是另一个独立实验，不改变 SDK/native v1 或 GUI C ABI。
+它启动一个固定准入的 GCC 任务，复制真实 wait 状态，按准确创建者所有权读取
+有界合并输出。即使临时产物清理报错，CLOSE 仍使身份失效并回收任务。启动器
+拥有易失的逐次记录，并另行请求文件发布。见[受控构建契约](../docs/zh-CN/milestones/M17_BUILD.md)。

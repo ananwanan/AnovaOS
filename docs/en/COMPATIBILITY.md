@@ -254,3 +254,7 @@ saves, reads logs and interrupts under storage pressure. See [M16.5](validation/
 and [M16.6](validation/M16.6.md) for exact faults/budgets and local evidence. General
 Linux journals, arbitrary projects, desktop workflows and compiler bootstrap need
 independent profiles; ext2 remains the default/recovery route.
+
+## M17.2 graphical PTY profile
+
+The separately configured BusyBox 1.36.1/musl 1.2.4 interactive ash has local real-PTY input, foreground Ctrl+C, WUNTRACED child-stop reporting, merged stdout/stderr, resize/SIGWINCH and explicit shell restart acceptance. Existing source-built GCC 11.2.0 compiles the selected C application through graphical input and its exact executable runs again after reboot. This does not replace the original M9 BusyBox seed or establish arbitrary shell jobs, WCONTINUED, group wait, background TTIN/TTOU enforcement, full-screen terminal editors, Unicode or compiler reconstruction. See [M17.2](validation/M17.2.md) for the exact profile.

@@ -744,6 +744,123 @@ fn rename_replacement_preserves_open_bytes_and_description_lock_lifetime() {
     fs.clear(&mut fds);
     assert_eq!(fs.live_objects(), (0, 0));
 }
+
+#[test]
+fn editor_publication_requires_explicit_replacement_and_preserves_rejected_paths() {
+    let image = image();
+    let mut fs = Vfs::new(&image).unwrap();
+    let mut files = Descriptors::default();
+    for (path, bytes) in [("/tmp/source", b"new"), ("/tmp/target", b"old")] {
+        let fd = fs
+            .open(
+                &mut files,
+                ROOT,
+                path,
+                OPEN_CREATE | OPEN_WRITE | OPEN_EXCLUSIVE,
+            )
+            .unwrap();
+        fs.write(&files, fd, bytes).unwrap();
+        fs.close(&mut files, fd).unwrap();
+    }
+    let original_source = fs.metadata(ROOT, "/tmp/source").unwrap();
+    let original_target = fs.metadata(ROOT, "/tmp/target").unwrap();
+    assert_eq!(
+        fs.rename_file(ROOT, "/tmp/source", "/tmp/target", false),
+        Err(ALREADY_EXISTS)
+    );
+    assert_eq!(fs.metadata(ROOT, "/tmp/source"), Ok(original_source));
+    assert_eq!(fs.metadata(ROOT, "/tmp/target"), Ok(original_target));
+    assert_eq!(
+        fs.rename_file(ROOT, "/tmp/source", "/tmp/source", false),
+        Err(ALREADY_EXISTS)
+    );
+    fs.mkdir(ROOT, "/tmp/directory").unwrap();
+    assert_eq!(
+        fs.rename_file(ROOT, "/tmp/directory", "/tmp/moved", true),
+        Err(IS_DIRECTORY)
+    );
+    assert_eq!(
+        fs.rename_file(ROOT, "/tmp/source", "/tmp/directory", true),
+        Err(IS_DIRECTORY)
+    );
+    assert_eq!(
+        fs.rename_file(ROOT, "/text", "/tmp/moved", true),
+        Err(INVALID_ARGUMENT)
+    );
+    assert_eq!(
+        fs.rename_file(ROOT, "/tmp/source", "/text", true),
+        Err(INVALID_ARGUMENT)
+    );
+    assert_eq!(fs.metadata(ROOT, "/tmp/source"), Ok(original_source));
+    fs.rename_file(ROOT, "/tmp/source", "/tmp/target", true)
+        .unwrap();
+    assert_eq!(fs.metadata(ROOT, "/tmp/source"), Err(NOT_FOUND));
+    assert_eq!(fs.metadata(ROOT, "/tmp/target"), Ok(original_source));
+    let fd = fs.open(&mut files, ROOT, "/tmp/target", OPEN_READ).unwrap();
+    let mut bytes = [0; 3];
+    assert_eq!(fs.read(&files, fd, &mut bytes), Ok(3));
+    assert_eq!(&bytes, b"new");
+    fs.close(&mut files, fd).unwrap();
+    fs.rename_file(ROOT, "/tmp/target", "/tmp/moved", false)
+        .unwrap();
+    assert_eq!(fs.metadata(ROOT, "/tmp/moved"), Ok(original_source));
+    assert_eq!(fs.live_objects(), (0, 0));
+}
+
+#[test]
+fn native_publication_shares_linux_personality_disk_bytes_and_immutable_marker() {
+    let image = image();
+    let device = timestamp_disk();
+    let mut fs = Vfs::new(&image).unwrap();
+    fs.insert(ROOT, "persist", Data::Directory, Mount::Initramfs)
+        .unwrap();
+    fs.mount_disk(Ext2::mount(Box::new(device.clone())).unwrap())
+        .unwrap();
+    let mut files = Descriptors::default();
+    let fd = fs
+        .open(
+            &mut files,
+            ROOT,
+            "/persist/source.c.m17-tmp",
+            OPEN_CREATE | OPEN_WRITE | OPEN_EXCLUSIVE,
+        )
+        .unwrap();
+    fs.write(&files, fd, b"int main(void) { return 7; }\n")
+        .unwrap();
+    fs.fsync(&files, fd).unwrap();
+    fs.close(&mut files, fd).unwrap();
+    fs.rename_file(
+        ROOT,
+        "/persist/source.c.m17-tmp",
+        "/persist/source.c",
+        false,
+    )
+    .unwrap();
+    let parent = fs
+        .open(&mut files, ROOT, "/persist", OPEN_READ | OPEN_DIRECTORY)
+        .unwrap();
+    fs.fsync(&files, parent).unwrap();
+    fs.close(&mut files, parent).unwrap();
+    assert_eq!(
+        fs.rename_file(ROOT, "/persist/source.c", "/persist/.anova-abi", true),
+        Err(READ_ONLY)
+    );
+    fs.shutdown().unwrap();
+    drop(fs);
+    let mut fs = Vfs::new(&image).unwrap();
+    fs.insert(ROOT, "persist", Data::Directory, Mount::Initramfs)
+        .unwrap();
+    fs.mount_disk(Ext2::mount(Box::new(device)).unwrap())
+        .unwrap();
+    let fd = fs
+        .open(&mut files, ROOT, "/persist/source.c", OPEN_READ)
+        .unwrap();
+    let mut bytes = [0; 64];
+    let length = fs.read(&files, fd, &mut bytes).unwrap();
+    assert_eq!(&bytes[..length], b"int main(void) { return 7; }\n");
+    fs.close(&mut files, fd).unwrap();
+    fs.shutdown().unwrap();
+}
 #[test]
 fn shared_thread_table_publishes_close_and_releases_only_on_last_owner() {
     let image = image();

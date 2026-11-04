@@ -649,3 +649,71 @@ used 9,494,480 heap bytes, 1,564 VFS slots, 14 tasks, 16 FDs/process and 6,072 d
 blocks at peak; the earlier pressure session separately reached real limits and
 verified reuse. Read the capacity record for frame sampling limits, exact input
 closure and complete retained logs before applying these figures to another recipe.
+
+## Accepted M17.1 desktop profile
+
+`cargo xtask desktop-build` builds the native supervisor and existing host-built C/C++/Rust clients, plus a tiny explicitly Linux-personality boundary fixture, without compiler seed downloads. `cargo xtask desktop-image` creates `build/images/anova-desktop.iso`; `cargo xtask run --desktop [--disk build/disks/work.ext4]` boots it with an independent COM1 shell. Launcher keys: `1`/`2`/`3` launch or stop, `r` replaces the session, `q` exits. Focus the launcher first.
+
+`cargo xtask desktop-test` runs five headless QEMU boots with loopback-only TCP QMP, genuine physical input/fault/restart scenarios, task/FD pressure, exact saved bytes, ordinary ext4 reboot, ext2 and missing-device fallback. Evidence is under `build/desktop-test/`; `desktop-test.result.txt` reports the overall result and failures remain failures. The explicit `desktop test` session (selected automatically by the dedicated test ISO) enables launcher `f`/`b` raw-client probes and F12 compositor UD2; these are not ordinary desktop shortcuts. The selected 5-second gesture/UART budgets and unchanged resource limits passed locally. See [M17.1](../validation/M17.1.md) for measured scope and preserved records. This retains the M17.1 profile; the separately accepted M17.2 terminal is described below.
+
+## M17.2 real PTY terminal
+
+Desktop archives now also build/admit the native terminal and a separate pinned ash with foreground job control. Keep its generated `busybox-terminal-1.36.1-source.tar.gz` redistribution bundle. Focus the launcher and press `t`; F4 closes, F5 starts a new shell, Shift-PgUp/PgDn browses history. A terminal replaces the third GUI client, keeping four windows. `run --desktop` includes shell-only support; `terminal-image --toolchain` or `run --desktop --toolchain --disk build/disks/pty-work.ext4` adds the verified existing M11 tools. Create that work disk explicitly with `ext4-journal-image --linux`; immutable personality markers still govern executable admission.
+
+`cargo xtask desktop-pty-test` requires the completed source-built M11 stage and runs the actual graphical C compilation plus all PTY failure/reboot checks. `--without-toolchain` selects a smaller terminal/runtime-only gate and cannot establish compiler acceptance. Results, UART/TCP-QMP transcripts, real PPM captures and exact stopped-disk dumps are under `build/desktop-pty-test/`. `terminal-test` remains the independent UART gate. See [PTY contract](../milestones/M17_PTY.md) and [M17.2 evidence](../validation/M17.2.md). M17.3 bounded files/editing and real GUI storage faults are locally accepted; M17.5 retains full three-language graphical workflow and compiler-load latency acceptance.
+
+## Minimal graphical source editing
+
+The opt-in desktop includes Files. Focus the launcher and press `f`; browse or
+open `/persist` paths, edit and save with F5/Ctrl+S. The graphical PTY (`t`) reads
+those exact paths from the same mounted VFS. Create a fresh Linux-personality
+work disk when compiler outputs will be executed. See [M17 files](../milestones/M17_FILES.md)
+for bounds, unsaved/overwrite prompts and recovery-copy handling.
+
+```sh
+cargo xtask desktop-image
+cargo xtask ext4-journal-image --linux build/disks/editor-work.ext4
+cargo xtask run --desktop --disk build/disks/editor-work.ext4
+cargo xtask desktop-files-test
+cargo xtask desktop-files-fault-test
+# Reproduce one fault case independently.
+cargo xtask desktop-files-fault-test --case postpublish-fsync
+```
+
+`cargo xtask test-host` includes the allocation-free editor fault matrix. The
+main-push-only workflow preserves existing desktop/PTY gates and then runs the
+new file/editor gate; no feature-branch or manual trigger is added. Actual local
+checks and bounded real GUI storage-fault acceptance are recorded in [M17.3](../validation/M17.3.md).
+
+`desktop-files-fault-test` is the separate end-to-end storage entry. It prepares
+independent regular images under `build/disks/`, allocates real ext4 inode/block
+pressure, and configures QMP blkdebug write/flush failures after mount. The guest
+still uses the ordinary graphical editor, VFS, ext4/JBD2 and virtio-blk paths.
+`build/desktop-files-fault-test/latest.txt` identifies the timestamped run directory;
+per-case records retain fixture scripts/counters, UART/QMP transcripts, actual
+scanouts, original failed disks, recovery policy and exact file dumps/hashes.
+A failed attempt remains recorded as `result=Err`; only an executed successful
+result establishes acceptance. The case list and actual run results are in
+[M17.3 validation](../validation/M17.3.md).
+
+## Controlled build diagnostics
+
+With the M11 profile and Linux work disk, focus the launcher, press `b`, then `g`
+to compile saved `/persist/build.c` through the fixed controlled GCC recipe. The
+view displays the command, exact task identity, lifecycle, merged stdout/stderr,
+real exit reason/code and publication errors. `[`/`]` selects one of four 8 KiB
+records, PgUp/PgDn scrolls, Esc returns. Successful output is `/persist/build-app`;
+synchronize separately before normal shutdown. Existing staging files require
+explicit inspection instead of truncation. Missing compiler/resource limits are
+visible start failures; release the indicated capacity and retry.
+
+`cargo xtask desktop-build-test` runs the real Files/GCC/PTY repair loop and a
+separate admitted Linux fault-producer ISO, with 5 s interaction, 35 s build and
+500 ms compiler-observer bounds. Timestamped evidence is under
+`build/desktop-build-test/`; `latest.txt` selects the run and `result.txt` preserves
+success or failure. It asserts genuine scanout, exact prior artifact bytes,
+reboot retention, actual SIGILL, long-output truncation, shared PTY/task/FD
+exhaustion, usercopy retention, family cleanup and stale identity rejection.
+See [M17.4 contract](../milestones/M17_BUILD.md) and [validation](../validation/M17.4.md).
+The main-push-only toolchain job includes this gate; configured CI is not executed
+remote acceptance. Preserve all original desktop/PTY/files/storage-fault gates.

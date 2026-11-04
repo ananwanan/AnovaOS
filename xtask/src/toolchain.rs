@@ -17,6 +17,28 @@ pub(super) fn append(bytes: &mut Vec<u8>, kind: u8, path: &str, data: &[u8]) {
     bytes[8..12].copy_from_slice(&count.to_le_bytes());
 }
 pub(super) fn pack(root: &Path) -> Result<PathBuf> {
+    let mut bytes = fs::read(root.join("build/apps/initramfs.anovafs"))?;
+    append_profile(root, &mut bytes)?;
+    // Decode the entire archive now, before handing any of it to a kernel.
+    let mut archive =
+        anova_vfs::archive::Archive::new(&bytes).map_err(|e| format!("Toolchain archive: {e}"))?;
+    while archive
+        .entry()
+        .map_err(|e| format!("Toolchain entry: {e}"))?
+        .is_some()
+    {}
+    let work = root.join("build/toolchain");
+    let path = work.join("initramfs.anovafs");
+    fs::write(&path, &bytes)?;
+    fs::write(
+        work.join("archive.sha256"),
+        format!("{:x}\n", Sha256::digest(&bytes)),
+    )?;
+    Ok(path)
+}
+
+/// Append the same verified GCC/sysroot admission to a native desktop archive.
+pub(super) fn append_profile(root: &Path, bytes: &mut Vec<u8>) -> Result<()> {
     command(
         Command::new("python3")
             .arg(root.join("ports/gcc/build.py"))
@@ -24,12 +46,11 @@ pub(super) fn pack(root: &Path) -> Result<PathBuf> {
     )?;
     command(Command::new("python3").arg(root.join("ports/gcc/package.py")))?;
     let work = root.join("build/toolchain");
-    let mut bytes = fs::read(root.join("build/apps/initramfs.anovafs"))?;
     let mut paths = vec![work.join("package/tc")];
     while let Some(path) = paths.pop() {
         let guest = format!("/{}", path.strip_prefix(work.join("package"))?.display());
         if path.is_dir() {
-            append(&mut bytes, 2, &guest, &[]);
+            append(bytes, 2, &guest, &[]);
             let mut children = fs::read_dir(&path)?
                 .map(|p| p.map(|p| p.path()))
                 .collect::<std::io::Result<Vec<_>>>()?;
@@ -48,11 +69,11 @@ pub(super) fn pack(root: &Path) -> Result<PathBuf> {
             } else {
                 1
             };
-            append(&mut bytes, kind, &guest, &data);
+            append(bytes, kind, &guest, &data);
         }
     }
     // GCC's standard sysroot layout uses /usr/include and /usr/lib below /tc.
-    append(&mut bytes, 3, "/tc/usr", b".");
+    append(bytes, 3, "/tc/usr", b".");
     let wrapper = work.join("cc.elf");
     command(
         Command::new("musl-gcc")
@@ -69,7 +90,7 @@ pub(super) fn pack(root: &Path) -> Result<PathBuf> {
             .arg("-o")
             .arg(&wrapper),
     )?;
-    append(&mut bytes, 5, "/bin/gcc", &fs::read(wrapper)?);
+    append(bytes, 5, "/bin/gcc", &fs::read(wrapper)?);
     let probe = work.join("runtime.elf");
     command(
         Command::new("musl-gcc")
@@ -86,26 +107,12 @@ pub(super) fn pack(root: &Path) -> Result<PathBuf> {
             .arg("-o")
             .arg(&probe),
     )?;
-    append(&mut bytes, 5, "/bin/m11-runtime", &fs::read(probe)?);
+    append(bytes, 5, "/bin/m11-runtime", &fs::read(probe)?);
 
     for name in ["g++", "make", "cc"] {
-        append(&mut bytes, 3, &format!("/bin/{name}"), b"gcc");
+        append(bytes, 3, &format!("/bin/{name}"), b"gcc");
     }
-    // Decode the entire archive now, before handing any of it to a kernel.
-    let mut archive =
-        anova_vfs::archive::Archive::new(&bytes).map_err(|e| format!("Toolchain archive: {e}"))?;
-    while archive
-        .entry()
-        .map_err(|e| format!("Toolchain entry: {e}"))?
-        .is_some()
-    {}
-    let path = work.join("initramfs.anovafs");
-    fs::write(&path, &bytes)?;
-    fs::write(
-        work.join("archive.sha256"),
-        format!("{:x}\n", Sha256::digest(&bytes)),
-    )?;
-    Ok(path)
+    Ok(())
 }
 pub fn image(root: &Path) -> Result<PathBuf> {
     apps::build(root, false)?;

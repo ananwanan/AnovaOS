@@ -452,3 +452,61 @@ bzip2、中断/重启保留和宿主测量的前台 UART 预算。见 [M16.5](..
 1,564 个 VFS 槽、14 个任务、每进程 16 个 FD 和 6,072 个磁盘块；此前独立压力
 会话真实达到上限并验证复用。将这些数字用于其他配方前，应阅读容量记录中的
 物理页采样限制、精确输入闭包与完整保留日志。
+
+## M17.1 已验收桌面配置
+
+`cargo xtask desktop-build` 构建原生监督器及宿主构建的既有 C/C++/Rust 客户端，并显式准入一个小型 Linux personality 边界探针，不下载编译器种子。`cargo xtask desktop-image` 生成 `build/images/anova-desktop.iso`，`cargo xtask run --desktop [--disk build/disks/work.ext4]` 启动桌面及独立 COM1 shell。先聚焦启动器，使用 `1`/`2`/`3` 启动或停止、`r` 替换会话、`q` 退出。
+
+`cargo xtask desktop-test` 通过仅回环 TCP QMP 执行五次无窗口 QEMU 启动，验证实际物理输入/故障/重启、任务/FD 压力、精确保存内容、普通 ext4 重启、ext2 及缺设备回退。证据位于 `build/desktop-test/`，`desktop-test.result.txt` 报告整体结果，失败不会被掩盖。显式 `desktop test` 会话（专用测试 ISO 自动选择）启用启动器 `f`/`b` 原始客户端探针和 F12 合成器 UD2，不属于普通桌面快捷键。选定的 5 秒操作/UART 预算及原资源限额已本地通过。实测边界和保留记录见 [M17.1](../validation/M17.1.md)。此项保留 M17.1 配置；另行验收的 M17.2 终端见下文。
+
+## M17.2 真实 PTY 终端
+
+桌面归档现在还构建并准入原生终端及单独固定版本、启用前台作业控制的 ash。分发时保留生成的 `busybox-terminal-1.36.1-source.tar.gz` 源码包。聚焦启动器按 `t`；F4 关闭，F5 重开 shell，Shift-PgUp/PgDn 查看历史。终端替换第三个 GUI 客户端，保持四窗口。`run --desktop` 提供 shell；`terminal-image --toolchain` 或 `run --desktop --toolchain --disk build/disks/pty-work.ext4` 加入已验证的 M11 工具。用 `ext4-journal-image --linux` 显式创建该工作盘；不可变 personality 标记继续决定可执行准入。
+
+`cargo xtask desktop-pty-test` 需要完成源码构建的 M11 安装树，执行实际图形 C 编译及 PTY 故障/重启检查；`--without-toolchain` 仅运行较小终端/运行时门禁，不能代替编译器验收。结果、UART/TCP-QMP、真实 PPM 和停盘精确转储位于 `build/desktop-pty-test/`。原 `terminal-test` 仍为独立 UART 门禁。详见 [PTY 契约](../milestones/M17_PTY.md)及 [M17.2 证据](../validation/M17.2.md)。M17.3 有界文件/编辑器及真实 GUI 存储故障已本地验收；M17.5 仍需完整三语言图形开发流程和编译负载响应验收。
+
+## 最小图形源码编辑
+
+显式桌面镜像包含 Files；聚焦启动器按 `f`，浏览或打开 `/persist` 路径，编辑后
+按 F5/Ctrl+S 保存。图形 PTY（`t`）从同一个挂载 VFS 读取完全相同的路径。
+需要执行编译产物时，创建全新 Linux personality 工作盘。边界、未保存/覆盖
+确认及恢复副本操作见 [M17 文件](../milestones/M17_FILES.md)。
+
+```sh
+cargo xtask desktop-image
+cargo xtask ext4-journal-image --linux build/disks/editor-work.ext4
+cargo xtask run --desktop --disk build/disks/editor-work.ext4
+cargo xtask desktop-files-test
+cargo xtask desktop-files-fault-test
+# 单独复现一个故障用例。
+cargo xtask desktop-files-fault-test --case postpublish-fsync
+```
+
+`cargo xtask test-host` 包含无分配编辑器故障矩阵。仅 main 推送的 workflow 保留
+现有桌面/PTY 门禁，再运行新文件/编辑器门禁，没有新增功能分支或手动触发。
+实际本地检查及有界真实 GUI 存储故障验收见 [M17.3](../validation/M17.3.md)。
+
+`desktop-files-fault-test` 是独立的端到端存储入口，在 `build/disks/` 准备独立
+普通镜像，真实分配 ext4 inode/块以形成压力，并在挂载后通过 QMP 配置 blkdebug
+写入/flush 故障。客体仍使用普通图形编辑器、VFS、ext4/JBD2 及 virtio-blk 路径。
+`build/desktop-files-fault-test/latest.txt` 指向按时间戳保留的运行目录，各用例保留
+夹具脚本/计数、UART/QMP、真实截图、原始失败磁盘、恢复策略及精确文件转储/哈希。
+失败尝试保留为 `result=Err`；只有实际运行成功的结果才代表验收。用例列表和
+实际结果见 [M17.3 验证](../validation/M17.3.md)。
+
+## 受控构建诊断
+
+使用 M11 工具配置与 Linux 工作盘，聚焦启动器按 `b`，再按 `g`，通过固定受控
+GCC 配方编译已保存的 `/persist/build.c`。界面显示命令、准确任务身份、生命周期、
+合并 stdout/stderr、真实退出 reason/code 和发布错误。`[`/`]` 选择四条 8 KiB
+记录之一，PgUp/PgDn 滚动，Esc 返回。成功产物为 `/persist/build-app`，正常关机前
+另行同步。已有临时文件必须检查，不会直接截断。缺少编译器或资源限额均显示为
+启动失败；释放对应容量后重试。
+
+`cargo xtask desktop-build-test` 执行真实 Files/GCC/PTY 修复闭环及独立准入 Linux
+故障输出镜像，保持 5 秒交互、35 秒构建和 500 ms 编译观察界限。带时间戳证据位于
+`build/desktop-build-test/`；`latest.txt` 指向本轮，`result.txt` 保留成功或失败。
+断言包括真实显示、旧产物精确字节、重启保留、真实 SIGILL、长输出截断、共享
+PTY/任务/FD 耗尽、用户复制保留、进程族清理和旧身份拒绝。见 [M17.4 契约](../milestones/M17_BUILD.md)
+及[验证](../validation/M17.4.md)。仅 main 推送触发的工具链任务加入本门禁；CI 配置
+不等于已执行的远端验收。保留所有原有桌面、PTY、文件和存储故障门禁。

@@ -218,7 +218,7 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `docs/zh-CN/validation/M8.md` | Provide the complete Simplified Chinese counterpart of `docs/en/validation/M8.md`, preserving technical scope, commands, evidence and original legal texts. |
 | `docs/zh-CN/validation/M8_OPTIMIZATION.md` | Provide the complete Simplified Chinese counterpart of `docs/en/validation/M8_OPTIMIZATION.md`, preserving technical scope, commands, evidence and original legal texts. |
 | `docs/zh-CN/validation/M9.md` | Provide the complete Simplified Chinese counterpart of `docs/en/validation/M9.md`, preserving technical scope, commands, evidence and original legal texts. |
-| `kernel/Cargo.toml` | Builds the bare-metal kernel and isolated QEMU failure-injection configurations. |
+| `kernel/Cargo.toml` | Build the bare-metal kernel, sampled desktop sessions and opt-in isolated QEMU failure tests. |
 | `kernel/build.rs` | Reject host-target kernel builds and select the kernel-only linker script. |
 | `kernel/src/abi/mod.rs` | Adapt native system queries; task owns process lifecycle and fs owns descriptor calls. |
 | `kernel/src/arch/mod.rs` | Select the implemented x86_64 hardware architecture boundary. |
@@ -238,9 +238,9 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `kernel/src/drivers/mod.rs` | Own BSP device initialization, persistent VFS handoff and optional scheduler-polled PS/2 input. |
 | `kernel/src/drivers/network.rs` | Own modern virtio-net split queues, frame/DMA bounds, ownership fences and reset/quarantine. |
 | `kernel/src/drivers/pci.rs` | Enumerate PCI bridges/functions and admit bounded modern virtio MMIO capabilities/BARs. |
-| `kernel/src/drivers/virtio.rs` | Own a coherent split block queue, checked transfers/FLUSH, timeout, reset and DMA quarantine. |
+| `kernel/src/drivers/virtio.rs` | Own a coherent split block queue, checked transfers/FLUSH, diagnostic failure metadata, timeout, reset and DMA quarantine. |
 | `kernel/src/fs/mod.rs` | Bridge checked native user buffers to the shared VFS and polled canonical terminal. Calls run on the BSP at IF=0; blocking retains only a copied syscall frame, never a lock. |
-| `kernel/src/fs/tty.rs` | Bounded COM1/four-PTY line disciplines, input/output queues, settings, foreground signals and hangup. |
+| `kernel/src/fs/tty.rs` | Bounded COM1/four-PTY line disciplines, exact write/poll/wakeup progress conditions, settings, foreground signals and hangup. |
 | `kernel/src/graphics.rs` | Validate display mappings, present/reclaim the boot buffer, manage the diagnostic cursor and copy checked user compositor damage. |
 | `kernel/src/gui.rs` | Authenticate executable/server and process/client identities, copy bounded IPC/scanout and clean up lifetimes. |
 | `kernel/src/main.rs` | Boot owned CPU/memory/devices, optional checked software graphics, and isolated user workloads. |
@@ -381,7 +381,7 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `user/gui-client/Cargo.toml` | Build independent native window clients and adversarial transport fixtures. |
 | `user/gui-client/src/main.rs` | Upload private red/blue surfaces, handle focused input and test crash/queue/ownership boundaries. |
 | `user/gui-common/Cargo.toml` | Share internal native GUI transport helpers across the compositor and test programs. |
-| `user/gui-common/src/lib.rs` | Wrap synchronous copied GUI packets and preserve explicit pointer safety contracts. |
+| `user/gui-common/src/lib.rs` | Wrap checked GUI transport/serial records and bound connection retries during asynchronous peer-slot reclamation while preserving real quota errors. |
 | `user/gui-link.rs` | Link independent guest client objects with the Rust GUI library, native CRT and panic boundary. |
 | `user/gui-run/Cargo.toml` | Package the native compositor/client lifecycle supervisor for guest SDK applications. |
 | `user/gui-run/src/main.rs` | Launch isolated GUI processes and require actual expected wait statuses and reaping. |
@@ -431,7 +431,7 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `xtask/src/disk.rs` | Create safe native/Linux ext2 profiles and drive watchdog-bounded reboot/integrity/device-error scenarios. |
 | `xtask/src/foundation.rs` | Create/retain controlled ext4 images and run four QEMU readonly/reboot/rejection gates with source/artifact hashes. |
 | `xtask/src/gpu.rs` | Gate exact-device hardware rendering, full scanout comparisons, fault/reset recovery and headless CPU fallback. |
-| `xtask/src/graphics.rs` | Verify actual QMP pixels, bounded capture parsing, serial recovery and clean shutdown with and without VGA. |
+| `xtask/src/graphics.rs` | Verify actual scanout/COM1 and bounded QMP transactions; retain partial input and retry only empty TCP startup resets within five seconds. |
 | `xtask/src/gui.rs` | Inject actual QMP input and compare native windows, failure recovery and every scanout pixel. |
 | `xtask/src/gui_sdk.rs` | Verify guest edits/builds, physical GUI input, literal scanout, faults and retained reboot hashes. |
 | `xtask/src/gui_sdk_build.rs` | Export a checksummed GUI source SDK with both language guides and package its guest compiler/display image. |
@@ -477,3 +477,65 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `docs/assets/validation/M16_CORE_CI54.json` | Preserve digest-verified core CI artifact result records, exact source identity and bounded accepted scope. |
 | `docs/assets/validation/M16_CAPACITY_LOCAL.json` | Preserve accepted local ext4 kernel capacity, budgets, complete provenance and digest-verified raw logs. |
 | `docs/assets/validation/M16_CORE_CI57.json` | Retain verified current-code core CI artifact results, source identity and artifact digest. |
+| `crates/abi/src/process.rs` | Define the separate versioned direct-child supervision contract and reject invalid versions. |
+| `kernel/src/task/process_control.rs` | Authorize direct-child polling and stopping, preserve status on copy failure and reuse kernel cleanup. |
+| `user/rt/src/process.rs` | Wrap experimental nonblocking child polling and identity-checked stop without changing native v1. |
+| `user/desktop/Cargo.toml` | Build the Rust desktop session supervisor against native process and GUI interfaces. |
+| `user/desktop/src/main.rs` | Own admitted clients/compositor, bounded session replacement, launcher actions and the bounded diagnostic event loop. |
+| `xtask/src/desktop.rs` | Build desktop inputs, explicit Linux boundary/PTY shell admissions and host-built C/C++/Rust clients in opt-in images. |
+| `docs/en/validation/M17.1.md` | Record accepted local desktop input/lifecycle/reboot evidence, budgets, original failure and remaining scope. |
+| `docs/zh-CN/validation/M17.1.md` | Translate accepted desktop scope, process boundary, measurements, failure evidence and remaining work. |
+| `tests/guest/desktop/linux-park.S` | Execute real Linux nanosleep/exit to verify native supervision rejects live Linux children. |
+| `user/desktop/src/checks.rs` | Exhaust and reuse real child/task/FD resources while checking nonchild and Linux boundaries. |
+| `xtask/src/desktop_test.rs` | Drive desktop boots, physical input/scanout, actual faults and exact persisted bytes; share bounded ordinary/fault-configured QEMU startup. |
+| `docs/assets/validation/M17_DESKTOP_LOCAL.json` | Retain desktop source/input identities, predeclared budgets, raw UART/QMP/failure logs and compressed exact screenshots; JSON uses its purpose field instead of a comment. |
+| `crates/abi/src/pty.rs` | Define the separate versioned native PTY wire contract, ownership and checked transfer/geometry bounds. |
+| `crates/terminal/Cargo.toml` | Package bounded terminal/ANSI history and independent compiler-attempt logs for native and host tests. |
+| `crates/terminal/src/lib.rs` | Parse fragmented bounded ANSI, clip/resize cells and retain a fixed 256-line history. |
+| `crates/terminal/src/tests.rs` | Verify cursor/colors/erasure, fragmented controls, history bounds, resize and fresh-producer recovery. |
+| `kernel/src/task/pty.rs` | Own shared private PTY masters for separate interactive/build interfaces, creator checks, admitted Linux families, rollback and failed-copy retention. |
+| `user/rt/src/pty.rs` | Wrap the experimental native PTY session with bounded nonblocking transfers and owned cleanup. |
+| `user/terminal/Cargo.toml` | Build the native graphical PTY client separately from its Linux shell and compiler inputs. |
+| `user/terminal/src/main.rs` | Run bounded GUI/PTY input/output turns, history, visible shell status and explicit restart/close. |
+| `user/terminal/src/window.rs` | Pump immutable acknowledged GUI frames for terminal, Files and launcher diagnostics; release storage ownership across compositor replacements. |
+| `user/terminal/src/checks.rs` | Exercise real PTY/creator/stale/copy/status/task/global-description boundaries and repeated recovery. |
+| `tests/guest/terminal/fixture.c` | Generate actual stdout/stderr, stopped-child, SIGWINCH/output, interrupt and detached-family workloads. |
+| `tests/guest/terminal/hello.c` | Provide the exact C source compiled and rerun through physical graphical-terminal input. |
+| `xtask/src/pty_terminal.rs` | Admit the native terminal, separately pinned interactive ash and optional verified M11 toolchain. |
+| `xtask/src/pty_terminal_test.rs` | Drive graphical PTY/GCC input, real scanout, interruption/resize/history/pressure and exact reboot dumps. |
+| `docs/en/milestones/M17_PTY.md` | Define PTY admission/ownership, async frame pumping, ANSI bounds and shell controls. |
+| `docs/zh-CN/milestones/M17_PTY.md` | Translate the implemented PTY interface, executable policy, limits and controls. |
+| `docs/en/validation/M17.2.md` | Record actual PTY/GCC/reboot acceptance, fixed budgets, retained bytes and failure corrections. |
+| `docs/zh-CN/validation/M17.2.md` | Translate PTY acceptance scope, measurements, recovery proof and remaining work. |
+| `docs/assets/validation/M17_PTY_LOCAL.json` | Retain exact PTY source/tool/input identities, raw successful/failure logs and compressed genuine scanouts; purpose is a JSON field. |
+| `crates/abi/src/files.rs` | Define the checked experimental regular-file rename/replace wire separately from frozen native v1. |
+| `crates/editor/Cargo.toml` | Package the bounded allocation-free source editor and checked publication policy for guest and host tests. |
+| `crates/editor/src/lib.rs` | Own source bytes, exact disk baselines, dirty protection and conservative temporary/backup save transactions. |
+| `crates/editor/src/tests.rs` | Inject required save phase failures, bound paths/buffers and verify exact prior-copy retention. |
+| `user/files/Cargo.toml` | Build the native graphical file browser and source editor using the shared model and runtime. |
+| `user/files/src/main.rs` | Implement bounded directory navigation, path/confirmation dialogs, editing and observed buffer/error diagnostics. |
+| `user/rt/src/files.rs` | Wrap the versioned native no-clobber rename and explicit replacement syscall with exact request records. |
+| `xtask/src/desktop_files_test.rs` | Verify real editor/PTY/reboot bytes, protected saves and newline-complete UART operation records without relaxing assertions or deadlines. |
+| `xtask/src/desktop_files_fault_test.rs` | Drive real GUI boundary and storage-fault saves, exact recovery copies, retry and clean-reboot checks with retained evidence. |
+| `xtask/src/desktop_files_fixtures.rs` | Build isolated ordinary-disk fixtures using real ext4 inode/block allocations, exact boundary bytes and retained preparation audits. |
+| `xtask/src/desktop_files_device.rs` | Configure real QMP blkdebug write/flush errors, byte-identical flush-generation control and exact phase-specific artifact checks. |
+| `docs/en/milestones/M17_FILES.md` | Define file/editor controls, bounds, shared work namespace and exact prior-copy/save guarantees. |
+| `docs/zh-CN/milestones/M17_FILES.md` | Translate file/editor controls, bounds, namespace sharing and actual save guarantees. |
+| `docs/en/validation/M17.3.md` | Record bounded graphical files/editor, actual storage-fault/recovery acceptance, exact evidence and retained failures. |
+| `docs/zh-CN/validation/M17.3.md` | Translate actual files/editor storage-fault/recovery acceptance, evidence and remaining durability boundaries. |
+| `user/files/src/fs.rs` | Adapt bounded editor reads, exclusive complete writes, file/parent sync and rename to the native shared VFS; trace actual syscall phase/results. |
+| `docs/assets/validation/M17_FILES_LOCAL.json` | Retain compressed exact source snapshots, genuine editor/PTY scanouts, transcripts, saved bytes, host checks and regression observations; purpose is a JSON field. |
+| `docs/assets/validation/M17_FILES_FAULT_LOCAL.json` | Retain actual GUI fault/regression records, genuine scanouts, exact dumps, source/tool identities and failed attempts; purpose is a JSON field. |
+| `crates/abi/src/build.rs` | Define independent build v1 wire validation, fixed GCC recipe and exact owned job identity. |
+| `user/rt/src/build.rs` | Own controlled compiler jobs with bounded reads, real wait status and automatic family cleanup. |
+| `crates/terminal/src/build_log.rs` | Retain four fixed raw log tails, independent attempt identities, explicit eviction and bounded line rendering. |
+| `user/desktop/src/diagnostics.rs` | Run controlled GCC attempts in bounded launcher turns and preserve volatile records across compositor replacements. |
+| `user/desktop/src/build_checks.rs` | Assert real build ABI copy/ownership/stale identity, shared PTY/task/open pressure and rollback recovery. |
+| `xtask/src/desktop_build_test.rs` | Verify real GUI GCC error/repair/artifact retention and independent Linux job-fault/pressure fixtures with bounded QEMU evidence. |
+| `tests/guest/desktop/build-fixture.c` | Provide an explicitly separate admitted compiler substitute for real UD2, long merged output and detached-family fault tests. |
+| `docs/en/milestones/M17_BUILD.md` | Specify first-batch build ownership, lifecycle, publication, interface and bounded retention contract. |
+| `docs/zh-CN/milestones/M17_BUILD.md` | Translate the controlled-build interface, ownership, log limits, retention and remaining scope. |
+| `docs/en/validation/M17.4.md` | Record actual first-batch build diagnostic acceptance, evidence, failures and remaining M17.4 work. |
+| `docs/zh-CN/validation/M17.4.md` | Translate actual first-batch acceptance, measurements and remaining M17.4 limitations. |
+| `docs/assets/validation/M17_BUILD_LOCAL.json` | Retain exact source identities, checks, genuine scanouts, transcripts, artifact bytes and failed attempts; purpose is a JSON field. |
+| `kernel/src/fs/tty_ready.rs` | Share exact PTY write/poll/wakeup progress predicates and host-test CRLF, echo and EOF boundaries. |

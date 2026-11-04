@@ -63,6 +63,63 @@ pub fn build(root: &Path, clippy: bool) -> Result<()> {
     if !clippy && reuse_snapshot()? {
         return Ok(());
     }
+    native(root, clippy)?;
+    if clippy {
+        return Ok(());
+    }
+    let apps = directory(root, "apps")?;
+    for (name, source, musl) in [
+        ("linux-probe", "probe.c", false),
+        ("linux-musl", "musl.c", true),
+        ("ext4-write-test", "ext4_write.c", true),
+    ] {
+        let path = apps.join(format!("{name}.elf"));
+        let mut cc = Command::new(if musl { "musl-gcc" } else { "gcc" });
+        cc.args([
+            "-static",
+            "-no-pie",
+            "-fcf-protection=none",
+            "-O2",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-fno-stack-protector",
+            "-Wl,--build-id=none",
+            "-Wl,-z,noexecstack",
+        ]);
+        if !musl {
+            cc.arg(root.join("user/linux/probe.S"));
+            cc.args(["-nostdlib", "-fno-builtin"]);
+        }
+        command(
+            cc.arg(root.join("user/linux").join(source))
+                .arg("-o")
+                .arg(&path),
+        )?;
+        let bytes = fs::read(&path)?;
+        anova_elf::parse_linux(&bytes).map_err(|e| format!("Invalid Linux ELF {name}: {e:?}"))?;
+        use std::io::Write;
+        let mut manifest = fs::OpenOptions::new()
+            .append(true)
+            .open(apps.join("manifest.toml"))?;
+        writeln!(
+            manifest,
+            "\n[[apps]]\nname = \"{name}\"\nabi = \"{}\"\nfile = \"{name}.elf\"\nsha256 = \"{:x}\"",
+            anova_abi::linux::PERSONALITY,
+            Sha256::digest(&bytes)
+        )?;
+    }
+    linux::build(root, &apps)?;
+    linux::build_m9(root, &apps)?;
+    packages::build(root, &apps)?;
+    initramfs(&apps)?;
+    remember_snapshot(root, &apps)?;
+    println!("Verified native Rust/C ELF outputs in {}", apps.display());
+    Ok(())
+}
+
+/// Build only native images; the desktop's source clients do not require Linux seed downloads.
+pub fn native(root: &Path, clippy: bool) -> Result<()> {
     let output = Command::new("rustc")
         .args(["--print", "sysroot"])
         .output()?;
@@ -185,53 +242,6 @@ pub fn build(root: &Path, clippy: bool) -> Result<()> {
     let path = apps.join("manifest.toml");
     output_path(&path)?;
     fs::write(path, manifest)?;
-    for (name, source, musl) in [
-        ("linux-probe", "probe.c", false),
-        ("linux-musl", "musl.c", true),
-        ("ext4-write-test", "ext4_write.c", true),
-    ] {
-        let path = apps.join(format!("{name}.elf"));
-        let mut cc = Command::new(if musl { "musl-gcc" } else { "gcc" });
-        cc.args([
-            "-static",
-            "-no-pie",
-            "-fcf-protection=none",
-            "-O2",
-            "-Wall",
-            "-Wextra",
-            "-Werror",
-            "-fno-stack-protector",
-            "-Wl,--build-id=none",
-            "-Wl,-z,noexecstack",
-        ]);
-        if !musl {
-            cc.arg(root.join("user/linux/probe.S"));
-            cc.args(["-nostdlib", "-fno-builtin"]);
-        }
-        command(
-            cc.arg(root.join("user/linux").join(source))
-                .arg("-o")
-                .arg(&path),
-        )?;
-        let bytes = fs::read(&path)?;
-        anova_elf::parse_linux(&bytes).map_err(|e| format!("Invalid Linux ELF {name}: {e:?}"))?;
-        use std::io::Write;
-        let mut manifest = fs::OpenOptions::new()
-            .append(true)
-            .open(apps.join("manifest.toml"))?;
-        writeln!(
-            manifest,
-            "\n[[apps]]\nname = \"{name}\"\nabi = \"{}\"\nfile = \"{name}.elf\"\nsha256 = \"{:x}\"",
-            anova_abi::linux::PERSONALITY,
-            Sha256::digest(&bytes)
-        )?;
-    }
-    linux::build(root, &apps)?;
-    linux::build_m9(root, &apps)?;
-    packages::build(root, &apps)?;
-    initramfs(&apps)?;
-    remember_snapshot(root, &apps)?;
-    println!("Verified native Rust/C ELF outputs in {}", apps.display());
     Ok(())
 }
 

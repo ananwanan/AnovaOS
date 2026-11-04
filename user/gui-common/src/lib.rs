@@ -2,6 +2,7 @@
 #![no_std]
 //! Checked copied-message transport and atomic bounded serial records for native GUI programs.
 //! Internal compositor/supervisor plumbing remains separate from the public GUI library ABI.
+//! Bound connection retries while a stopped peer's asynchronous GUI slot is being reclaimed.
 
 use anova_gui::{Reply, Request, transport as t};
 use anova_rt as rt;
@@ -87,13 +88,22 @@ pub fn deliver(client: u64, reply: &Reply) -> Result<(), i64> {
 }
 
 pub fn connect() -> Result<u64, i64> {
+    let mut last = rt::abi::NOT_FOUND;
     for _ in 0..100 {
         match scalar(t::CONNECT) {
-            Err(rt::abi::NOT_FOUND | rt::abi::WOULD_BLOCK) => rt::sleep(1).unwrap(),
+            Err(error @ (rt::abi::NOT_FOUND | rt::abi::WOULD_BLOCK | rt::abi::NO_SPACE)) => {
+                if error == rt::abi::NO_SPACE && last != error {
+                    log(format_args!(
+                        "[GUI:CONNECT_WAIT] quota_busy=true retry_ticks=100\n"
+                    ));
+                }
+                last = error;
+                rt::sleep(1).unwrap();
+            }
             result => return result,
         }
     }
-    Err(rt::abi::NOT_FOUND)
+    Err(last)
 }
 
 struct Serial {

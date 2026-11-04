@@ -42,6 +42,7 @@ pub(crate) struct Thread {
     pub sid: u64,
     pub(in crate::task) blocked: Option<Blocked>,
     pub stopped: bool,
+    pub stop_status: Option<u32>,
     pub leader_exit: Option<Outcome>,
     pub saved_mask: Option<u64>,
     // A vfork parent cannot run or deliver handlers while its child shares this root.
@@ -58,6 +59,7 @@ impl Thread {
             sid: pid,
             blocked: None,
             stopped: false,
+            stop_status: None,
             leader_exit: None,
             saved_mask: None,
             vfork_child: None,
@@ -190,6 +192,7 @@ impl Kernel {
         thread.sid = parent.thread.sid;
         thread.umask = parent.thread.umask;
         let process = Process {
+            pty_member: self.process(i).pty_member,
             image: Some(image),
             stack: Some(stack),
             context,
@@ -468,7 +471,9 @@ impl Kernel {
                         && (target == 0 || entry.pid == target)
                     {
                         any = true;
-                        ready |= matches!(entry.state, State::Zombie(_));
+                        ready |= matches!(entry.state, State::Zombie(_))
+                            || self.process(i).context.frame.rdx & 2 != 0
+                                && self.process(k).thread.stop_status.is_some();
                     }
                 }
                 if ready || !any {

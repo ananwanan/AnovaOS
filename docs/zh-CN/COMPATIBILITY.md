@@ -209,3 +209,7 @@ Linux 包、glibc、依赖求解、签名认证或进程沙箱。见 [M13](miles
 1.0.8，专用 UART 监督程序在存储压力下执行命令、保存、读取日志和中断。精确故障/预算和本地
 证据见 [M16.5](validation/M16.5.md)、[M16.6](validation/M16.6.md)。通用 Linux 日志、任意项目、
 桌面工作流和编译器自举需独立配置；ext2 仍为默认/恢复路线。
+
+## M17.2 图形 PTY 配置
+
+单独配置的 BusyBox 1.36.1/musl 1.2.4 交互式 ash 已本地验证真实 PTY 输入、前台 Ctrl+C、WUNTRACED 子进程停止状态、合流 stdout/stderr、缩放/SIGWINCH 和显式 shell 重启。已有源码构建的 GCC 11.2.0 经图形输入编译指定 C 应用，精确程序在重启后再次运行。不替换原 M9 BusyBox 种子，不代表任意 shell 作业、WCONTINUED、进程组等待、后台 TTIN/TTOU 强制、全屏终端编辑器、Unicode 或编译器自举。准确范围见 [M17.2](validation/M17.2.md)。

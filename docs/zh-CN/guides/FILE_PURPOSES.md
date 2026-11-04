@@ -216,7 +216,7 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `docs/zh-CN/validation/M8.md` | 记录 M8 的实际本地执行、命令和产物身份、失败/恢复证据、当时限制与未测范围（简体中文，与英文对应）。 |
 | `docs/zh-CN/validation/M8_OPTIMIZATION.md` | 记录 M8_OPTIMIZATION 的实际本地执行、命令和产物身份、失败/恢复证据、当时限制与未测范围（简体中文，与英文对应）。 |
 | `docs/zh-CN/validation/M9.md` | 记录 M9 的实际本地执行、命令和产物身份、失败/恢复证据、当时限制与未测范围（简体中文，与英文对应）。 |
-| `kernel/Cargo.toml` | 构建 bare-metal 内核及隔离的 QEMU 故障注入配置。 |
+| `kernel/Cargo.toml` | 构建裸机内核、带资源采样的桌面会话及可选隔离 QEMU 故障测试。 |
 | `kernel/build.rs` | 拒绝宿主 target 内核构建，选择仅用于内核的 linker script。 |
 | `kernel/src/abi/mod.rs` | 适配原生系统查询；进程生命周期归 task，描述符调用归 fs。 |
 | `kernel/src/arch/mod.rs` | 选择已实现的 x86_64 硬件架构边界。 |
@@ -236,9 +236,9 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `kernel/src/drivers/mod.rs` | 管理 BSP 设备初始化、持久 VFS 交接及可选 scheduler-polled PS/2 输入。 |
 | `kernel/src/drivers/network.rs` | 管理 modern virtio-net split queues、帧/DMA 边界、所有权屏障及 reset/quarantine。 |
 | `kernel/src/drivers/pci.rs` | 枚举 PCI 桥和函数，准入有界 modern virtio MMIO capabilities/BAR。 |
-| `kernel/src/drivers/virtio.rs` | 管理 coherent split block queue、checked transfers/FLUSH、超时、reset 和 DMA 隔离。 |
+| `kernel/src/drivers/virtio.rs` | 管理 coherent split block queue、checked transfers/FLUSH、失败元数据诊断、超时、reset 和 DMA 隔离。 |
 | `kernel/src/fs/mod.rs` | 将 checked native user buffers 桥接到共享 VFS 和轮询 canonical terminal；BSP IF=0 调用，阻塞仅保留 syscall frame 副本，不保留锁。 |
-| `kernel/src/fs/tty.rs` | 实现有界 COM1/四 PTY line discipline、输入输出队列、配置、前台信号和 hangup。 |
+| `kernel/src/fs/tty.rs` | 实现有界 COM1/四 PTY line discipline、准确写入/poll/唤醒条件、配置、前台信号和 hangup。 |
 | `kernel/src/graphics.rs` | 验证显示映射，显示/回收引导缓冲，管理诊断光标并复制已检查用户合成器损伤区。 |
 | `kernel/src/gui.rs` | 认证 executable/server 和 process/client 身份，复制有界 IPC/scanout 并清理生命周期。 |
 | `kernel/src/main.rs` | 启动自有 CPU/内存/设备、可选 checked 软件图形和隔离用户负载。 |
@@ -379,7 +379,7 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `user/gui-client/Cargo.toml` | 构建独立原生窗口客户端和用于检验传输边界的对抗夹具。 |
 | `user/gui-client/src/main.rs` | 上传私有红/蓝表面、处理焦点输入，并测试崩溃、队列和所有权边界。 |
 | `user/gui-common/Cargo.toml` | 在合成器和测试程序之间共享内部原生 GUI 传输辅助代码。 |
-| `user/gui-common/src/lib.rs` | 封装同步复制的 GUI 消息，并保留明确的指针安全约定。 |
+| `user/gui-common/src/lib.rs` | 封装受检 GUI 传输和串口记录；异步进程槽回收期间有界重试连接，并保留真实配额错误。 |
 | `user/gui-link.rs` | 将独立 guest 客户端目标文件与 Rust GUI 库、原生 CRT 和 panic 边界链接。 |
 | `user/gui-run/Cargo.toml` | 为 guest SDK 应用打包原生合成器/客户端生命周期监督程序。 |
 | `user/gui-run/src/main.rs` | 启动隔离 GUI 进程，要求真实等待状态符合预期并完成回收。 |
@@ -429,7 +429,7 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `xtask/src/disk.rs` | 创建安全的 native/Linux ext2 镜像，并用 watchdog 限时驱动重启、完整性和设备错误场景。 |
 | `xtask/src/foundation.rs` | 创建并保留受控 ext4 镜像，执行带源码/产物哈希的四次 QEMU 只读/重启/拒绝门禁。 |
 | `xtask/src/gpu.rs` | 验收指定设备的真实硬件绘制、完整 scanout 比较、故障/reset 恢复和无头 CPU 回退。 |
-| `xtask/src/graphics.rs` | 验证真实 QMP 像素、有界截图解析，以及有/无 VGA 时的串口恢复和正常关机。 |
+| `xtask/src/graphics.rs` | 验证真实显示/COM1 与有界 QMP 事务；保留部分输入，仅在五秒内重试空 TCP 启动重置。 |
 | `xtask/src/gui.rs` | 注入真实 QMP 输入，比较原生窗口、故障恢复及每一个 scanout 像素。 |
 | `xtask/src/gui_sdk.rs` | 验证 guest 编辑/构建、物理 GUI 输入、实际画面、故障和重启后保留文件哈希。 |
 | `xtask/src/gui_sdk_build.rs` | 导出含双语指南和校验清单的 GUI 源码 SDK，打包 guest 编译器/显示镜像。 |
@@ -475,3 +475,65 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `docs/assets/validation/M16_CORE_CI54.json` | Preserve digest-verified core CI artifact result records, exact source identity and bounded accepted scope. |
 | `docs/assets/validation/M16_CAPACITY_LOCAL.json` | Preserve accepted local ext4 kernel capacity, budgets, complete provenance and digest-verified raw logs. |
 | `docs/assets/validation/M16_CORE_CI57.json` | Retain verified current-code core CI artifact results, source identity and artifact digest. |
+| `crates/abi/src/process.rs` | 定义独立版本化直接子进程监督契约并拒绝非法版本。 |
+| `kernel/src/task/process_control.rs` | 授权直接子进程轮询/停止，复制失败保留状态并复用内核清理。 |
+| `user/rt/src/process.rs` | 封装实验非阻塞子进程轮询与身份受检停止，保留 native v1。 |
+| `user/desktop/Cargo.toml` | 通过原生进程与 GUI 接口构建 Rust 桌面会话监督器。 |
+| `user/desktop/src/main.rs` | 管理准入客户端/合成器、有界会话替换、启动器操作和有界诊断事件循环。 |
+| `xtask/src/desktop.rs` | 构建桌面输入及显式 Linux 边界探针，校验宿主构建的三语言客户端并打包显式镜像。 |
+| `docs/en/validation/M17.1.md` | 记录已验收桌面输入/生命周期/重启证据、预算、原始故障与剩余范围。 |
+| `docs/zh-CN/validation/M17.1.md` | 提供已验收桌面范围、进程边界、测量、故障证据与剩余工作的中文说明。 |
+| `tests/guest/desktop/linux-park.S` | 执行真实 Linux nanosleep/exit，验证原生监督拒绝存活 Linux 子进程。 |
+| `user/desktop/src/checks.rs` | 实际耗尽并复用子进程/任务/FD，检查非子进程及 Linux 边界。 |
+| `xtask/src/desktop_test.rs` | 驱动五次桌面启动、物理输入/画面、真实故障、有界恢复和精确持久文件检查。 |
+| `docs/assets/validation/M17_DESKTOP_LOCAL.json` | 保存桌面源码/输入身份、预声明预算、原始 UART/QMP/故障日志及压缩精确截图；JSON 以 purpose 字段替代注释。 |
+| `crates/abi/src/pty.rs` | 定义独立版本化原生 PTY wire 契约、所有权及传输/几何边界。 |
+| `crates/terminal/Cargo.toml` | 打包供原生及宿主测试使用的无分配终端字符/历史模型。 |
+| `crates/terminal/src/lib.rs` | 解析分片有界 ANSI，裁剪/缩放字符并保留固定 256 行历史。 |
+| `crates/terminal/src/tests.rs` | 验证光标/颜色/擦除、分片控制、历史限额、缩放和新输出源恢复。 |
+| `kernel/src/task/pty.rs` | 持有私有 PTY master、准确创建者句柄、准入 Linux 进程族、复制失败保留和回收快照。 |
+| `user/rt/src/pty.rs` | 封装实验性原生 PTY 会话，提供有界非阻塞传输及所有权清理。 |
+| `user/terminal/Cargo.toml` | 构建与 Linux shell/编译器输入分离的原生图形 PTY 客户端。 |
+| `user/terminal/src/main.rs` | 运行有界 GUI/PTY 输入输出轮次、回滚、可见 shell 状态和显式重启/关闭。 |
+| `user/terminal/src/window.rs` | 为终端、Files 和启动器诊断推进不可变且需确认的 GUI 帧；合成器替换后释放存储所有权。 |
+| `user/terminal/src/checks.rs` | 实际验证 PTY/创建者/过期/复制/状态/任务/全局打开描述边界及重复恢复。 |
+| `tests/guest/terminal/fixture.c` | 生成真实 stdout/stderr、停止子进程、SIGWINCH/输出、中断和脱离会话进程族负载。 |
+| `tests/guest/terminal/hello.c` | 提供经物理图形终端输入编译并再次运行的精确 C 源码。 |
+| `xtask/src/pty_terminal.rs` | 准入原生终端、单独固定的交互 ash 和可选已验证 M11 工具链。 |
+| `xtask/src/pty_terminal_test.rs` | 驱动图形 PTY/GCC 输入、真实画面、中断/缩放/回滚/压力及精确重启转储。 |
+| `docs/en/milestones/M17_PTY.md` | 定义 PTY 准入/所有权、异步帧推进、ANSI 限额和 shell 控制。 |
+| `docs/zh-CN/milestones/M17_PTY.md` | 翻译已实现 PTY 接口、可执行策略、限额和操作。 |
+| `docs/en/validation/M17.2.md` | 记录真实 PTY/GCC/重启验收、固定预算、保留字节和故障修复。 |
+| `docs/zh-CN/validation/M17.2.md` | 翻译 PTY 验收范围、测量、恢复证据和剩余工作。 |
+| `docs/assets/validation/M17_PTY_LOCAL.json` | 保存准确 PTY 源码/工具/输入身份、原始成功/失败日志和压缩真实画面；JSON 以 purpose 字段说明用途。 |
+| `crates/abi/src/files.rs` | Define the checked experimental regular-file rename/replace wire separately from frozen native v1. |
+| `crates/editor/Cargo.toml` | Package the bounded allocation-free source editor and checked publication policy for guest and host tests. |
+| `crates/editor/src/lib.rs` | Own source bytes, exact disk baselines, dirty protection and conservative temporary/backup save transactions. |
+| `crates/editor/src/tests.rs` | Inject required save phase failures, bound paths/buffers and verify exact prior-copy retention. |
+| `user/files/Cargo.toml` | Build the native graphical file browser and source editor using the shared model and runtime. |
+| `user/files/src/main.rs` | Implement bounded directory navigation, path/confirmation dialogs, editing and observed buffer/error diagnostics. |
+| `user/rt/src/files.rs` | Wrap the versioned native no-clobber rename and explicit replacement syscall with exact request records. |
+| `xtask/src/desktop_files_test.rs` | 验证真实编辑器/PTY/重启字节、保存保护及完整换行 UART 操作记录，不放宽断言或期限。 |
+| `xtask/src/desktop_files_fault_test.rs` | Drive real GUI boundary and storage-fault saves, exact recovery copies, retry and clean-reboot checks with retained evidence. |
+| `xtask/src/desktop_files_fixtures.rs` | Build isolated ordinary-disk fixtures using real ext4 inode/block allocations, exact boundary bytes and retained preparation audits. |
+| `xtask/src/desktop_files_device.rs` | Configure real QMP blkdebug write/flush errors, byte-identical flush-generation control and exact phase-specific artifact checks. |
+| `docs/en/milestones/M17_FILES.md` | Define file/editor controls, bounds, shared work namespace and exact prior-copy/save guarantees. |
+| `docs/zh-CN/milestones/M17_FILES.md` | Translate file/editor controls, bounds, namespace sharing and actual save guarantees. |
+| `docs/en/validation/M17.3.md` | Record bounded graphical files/editor, actual storage-fault/recovery acceptance, exact evidence and retained failures. |
+| `docs/zh-CN/validation/M17.3.md` | Translate actual files/editor storage-fault/recovery acceptance, evidence and remaining durability boundaries. |
+| `user/files/src/fs.rs` | Adapt bounded editor reads, exclusive complete writes, file/parent sync and rename to the native shared VFS; trace actual syscall phase/results. |
+| `docs/assets/validation/M17_FILES_LOCAL.json` | Retain compressed exact source snapshots, genuine editor/PTY scanouts, transcripts, saved bytes, host checks and regression observations; purpose is a JSON field. |
+| `docs/assets/validation/M17_FILES_FAULT_LOCAL.json` | Retain actual GUI fault/regression records, genuine scanouts, exact dumps, source/tool identities and failed attempts; purpose is a JSON field. |
+| `crates/abi/src/build.rs` | 定义独立 build v1 请求验证、固定 GCC 命令与准确所属任务身份。 |
+| `user/rt/src/build.rs` | 以有界读取、真实退出状态和自动任务族清理拥有受控编译任务。 |
+| `crates/terminal/src/build_log.rs` | 保留四条固定原始日志尾部、独立尝试身份、明确淘汰计数及有界行显示。 |
+| `user/desktop/src/diagnostics.rs` | 在启动器有界循环中运行受控 GCC，跨合成器替换保留易失记录。 |
+| `user/desktop/src/build_checks.rs` | 断言真实构建 ABI 复制/所有权/过期身份、共享 PTY/任务/打开描述压力和回滚恢复。 |
+| `xtask/src/desktop_build_test.rs` | 用有界 QEMU 证据验证真实 GUI GCC 错误/修复/产物保留及独立 Linux 任务故障/压力。 |
+| `tests/guest/desktop/build-fixture.c` | 提供明确独立准入的编译器替代 fixture，验证真实 UD2、长合并输出和脱离会话任务族。 |
+| `docs/en/milestones/M17_BUILD.md` | 规定第一批构建所有权、生命周期、发布、接口和有界保留契约。 |
+| `docs/zh-CN/milestones/M17_BUILD.md` | 以简体中文说明受控构建接口、所有权、日志上限、保留和剩余范围。 |
+| `docs/en/validation/M17.4.md` | 记录首批构建诊断实际验收、证据、失败和 M17.4 剩余工作。 |
+| `docs/zh-CN/validation/M17.4.md` | 以简体中文记录首批实际验收、测量和 M17.4 剩余限制。 |
+| `docs/assets/validation/M17_BUILD_LOCAL.json` | 保留准确源码身份、检查、真实画面、会话、产物字节与失败尝试；用途存于 JSON 字段。 |
+| `kernel/src/fs/tty_ready.rs` | 共用准确 PTY 写入/poll/唤醒条件，并在宿主测试 CRLF、回显和 EOF 边界。 |

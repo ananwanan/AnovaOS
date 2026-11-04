@@ -873,6 +873,31 @@ impl<'a> Vfs<'a> {
         }
         Ok(())
     }
+    /// Publish a regular file without following a source or destination symlink.
+    /// The native experimental editor extension uses no-clobber by default; replacement
+    /// must be explicit. Scheduler serialization keeps the check and rename indivisible
+    /// with respect to other callers; durability still requires a separate sync.
+    pub fn rename_file(
+        &mut self,
+        cwd: usize,
+        from: &str,
+        to: &str,
+        replace: bool,
+    ) -> Result<(), i64> {
+        match self.metadata_nofollow(cwd, from)?.1 {
+            1 => {}
+            2 => return Err(IS_DIRECTORY),
+            _ => return Err(INVALID_ARGUMENT),
+        }
+        match self.metadata_nofollow(cwd, to) {
+            Ok(_) if !replace => return Err(ALREADY_EXISTS),
+            Ok((_, 1, _, _)) | Err(NOT_FOUND) => {}
+            Ok((_, 2, _, _)) => return Err(IS_DIRECTORY),
+            Ok(_) => return Err(INVALID_ARGUMENT),
+            Err(error) => return Err(error),
+        }
+        self.rename(cwd, from, to)
+    }
     /// Rename with the backend's directory-move contract; callers with live cwd references supply them below.
     pub fn rename(&mut self, cwd: usize, from: &str, to: &str) -> Result<(), i64> {
         self.rename_with_cwds(cwd, from, to, &[])

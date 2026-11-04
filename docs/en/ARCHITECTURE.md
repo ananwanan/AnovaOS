@@ -7,7 +7,7 @@ This describes implemented boundaries through the accepted M15.6 reconstruction 
 separately scoped future architecture. Guest toolchains, native SDKs and bounded Rust GUI/GPU
 profiles are implemented; full compiler reconstruction, guest-only image generation, SMP and
 physical hardware remain separate. M16 now implements the backend/cache boundary and a
-controlled ext4 profiles, explicit JBD2 recovery and opt-in migration/build acceptance; M17 desktop remains future work. Current evidence is in [STATUS](guides/STATUS.md).
+controlled ext4 profiles, explicit JBD2 recovery and opt-in migration/build acceptance; M17.1 has bounded local session/input/fault/reboot acceptance; M17.2 adds the locally accepted PTY terminal; M17.3 has local bounded file/editor and real GUI storage-fault acceptance; M17.4 batch one has bounded local build-diagnostic acceptance; remaining M17.4 and M17.5 stay pending. Current evidence is in [STATUS](guides/STATUS.md).
 
 ## 1. Overall structure
 
@@ -708,3 +708,52 @@ Separate pressure reached the heap, all VFS/task/FD slots and disk ENOSPC, then
 the same recovered disk completed construction and new-kernel boot recovery.
 These observations size the declared non-GUI recipe; broader workloads require
 independent measurements. Complete results and raw logs are in the capacity record.
+
+## M17.1 accepted session boundary
+
+The separate experimental `0x101` native process-control call validates version and exact direct-child identity before nonblocking wait or signal-15 stop. It shares checked status copying and kernel lifecycle cleanup. Rust userland owns the launcher, fixed executable list and three-replacement policy; init runs COM1 independently. Desktop builds reuse existing host-built C/C++/Rust GUI clients, plus one explicitly admitted Linux nanosleep/exit boundary fixture; no compiler download is needed. GUI/native v1 records and global quotas are unchanged. Drawing-time disconnection follows the same three-replacement policy as poll-time/server loss. `desktop-test` separately verifies actual input/scanout, owned-child cleanup, quota/task/FD reuse, client/compositor faults and persisted work across five clean boots; see [M17.1](validation/M17.1.md). Its loopback-only TCP QMP transport shares the existing bounded transaction validation; ordinary Unix QMP gates remain available. Resource sampling is enabled for the desktop without increasing capacities.
+
+## M17.2 PTY boundary
+
+The native terminal owns experimental `0x102` sessions with private masters. Its admitted Linux shell receives only slave stdio, its own SID/PGID and inherited cwd. An immutable process-family tag survives fork/clone/exec/setsid; owner exit/fault/stop closes/reaps exactly that family. READ/STATUS retain data/status after failed usercopy. `/dev/tty` resolves by controlling session and real WUNTRACED notifications are copied before consumption. A fixed ANSI/history model and immutable raster snapshots feed one asynchronous upload at a time, with bounded PTY and GUI work between acknowledgements. The low-level Rust Canvas is reusable without changing the GUI C ABI. See [contract](milestones/M17_PTY.md) and [acceptance](validation/M17.2.md); resource capacities, main-only Actions, COM1 recovery and later M17 stages retain their boundaries.
+
+## M17.3 file/editor boundary
+
+The native Files GUI and Linux PTY share VFS `/persist`; filesystem data access
+does not grant GUI or Linux executable authority. The no_std editor model owns
+bounded bytes, baseline/dirty/confirmation state and publication policy. The
+native client owns path prompts, directory rendering and incremental GUI uploads.
+The kernel supplies only checked file primitives.
+
+Experimental native syscall `0x103` is separate from frozen native v1: RDI is
+`(1 << 32) | operation` (0 no-clobber rename, 1 explicit regular-file replace),
+RSI points to an exact 40-byte record, RDX is 40. Five little-endian u64 fields are
+source address/length, destination address/length and zero reserved. Paths are
+nonempty UTF-8 without NUL, at most 128 bytes; both paths are copied and checked
+before mutation. Directories and symlinks are rejected. Rename does not imply
+flush. The editor combines this with existing fsync and the documented prior-copy
+policy; see [M17 files](milestones/M17_FILES.md). Native adapter `FILES:IO_BEGIN`
+and `FILES:IO_END` records identify actual create/write/fsync/close, publication,
+parent synchronization and recovery-cleanup results. They observe the existing
+syscalls without pausing a save or substituting storage responses. After an error,
+`FILES:BUFFER` records path, length, cursor, dirty state and an FNV-1a64 fingerprint;
+buffers up to 64 bytes additionally record every byte in hexadecimal. Exact disk
+dumps and SHA-256 remain separate from these buffer observations.
+
+## M17.4 controlled-build boundary
+
+The launcher integrates diagnostics in its existing window and pumps the same
+acknowledged asynchronous transport as Files/terminal. Separate experimental
+`0x104` starts a fixed explicitly admitted Linux GCC leader, sharing the existing
+PTY pool and tagged-family ownership. Exact wait status is independent of the
+interactive shell. Four fixed 8 KiB raw merged-output records use attempt numbers
+and never-reused job PIDs, retain completed logs across compositor/session
+replacement in the same launcher, and explicitly report byte/record eviction.
+Only a successful compiler with complete capture requests staging-file publication; failed/cut builds preserve
+the earlier executable. CLOSE reaps/closes even if staging cleanup reports an
+error. PTY write/poll/wakeup predicates share exact CRLF/echo room and EOF
+checks to prevent a false-ready writer from starving the nonpreemptible kernel.
+Kernel block failures now report queue/completion/timeout metadata without
+changing the existing deadline or fail-closed policy. See [build contract](milestones/M17_BUILD.md)
+and [actual first-batch validation](validation/M17.4.md). Global resources,
+general task termination, broader recovery and M17.5 remain independent.

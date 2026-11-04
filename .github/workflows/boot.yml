@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Run the complete retained runtime, SDK, toolchain and ext4 gates only for main pushes.
+# Run retained runtime, build diagnostics, GUI storage faults, files/PTY, SDK and toolchain gates only for main pushes.
 name: Bare-metal boot
 
 on:
@@ -36,7 +36,7 @@ jobs:
       - name: Check file-purpose explanations
         run: cargo xtask check-files
       - name: Check host tools
-        run: cargo clippy --locked -p xtask -p anova-platform -p anova-memory -p anova-abi -p anova-elf -p anova-sched -p anova-vfs -p anova-storage -p anova-graphics -p anova-input -p anova-gui -p anova-gui-runtime --all-targets -- -D warnings
+        run: cargo clippy --locked -p xtask -p anova-platform -p anova-memory -p anova-abi -p anova-elf -p anova-sched -p anova-vfs -p anova-storage -p anova-graphics -p anova-input -p anova-gui -p anova-gui-runtime -p anova-terminal -p anova-editor --all-targets -- -D warnings
       - name: Check and build native Rust/C applications
         run: |
           cargo xtask check-apps
@@ -53,6 +53,7 @@ jobs:
           cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features input-test -- -D warnings
           cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features graphics,gui -- -D warnings
           cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features graphics,gui,gui-test -- -D warnings
+          cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features desktop-test -- -D warnings
           cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features gpu -- -D warnings
           cargo clippy --locked -p anova-kernel --target x86_64-unknown-none --features gpu-test -- -D warnings
       - name: Test host logic
@@ -82,6 +83,10 @@ jobs:
         run: cargo xtask input-test
       - name: Verify isolated native windows, physical input, redraw and compositor recovery
         run: cargo xtask gui-test
+      - name: Verify supervised desktop, fault recovery, resource reuse and persisted work
+        run: cargo xtask desktop-test
+      - name: Verify graphical files, protected saves, shared PTY paths and clean reboot
+        run: cargo xtask desktop-files-test
       - name: Verify persistent sources, binaries, clean shutdown and device failures
         run: cargo xtask persistence-test
       - name: Verify controlled ext4 readonly, large namespace, reboot and rejection
@@ -105,10 +110,59 @@ jobs:
             build/logs/
             build/input/
             build/gui/
+            build/desktop/
+            build/desktop-test/
+            build/desktop-files-test/
+            build/terminal/
+            build/compat-terminal/busybox.config
+            build/images/busybox-terminal-1.36.1-source.tar.gz
             build/gpu/
             build/foundation/
           if-no-files-found: ignore
 
+
+  desktop-storage:
+    needs: boot
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Install ordinary desktop and storage test utilities
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 xorriso curl dpkg-dev gcc g++ binutils make musl-tools qemu-user e2fsprogs openssl python3
+      - name: Load the pinned Rust toolchain
+        run: rustup show active-toolchain
+      - name: Cache checksum-verified boot inputs
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: build/cache/
+          key: boot-inputs-${{ runner.os }}-${{ hashFiles('boot/dependencies.toml') }}
+      - name: Fetch verified boot inputs
+        run: cargo xtask fetch
+      - name: Check prerequisites
+        run: cargo xtask doctor
+      - name: Verify real graphical editor bounds, storage faults, recovery and reboot
+        run: |
+          mkdir -p build/desktop-files-fault-test
+          set -o pipefail
+          cargo xtask desktop-files-fault-test 2>&1 | tee build/desktop-files-fault-test/ci.log
+      - name: Upload graphical storage fault evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-storage-evidence
+          path: |
+            build/desktop-files-fault-test/
+            build/disks/m17-files-*.ext4
+            build/desktop/inputs.txt
+            build/terminal/inputs.txt
+            build/terminal/manifest.toml
+            build/compat-terminal/busybox.config
+            build/images/busybox-terminal-1.36.1-source.tar.gz
+          compression-level: 6
+          retention-days: 7
+          if-no-files-found: warn
 
   guest-toolchain:
     needs: boot
@@ -143,6 +197,10 @@ jobs:
         run: cargo xtask toolchain-build
       - name: Verify guest C/C++, incremental make, negative builds and reboot retention
         run: cargo xtask toolchain-test
+      - name: Verify real graphical PTY compilation, interruption, resize, exhaustion and reboot
+        run: cargo xtask desktop-pty-test
+      - name: Verify controlled build diagnostics, actual status, bounded logs and job recovery
+        run: cargo xtask desktop-build-test
       - name: Verify opt-in ext4 writes, guest builds, exhaustion, reboot and real disk failures
         run: cargo xtask foundation-write-test
       - name: Verify JBD2 sector cuts, checksum rejection and actual virtio recovery
@@ -201,6 +259,11 @@ jobs:
             build/rust/stage.sha256
             build/rust/archive.sha256
             build/gui-sdk/
+            build/terminal/
+            build/desktop-pty-test/
+            build/desktop-build-test/
+            build/compat-terminal/busybox.config
+            build/images/busybox-terminal-1.36.1-source.tar.gz
             build/foundation/
             build/journal-host/
           if-no-files-found: ignore

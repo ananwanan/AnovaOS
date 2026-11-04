@@ -3,7 +3,11 @@
 //! Native v1 constants, checked addresses and layouts; Linux translations live in a distinct module.
 //! Top-level syscall constants are native AnovaOS interfaces, never Linux syscall numbers.
 
+pub mod build;
+pub mod files;
 pub mod linux;
+pub mod process;
+pub mod pty;
 
 pub const VERSION: u32 = 1;
 /// SDK releases are independent from the frozen native syscall wire version.

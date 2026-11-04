@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: Apache-2.0
+# Build the bounded native file browser and source editor with explicit persistence errors.
+[package]
+name = "files"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+
+[dependencies]
+anova-rt = { path = "../rt" }
+anova-gui-user = { path = "../gui-common" }
+anova-gui-runtime = { path = "../../crates/gui-runtime" }
+anova-editor = { path = "../../crates/editor" }
+anova-gui = { path = "../../crates/gui" }

@@ -228,6 +228,14 @@ impl<'a> Compositor<'a> {
         self.order_len
     }
 
+    /// Inspect occupied visible rectangles for user-space placement without allocating.
+    pub fn visible_rectangles(&self) -> impl Iterator<Item = Rect> + '_ {
+        self.slots
+            .iter()
+            .filter(|slot| slot.handle != 0 && slot.visible)
+            .map(|slot| slot.rect)
+    }
+
     pub fn focused_client(&self) -> Option<ClientId> {
         self.focus.map(|index| self.slots[index].client)
     }

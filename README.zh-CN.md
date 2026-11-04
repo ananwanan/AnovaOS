@@ -36,6 +36,10 @@ GitHub Actions 暂时**仅在推送 `main` 时运行**，关闭 PR、手动和�
 | M15.5 | 使用继承工具和目标库在系统内编译真实内核；保留 ELF 后由宿主辅助打包，验证启动身份与恢复 |
 | M15.6 | bzip2 和内核各进行两轮独立干净构建，最终产物逐字节一致，归档证据与全部 12 次启动/拒绝/恢复会话通过 |
 | M16（有界本地配置） | 受检输入、后端/缓存解耦、受控 ext4 只读/写入及 JBD2 恢复；新盘 bzip2/串口验收，以及堆/VFS/FD/任务/磁盘耗尽恢复后的真实内核重建；远端 CI 单独记录 |
+| M17.1 | 受监督桌面、C/C++/Rust 同时输入/窗口、真实客户端/合成器故障、有界重启、资源复用及五次持久化/回退启动 |
+| M17.2 | 真实 Linux-musl PTY、有界 ANSI/回滚、Ctrl+C/缩放、实际 GCC 编译、耗尽清理及重启精确字节 |
+| M17.3 | 文件浏览、有界源码编辑、保存保护及 PTY 共享工作盘；真实 GUI 大小/inode/磁盘满/写入/flush 故障、恢复副本、重试及正常重启已本地验收 |
+| M17.4 第一批 | 启动器受控 GCC 任务、准确退出状态、有界合并日志、记录保留与进程族清理；资源面板和通用控制待完成 |
 
 证据按阶段收录在[验收索引](docs/zh-CN/index.md#验收记录)，各记录明确实际运行的检查。
 已配置 CI、远端 CI 实际结果和本地验收是分别记录的事实。
@@ -54,20 +58,22 @@ ext2 没有日志或断电恢复。通用 Linux/glibc、SMP、USB/实机支持�
 
 项目所有者确定的顺序为 **M16 资源/VFS/ext4 → M17 开发桌面 → M18 有条件的编译器及镜像自举**。
 M16 已实现后端/缓存、受控 ext4 只读/写入、JBD2 恢复和显式启用的迁移/构建验收。
-M17/M18 仍为计划。
+M17.1 受监督会话、物理输入、真实客户端/合成器故障、资源复用及文件保留已通过本地五启动验收；M17.2 的真实 PTY shell/编译/重启配置也已本地验收；M17.3 文件/编辑器及真实 GUI 存储故障已本地验收；M17.4 第一批受控构建诊断已按有界配置本地验收；M17.4 剩余项、M17.5 和 M18 待完成。
 
-1. [M16 基础能力](docs/zh-CN/milestones/M16_FOUNDATION.md)：完成远端 CI；声明的内核容量配置已本地通过，
+1. [M16 基础能力](docs/zh-CN/milestones/M16_FOUNDATION.md)：远端 CI 按所有者要求暂缓；声明的内核容量配置已本地通过，
    更广负载仍需独立定容。JBD2 与新盘迁移已有独立的 [M16.5](docs/zh-CN/validation/M16.5.md)/
    [M16.6](docs/zh-CN/validation/M16.6.md) 本地门禁。后端解耦、按需目录、可回收文件节点和受控
    ext4 只读访问已实现，可写范围见 [M16.4](docs/zh-CN/validation/M16.4.md)，既有证据见 [M16](docs/zh-CN/validation/M16.md)。
-2. [M17 开发桌面](docs/zh-CN/milestones/M17_DESKTOP.md)：提供真正的 PTY 终端、可靠编辑、
-   文件浏览与诊断，利用现有工具在桌面完成 C/C++/Rust 编辑、构建、运行、修错和重启保留。
+2. [M17 开发桌面](docs/zh-CN/milestones/M17_DESKTOP.md)：在已验收 PTY、Files 和首批诊断后，继续资源/任务/服务控制，
+   利用现有工具在桌面完成 C/C++/Rust 编辑、构建、运行、修错和重启保留。
 3. [M18 后续自举](docs/zh-CN/ROADMAP.md#m18有条件的自举)：满足实测前置条件后，分别重新评估
    GCC、LLVM/rustc/Cargo 和 guest 独立镜像生成；完整编译器自举不阻塞 M17。
 
 保留既有运行时、存储、GUI 和 M15 重建门禁。原生 `std`、SMP、设备 IRQ/异步 I/O、实机和
 全新文件系统格式独立推进。[STATUS](docs/zh-CN/guides/STATUS.md) 将已观察到的工具链依赖下载
 失败与本地验收分开记录。
+
+所有者已暂缓 M16 远端收尾，授权在 `feat/m17-desktop` 开始 M17。`cargo xtask desktop-build` 构建启动器及宿主构建的既有 C/C++/Rust 客户端，并包含显式 Linux 边界探针；`cargo xtask run --desktop [--disk build/disks/work.ext4]` 选择显式桌面会话。`cargo xtask desktop-test` 验证已验收的有界配置。见 [M17.1 本地验收](docs/zh-CN/validation/M17.1.md)。M17.2 已加入真实 PTY 终端：聚焦启动器按 `t`，`F5` 重开 shell，`F4` 关闭。`cargo xtask run --desktop --toolchain --disk build/disks/pty-work.ext4` 将已验证的 M11 工具加入显式 Linux personality 工作盘。详见 [PTY 契约](docs/zh-CN/milestones/M17_PTY.md)及 [M17.2 证据](docs/zh-CN/validation/M17.2.md)。M17.3 已加入[有界文件/编辑闭环](docs/zh-CN/milestones/M17_FILES.md)；`cargo xtask desktop-files-fault-test` 验证真实 GUI 边界/存储故障、精确恢复副本和重试，见[本地验收](docs/zh-CN/validation/M17.3.md)。
 
 ## 构建与启动
 
@@ -98,6 +104,8 @@ cargo xtask run --disk build/disks/work.ext2
 UEFI/Limine、四级页表，并分别配置内核/用户态编译参数。
 原生 ABI 与 Linux-musl personality 明确区分。
 
+M17.4 第一批[构建诊断](docs/zh-CN/milestones/M17_BUILD.md)通过启动器 `b`/`g` 构建已保存的 `/persist/build.c`；`cargo xtask desktop-build-test` 验证受控 GCC/失败闭环。见[实际验证和剩余工作](docs/zh-CN/validation/M17.4.md)。
+
 ## 开发配置与检查
 
 | 配置 | 命令与范围 |
@@ -109,6 +117,7 @@ UEFI/Limine、四级页表，并分别配置内核/用户态编译参数。
 | 原生 SDK | `cargo xtask sdk`、`app-new <c\|cpp\|rust> PROJECT`、`app-build PROJECT`、`app-pack MANIFEST OUTPUT`、`app-image PACKAGE SHA256`、`app-run PACKAGE SHA256`、`symbolize ELF ADDRESS...`；`sdk-test`、`app-test`、`package-v2-test`、`diagnostics-test` |
 | 显示/输入/合成器 | `cargo xtask graphics-test`、`input-test`、`gui-test`；交互使用 `run --graphics` 或 `run --gui` |
 | GUI runtime | `cargo xtask gui-sdk`、`gui-sdk-image`、`gui-sdk-test`、`gui-sdk-replay`；`run --gui-sdk` 配合原生数据盘 |
+| 开发桌面 | `cargo xtask desktop-test`、`desktop-pty-test`、`desktop-files-test`、`desktop-files-fault-test`、`desktop-build-test`；`run --desktop --toolchain` 配合 Linux 工作盘 |
 | GPU | `cargo xtask gpu-test` 需要经确认的硬件 GL renderer；`gpu-fallback-test` 不需要图形显示 |
 | ext4 可写（显式启用） | `cargo xtask foundation-write-test`；`ext4-image [--linux] build/disks/work.ext4`，再用 `run --ext4-write [--toolchain] --disk build/disks/work.ext4`；[配置与证据](docs/zh-CN/validation/M16.4.md) |
 | JBD2 / 新工作盘 | `cargo xtask foundation-journal-test`; `cargo xtask foundation-migrate-test`; [M16.5](docs/zh-CN/validation/M16.5.md), [M16.6](docs/zh-CN/validation/M16.6.md) |
@@ -130,7 +139,7 @@ UEFI/Limine、四级页表，并分别配置内核/用户态编译参数。
 | [项目大纲](docs/zh-CN/PROJECT_OUTLINE.md)、[路线图](docs/zh-CN/ROADMAP.md) | 目标、依赖、验收与剩余工作 |
 | [架构](docs/zh-CN/ARCHITECTURE.md)、[兼容范围](docs/zh-CN/COMPATIBILITY.md) | 子系统所有权、ABI、限制及受测软件 |
 | [开发指南](docs/zh-CN/index.md#开发指南) | 配置、风格、工具链、许可、需求、状态与文件用途 |
-| [阶段设计](docs/zh-CN/index.md#阶段设计)、[验收记录](docs/zh-CN/index.md#验收记录) | 截至 M15.6 的验收契约/证据、部分 M16 实现及 M17 计划 |
+| [阶段设计](docs/zh-CN/index.md#阶段设计)、[验收记录](docs/zh-CN/index.md#验收记录) | 截至 M15.6 的验收契约/证据、有界本地 M16/M17.1–M17.4 第一批及后续 M17 工作 |
 | [第三方输入与声明](docs/zh-CN/index.md#第三方输入与声明) | 来源及原样保留的上游许可证正文 |
 | [原生 SDK](sdk/README.zh-CN.md)、[GUI SDK](sdk/gui/README.zh-CN.md)、[重建配方](ports/bootstrap/README.zh-CN.md) | 各组件旁的双语开发入口 |
 

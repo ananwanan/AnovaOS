@@ -9,6 +9,13 @@ mod bootstrap_kernel;
 mod bootstrap_repeat;
 mod bootstrap_rust;
 mod debug;
+mod desktop;
+mod desktop_build_test;
+mod desktop_files_device;
+mod desktop_files_fault_test;
+mod desktop_files_fixtures;
+mod desktop_files_test;
+mod desktop_test;
 mod disk;
 mod foundation;
 mod foundation_capacity;
@@ -24,6 +31,8 @@ mod input;
 mod linux;
 mod network;
 mod packages;
+mod pty_terminal;
+mod pty_terminal_test;
 mod purposes;
 mod rust;
 mod rust_online;
@@ -33,6 +42,9 @@ mod smoke;
 mod terminal;
 mod toolchain;
 mod transcript;
+#[cfg(test)]
+#[path = "../../kernel/src/fs/tty_ready.rs"]
+mod tty_ready;
 
 use std::{
     boxed::Box,
@@ -58,6 +70,8 @@ enum Mode {
     Input,
     Gui,
     GuiTest,
+    Desktop,
+    DesktopTest,
     Gpu,
     Boot,
     Panic,
@@ -85,6 +99,8 @@ impl Mode {
             Self::Input => "input",
             Self::Gui => "gui",
             Self::GuiTest => "gui-test",
+            Self::Desktop => "desktop",
+            Self::DesktopTest => "desktop-test",
             Self::Gpu => "gpu",
             Self::Boot => "boot",
             Self::Panic => "panic",
@@ -111,6 +127,8 @@ impl Mode {
             Self::Input => Some("graphics,input-test"),
             Self::Gui => Some("graphics,gui"),
             Self::GuiTest => Some("graphics,gui,gui-test"),
+            Self::Desktop => Some("desktop"),
+            Self::DesktopTest => Some("desktop-test"),
             Self::Gpu => Some("graphics,gui,gpu-test"),
             Self::Boot => Some("qemu-test"),
             Self::Panic => Some("test-panic"),
@@ -200,6 +218,12 @@ fn execute() -> Result<()> {
             | "symbolize"
             | "app-image"
             | "app-run"
+            | "terminal-image"
+            | "desktop-pty-test"
+            | "desktop-files-fault-test"
+            | "ext4-journal-image"
+            | "ext4-image"
+            | "ext4-migrate"
     ) && args.len() > 1
     {
         return Err("Unexpected arguments; run cargo xtask help".into());
@@ -228,6 +252,34 @@ fn execute() -> Result<()> {
         "input-test" => input::verify(&root),
         "gui-image" => image(&root, Mode::Gui).map(|_| ()),
         "gui-test" => gui::verify(&root),
+        "desktop-build" => desktop::prepare(&root).map(|_| ()),
+        "desktop-image" => desktop::image(&root).map(|_| ()),
+        "desktop-test" => desktop_test::verify(&root),
+        "desktop-build-test" => desktop_build_test::verify(&root),
+        "desktop-files-test" => desktop_files_test::verify(&root),
+        "desktop-files-fault-test" => desktop_files_fault_test::verify(&root, &args[1..]),
+        "desktop-pty-test" => {
+            let compiler = match args.get(1).map(String::as_str) {
+                None => true,
+                Some("--without-toolchain") => false,
+                _ => return Err("Usage: cargo xtask desktop-pty-test [--without-toolchain]".into()),
+            };
+            if args.len() > 2 {
+                return Err("Unexpected desktop-pty-test argument".into());
+            }
+            pty_terminal_test::verify(&root, compiler)
+        }
+        "terminal-image" => {
+            let compiler = match args.get(1).map(String::as_str) {
+                None => false,
+                Some("--toolchain") => true,
+                _ => return Err("Usage: cargo xtask terminal-image [--toolchain]".into()),
+            };
+            if args.len() > 2 {
+                return Err("Unexpected terminal-image argument".into());
+            }
+            pty_terminal::image(&root, compiler).map(|_| ())
+        }
         "gui-sdk" => gui_sdk_build::export(&root).map(|_| ()),
         "gui-sdk-image" => gui_sdk_build::image(&root).map(|_| ()),
         "gui-sdk-test" => {
@@ -243,6 +295,7 @@ fn execute() -> Result<()> {
             let mut graphics = false;
             let mut gui = false;
             let mut gui_sdk = false;
+            let mut desktop = false;
             let mut ext4_write = false;
             let mut options = args.iter().skip(1);
             while let Some(option) = options.next() {
@@ -254,6 +307,7 @@ fn execute() -> Result<()> {
                     "--graphics" if !graphics => graphics = true,
                     "--gui" if !gui => gui = true,
                     "--gui-sdk" if !gui_sdk => gui_sdk = true,
+                    "--desktop" if !desktop => desktop = true,
                     "--disk" if disk.is_none() => {
                         disk = Some(disk::user_path(
                             &root,
@@ -262,11 +316,17 @@ fn execute() -> Result<()> {
                     }
                     _ => {
                         return Err(
-                        "Usage: cargo xtask run [--graphics | --gui | --gui-sdk] [--network] [--toolchain | --rust] [--disk build/disks/NAME.ext2]"
+                        "Usage: cargo xtask run [--graphics | --gui | --gui-sdk | --desktop] [--network] [--toolchain | --rust] [--disk build/disks/NAME.ext2]"
                                 .into(),
                         );
                     }
                 }
+            }
+            if desktop {
+                if graphics || gui || gui_sdk || rust || ext4_write || network {
+                    return Err("Select --desktop with optional --toolchain and --disk".into());
+                }
+                return desktop::run(&root, disk.as_deref(), toolchain);
             }
             if gui_sdk && (graphics || gui || toolchain || rust) {
                 return Err("Select --gui-sdk without another image profile".into());
@@ -449,6 +509,10 @@ fn execute() -> Result<()> {
                 "anova-gui",
                 "-p",
                 "anova-gui-runtime",
+                "-p",
+                "anova-terminal",
+                "-p",
+                "anova-editor",
             ]))?;
             command(Command::new("cargo").args([
                 "test",
@@ -475,7 +539,7 @@ fn execute() -> Result<()> {
         }
         "help" | "--help" | "-h" => {
             println!(
-                "AnovaOS host tools\n\n  cargo xtask doctor\n  cargo xtask fetch\n  cargo xtask build\n  cargo xtask image\n  cargo xtask run [--graphics | --gui | --gui-sdk] [--network] [--toolchain | --rust] [--disk build/disks/NAME.ext2]\n  cargo xtask smoke [--case CASE] [--timeout-secs 1..300]\n  cargo xtask verify\n  cargo xtask test-host\n  cargo xtask test-compat\n  cargo xtask trace-compat\n  cargo xtask apps\n  cargo xtask check-apps\n  cargo xtask check-files\n  cargo xtask network-test\n  cargo xtask package-test\n  cargo xtask sdk\n  cargo xtask app-new <c|cpp|rust> PROJECT\n  cargo xtask app-build PROJECT\n  cargo xtask app-pack MANIFEST OUTPUT\n  cargo xtask app-image PACKAGE SHA256\n  cargo xtask app-run PACKAGE SHA256 [--disk build/disks/NAME.ext2]\n  cargo xtask app-test\n  cargo xtask sdk-test\n  cargo xtask package-v2-test\n  cargo xtask diagnostics-test\n  cargo xtask symbolize ELF [--base 0xBIAS] ADDRESS... | --log LOG [--pid PID]\n  cargo xtask toolchain-build\n  cargo xtask toolchain-image\n  cargo xtask toolchain-test\n  cargo xtask bootstrap-prepare\n  cargo xtask bootstrap-test\n  cargo xtask bootstrap-gcc-test\n  cargo xtask bootstrap-rust-test\n  cargo xtask bootstrap-kernel-test\n  cargo xtask bootstrap-repeat-test\n  cargo xtask rust-build\n  cargo xtask rust-image\n  cargo xtask rust-cross-test\n  cargo xtask rust-runtime-test\n  cargo xtask rust-test\n  cargo xtask rust-online-test\n  cargo xtask rust-public-test\n  cargo xtask terminal-test\n  cargo xtask root-image [--linux] build/disks/NAME.ext2\n  cargo xtask persistence-test\n  cargo xtask foundation-test\n  cargo xtask foundation-write-test\n  cargo xtask foundation-journal-test\n  cargo xtask foundation-migrate-test\n  cargo xtask foundation-capacity-test\n  cargo xtask ext4-journal-image [--linux] build/disks/NAME.ext4\n  cargo xtask ext4-migrate build/disks/SOURCE.ext2 build/disks/NEW.ext4\n  cargo xtask ext4-image [--linux] build/disks/NAME.ext4\n  cargo xtask run --ext4-write [--toolchain] --disk build/disks/NAME.ext4\n  cargo xtask graphics-image\n  cargo xtask graphics-test\n  cargo xtask gpu-test\n  cargo xtask gpu-fallback-test\n  cargo xtask input-test\n  cargo xtask gui-image\n  cargo xtask gui-test\n  cargo xtask gui-sdk\n  cargo xtask gui-sdk-image\n  cargo xtask gui-sdk-test\n  cargo xtask gui-sdk-replay\n\nCASE: boot, panic, timeout, invalid-opcode, general-protection, page-fault, double-fault, stack-guard, read-only, no-execute, direct-no-execute, unmapped, oom.\nOutputs stay in build/; run uses disposable OVMF variables and a temporary data disk unless --disk is explicit. Use guest shutdown for persistent images. TCG is mandatory."
+                "AnovaOS host tools\n\n  cargo xtask doctor\n  cargo xtask fetch\n  cargo xtask build\n  cargo xtask image\n  cargo xtask run [--graphics | --gui | --gui-sdk | --desktop] [--network] [--toolchain | --rust] [--disk build/disks/NAME.ext2]\n  cargo xtask smoke [--case CASE] [--timeout-secs 1..300]\n  cargo xtask verify\n  cargo xtask test-host\n  cargo xtask test-compat\n  cargo xtask trace-compat\n  cargo xtask apps\n  cargo xtask check-apps\n  cargo xtask check-files\n  cargo xtask network-test\n  cargo xtask package-test\n  cargo xtask sdk\n  cargo xtask app-new <c|cpp|rust> PROJECT\n  cargo xtask app-build PROJECT\n  cargo xtask app-pack MANIFEST OUTPUT\n  cargo xtask app-image PACKAGE SHA256\n  cargo xtask app-run PACKAGE SHA256 [--disk build/disks/NAME.ext2]\n  cargo xtask app-test\n  cargo xtask sdk-test\n  cargo xtask package-v2-test\n  cargo xtask diagnostics-test\n  cargo xtask symbolize ELF [--base 0xBIAS] ADDRESS... | --log LOG [--pid PID]\n  cargo xtask toolchain-build\n  cargo xtask toolchain-image\n  cargo xtask toolchain-test\n  cargo xtask bootstrap-prepare\n  cargo xtask bootstrap-test\n  cargo xtask bootstrap-gcc-test\n  cargo xtask bootstrap-rust-test\n  cargo xtask bootstrap-kernel-test\n  cargo xtask bootstrap-repeat-test\n  cargo xtask rust-build\n  cargo xtask rust-image\n  cargo xtask rust-cross-test\n  cargo xtask rust-runtime-test\n  cargo xtask rust-test\n  cargo xtask rust-online-test\n  cargo xtask rust-public-test\n  cargo xtask terminal-test\n  cargo xtask root-image [--linux] build/disks/NAME.ext2\n  cargo xtask persistence-test\n  cargo xtask foundation-test\n  cargo xtask foundation-write-test\n  cargo xtask foundation-journal-test\n  cargo xtask foundation-migrate-test\n  cargo xtask foundation-capacity-test\n  cargo xtask ext4-journal-image [--linux] build/disks/NAME.ext4\n  cargo xtask ext4-migrate build/disks/SOURCE.ext2 build/disks/NEW.ext4\n  cargo xtask ext4-image [--linux] build/disks/NAME.ext4\n  cargo xtask run --ext4-write [--toolchain] --disk build/disks/NAME.ext4\n  cargo xtask graphics-image\n  cargo xtask graphics-test\n  cargo xtask gpu-test\n  cargo xtask gpu-fallback-test\n  cargo xtask input-test\n  cargo xtask desktop-build\n  cargo xtask desktop-image\n  cargo xtask desktop-test\n  cargo xtask desktop-build-test\n  cargo xtask desktop-files-test\n  cargo xtask desktop-files-fault-test [--case NAME]\n  cargo xtask desktop-pty-test [--without-toolchain]\n  cargo xtask terminal-image [--toolchain]\n  cargo xtask run --desktop [--toolchain] [--disk build/disks/work.ext4]\n  cargo xtask gui-image\n  cargo xtask gui-test\n  cargo xtask gui-sdk\n  cargo xtask gui-sdk-image\n  cargo xtask gui-sdk-test\n  cargo xtask gui-sdk-replay\n\nCASE: boot, panic, timeout, invalid-opcode, general-protection, page-fault, double-fault, stack-guard, read-only, no-execute, direct-no-execute, unmapped, oom.\nOutputs stay in build/; run uses disposable OVMF variables and a temporary data disk unless --disk is explicit. Use guest shutdown for persistent images. TCG is mandatory."
             );
             Ok(())
         }
