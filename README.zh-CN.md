@@ -45,6 +45,10 @@ GitHub Actions 暂时**仅在推送 `main` 时运行**，关闭 PR、手动和�
 证据按阶段收录在[验收索引](docs/zh-CN/index.md#验收记录)，各记录明确实际运行的检查。
 已配置 CI、远端 CI 实际结果和本地验收是分别记录的事实。
 
+早期启动的 I/O APIC 初始化允许固件与寄存器编号不同，仍屏蔽所有外部中断并逐项读回确认。
+`cargo xtask smoke --case ioapic-id-mismatch` 在解析后的 MADT 中注入编号，配合真实 QEMU
+寄存器复现报告中的 128/0 差异，且已纳入 `verify`；见带日期的[启动修复证据](docs/zh-CN/validation/M2.md)。
+
 系统当前为单 BSP、32 个进程/线程槽、内核不可抢占、固定 16 MiB 堆；外设 IRQ 保持屏蔽，
 设备 I/O 采用轮询。ext2 可写文件上限 4 MiB，受控 ext4 文件上限 256 MiB，tmpfs 和只读共享文件缓存上限仍为 1 MiB。
 ext2 没有日志或断电恢复。通用 Linux/glibc、SMP、USB/实机支持、原生 Rust `std`、

@@ -50,6 +50,13 @@ Evidence is recorded per stage in the [validation index](docs/en/index.md#valida
 Each record identifies its executed checks. Configured CI, actual remote CI execution
 and local acceptance are separate facts.
 
+The early-boot I/O APIC path tolerates firmware/register ID differences while
+keeping all external interrupts masked and checking every mask readback.
+`cargo xtask smoke --case ioapic-id-mismatch` reproduces the reported 128/0
+case using a parsed-MADT test injection and real QEMU registers, and is included
+in `verify`; see the dated
+[boot-fix evidence](docs/en/validation/M2.md).
+
 The current system uses one BSP, 32 process/thread slots, a non-preemptible
 kernel, a fixed 16 MiB heap and masked peripheral IRQs with polled device I/O.
 Writable ext2 files are bounded at 4 MiB; controlled ext4 files allow 256 MiB; tmpfs and readonly shared-file caches

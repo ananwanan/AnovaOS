@@ -62,6 +62,7 @@ Run from the repository root:
 | `cargo xtask image` | build/images/anova-normal.iso | Missing/corrupt inputs stop image generation |
 | `cargo xtask run` | UEFI boot workloads, native PID 1 and interactive serial shell | Process errors propagate; stop QEMU with Ctrl+C |
 | `cargo xtask smoke` | Memory/CPU and 11 isolation cases, then CPU/FPU/process lifecycle plus VFS/pipe/shell/tmpfs-OOM suite | Missing isolation/reclamation evidence, fatal kernel fault, wrong exit or deadline returns 1 |
+| `cargo xtask smoke --case ioapic-id-mismatch` | Same full boot with parsed MADT ID injected as 128 and real I/O APIC register ID 0 | Missing exact injection/mismatch/masking evidence or any normal smoke failure returns 1 |
 | `cargo xtask smoke --case panic` | Controlled panic and QEMU 35 | Intentionally returns 1 |
 | `cargo xtask smoke --case timeout --timeout-secs 8` | Controlled hang, killed by watchdog | Intentionally returns 1 |
 | `cargo xtask smoke --case page-fault` | Real guard write faults on IST2, QEMU 37 | Intentionally returns 1 |
@@ -72,14 +73,14 @@ Run from the repository root:
 | `cargo xtask smoke --case stack-guard` | Write to the owned normal-stack guard, QEMU 37 | Intentionally returns 1 |
 | `cargo xtask smoke --case unmapped` | Access after unmap and TLB flush, QEMU 37 | Intentionally returns 1 |
 | `cargo xtask smoke --case oom` | Infallible allocation panic, QEMU 35 | Intentionally returns 1 |
-| `cargo xtask verify` | Boot passes; twelve reached failure injections are rejected | Wrong vector/error/IST/address, unexpected outcome or unreached injection fails |
+| `cargo xtask verify` | Normal and I/O APIC ID mismatch boots pass; twelve reached failure injections are rejected | Missing mismatch evidence, wrong vector/error/IST/address, unexpected outcome or unreached injection fails |
 | `cargo xtask terminal-test` | Two normal boots: UART editing/CRLF/EOF, dynamic musl, Ctrl+C/EINTR, shell restart and volatile file loss | Missing actual output, guest failure or 30-second/session watchdog returns 1 |
 | `cargo xtask root-image build/disks/NAME.ext2` | New 16 MiB native-v1 ext2 data image | Existing files and unsafe paths are refused |
 | `cargo xtask run --disk build/disks/NAME.ext2` | Reuse an explicitly selected image; guest shutdown cleanly powers off | Does not format missing/existing images |
 | `cargo xtask persistence-test` | Editor/source/binary checks across shutdown/reboot, e2fsck and device error scenarios | Missing bytes/hash/mount/error/actual exit or 60-second/session watchdog fails |
 | `cargo xtask test-host` | Frame/buddy/table, VFS/pipe/FD, scheduler, archive/parser and transcript tests | Test failures propagate |
 
-smoke accepts --case boot/panic/timeout/invalid-opcode/general-protection/page-fault/
+smoke accepts --case boot/ioapic-id-mismatch/panic/timeout/invalid-opcode/general-protection/page-fault/
 double-fault/stack-guard/read-only/no-execute/direct-no-execute/unmapped/oom
 and --timeout-secs 1..300; its default is 30 seconds. verify uses
 30 seconds per case, including the deliberately hung image. Larger M9 runtime
@@ -152,7 +153,7 @@ A banner alone never passes.
 ## CI and evidence
 
 [boot.yml](../../../.github/workflows/boot.yml) runs the above checks on Ubuntu 24.04,
-including all 13 QEMU cases, the two-boot terminal scenario and persistence/error scenarios, and uploads logs even on failure. Actions are
+including all 14 QEMU cases, the two-boot terminal scenario and persistence/error scenarios, and uploads logs even on failure. Actions are
 pinned to commits. Configured CI and remote CI execution are separate facts.
 Current local evidence through M15.6 is listed in the
 [documentation index](../index.md#validation).

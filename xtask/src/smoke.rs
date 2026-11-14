@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Require CPU/memory/native/Linux runtime, checked file publication and storage proof plus exits.
+//! Assess the injected firmware I/O APIC ID mismatch against real QEMU registers and mask readback.
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Failure {
@@ -8,6 +9,35 @@ pub enum Failure {
     Exception,
     Exit(Option<i32>),
     Markers,
+}
+
+pub fn assess_ioapic_id_mismatch(
+    log: &str,
+    code: Option<i32>,
+    timed_out: bool,
+) -> Result<(), Failure> {
+    assess(log, code, timed_out)?;
+    let mut lines = log.lines();
+    if !lines.any(|line| line == "[TEST:INJECT] ioapic-id-mismatch original_id=0 firmware_id=128") {
+        return Err(Failure::Markers);
+    }
+    let ioapic = lines
+        .find(|line| line.starts_with("[CPU:IOAPIC]"))
+        .ok_or(Failure::Markers)?;
+    for (name, expected) in [
+        ("id", "128"),
+        ("register_id", "0"),
+        ("address", "0xfec00000"),
+        ("gsi", "0..24"),
+        ("destination", "0"),
+        ("all_masked", "true"),
+        ("id_mismatch", "true"),
+    ] {
+        if field(ioapic, name) != Some(expected) {
+            return Err(Failure::Markers);
+        }
+    }
+    Ok(())
 }
 
 pub fn assess(log: &str, code: Option<i32>, timed_out: bool) -> Result<(), Failure> {
@@ -371,6 +401,50 @@ mod tests {
         "[USER:CPU] syscall=true return=iretq\n[APP:RUST] args: hello-rust AnovaOS ring3; BSS=zero x87/SSE2=ok\n[USER:EXIT] pid=1 status=0\n[APP:C] args: hello-c native-v1; BSS=zero SSE2=ok\n[USER:EXIT] pid=2 status=7\n[USER:COPYFAULT] write=false recovered=true\n[USER:COPYFAULT] write=true recovered=true\n[USER:LOADER] partial_oom=rolled_back\n[USER:CASE] name=syscalls passed=true\n[USER:CASE] name=timer passed=true\n[USER:CASE] name=page-fault passed=true\n[USER:CASE] name=kernel-read passed=true\n[USER:CASE] name=kernel-write passed=true\n[USER:CASE] name=stack-guard passed=true\n[USER:CASE] name=invalid-opcode passed=true\n[USER:CASE] name=privileged passed=true\n[USER:CASE] name=bad-rsp passed=true\n[USER:CASE] name=read-only passed=true\n[USER:CASE] name=no-execute passed=true\n[USER:TEST] cases=11 repeated=8 pointers=rejected syscalls=checked faults=contained frames_restored=true user_irqs=1\n",
         "[PROC:OOM] spawn=rolled_back fork=rolled_back exec=retained frames_restored=true heap_restored=true\n[PROC:WORKER] GPR/XMM0-15/x87/MXCSR preserved\n[PROC:WORKER] GPR/XMM0-15/x87/MXCSR preserved\n[PROC:CASE] preemption-fpu-fault passed=true\n[PROC:CASE] fork-private-fd passed=true\n[PROC:CASE] fork-cpu-state passed=true\n[PROC:CASE] exec-reset-retain-fd passed=true\n[PROC:CASE] wait-any-orphan-repeat passed=true\n[PROC:CASE] capacity-reuse passed=true\n[SCHED:TEST] preemptions=4 preempt_switches=3 switches=8 sleeps=4 waits=16 idle_halts=3 forks=2 execs=1 spawns=55 reaps=57\n[SCHED:READY] processes_reclaimed=true descriptors=0 frames_restored=true heap_restored=true\n[USER:READY]\n[VFS:MOUNTS]\n[PCI:BLK]\n[BLK:READY]\n[BLK:BOUNDS] last_sector=ok capacity=reject overflow=reject flush=ok\n[DISK:MOUNT] /persist=ext2:rw\n[INIT:START] pid=1\n[FS:CASE] paths-copy-offset-fork-exec-cwd passed=true\n[FS:CASE] pipe-block-drain-eof-broken passed=true\n[FS:CASE] limits-rollback-reuse passed=true\n[FS:CASE] tmpfs-oom-rollback passed=true\n[DISK:TEST] offsets=true fork=true indirect=true sparse=true unlink=true reuse=true negatives=true\n[FS:TEST] passed=true\n[SHELL:STATUS] code=0\n[SHELL:STATUS] code=7\n[SHELL:STATUS] code=127\n[SHELL:STATUS] code=1\n[SHELL:STATUS] code=2\n[SHELL:TEST] files=verified pipeline_bytes=5000 redirection=true cwd=true\n[INIT:TEST] shell_status=0 children_reaped=true\n[VFS:IO] blocks=3 wakes=3 open_descriptions=0 pipes=0\n[BLK:RESET] acknowledged=true dma_released=true\n[VFS:READY] frames_restored=true heap_restored=true tmpfs=volatile\n[BOOT:OK]\n[TEST:PASS]\n",
     );
+
+    #[test]
+    fn ioapic_id_mismatch_requires_real_masking_and_complete_boot() {
+        let marker = "[TEST:INJECT] ioapic-id-mismatch original_id=0 firmware_id=128\n[CPU:IOAPIC] id=128 register_id=0 address=0xfec00000 gsi=0..24 destination=0 all_masked=true id_mismatch=true";
+        let log = GOOD.replace("[CPU:IOAPIC]", marker);
+        assert_eq!(assess_ioapic_id_mismatch(&log, Some(33), false), Ok(()));
+        assert_eq!(
+            assess_ioapic_id_mismatch(&log.replace('\n', "\r\n"), Some(33), false),
+            Ok(())
+        );
+        for (old, new) in [
+            ("[TEST:INJECT]", "[MISSING]"),
+            ("[CPU:IOAPIC] id=128", "[CPU:IOAPIC] id=0"),
+            ("register_id=0", "register_id=128"),
+            ("address=0xfec00000", "address=0x0"),
+            ("gsi=0..24", "gsi=0..1"),
+            ("destination=0", "destination=1"),
+            ("all_masked=true", "all_masked=false"),
+            ("id_mismatch=true", "id_mismatch=false"),
+            ("[CPU:TIMER]", "[MISSING]"),
+            ("[TEST:PASS]", "[MISSING]"),
+        ] {
+            assert_eq!(
+                assess_ioapic_id_mismatch(&log.replace(old, new), Some(33), false),
+                Err(Failure::Markers)
+            );
+        }
+        assert_eq!(
+            assess_ioapic_id_mismatch(GOOD, Some(33), false),
+            Err(Failure::Markers)
+        );
+        assert_eq!(
+            assess_ioapic_id_mismatch(marker, Some(33), false),
+            Err(Failure::Markers)
+        );
+        assert_eq!(
+            assess_ioapic_id_mismatch(&log, Some(35), false),
+            Err(Failure::Exit(Some(35)))
+        );
+        assert_eq!(
+            assess_ioapic_id_mismatch(&log, None, true),
+            Err(Failure::Timeout)
+        );
+    }
 
     #[test]
     fn runtime_gate_requires_all_three_program_profiles_and_real_cleanup() {

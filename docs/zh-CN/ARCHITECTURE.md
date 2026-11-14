@@ -42,9 +42,12 @@ block/net；其他设备须有驱动/验收。M1 不需 virtio，QEMU PS/2 不�
 - 早期32页池克隆当前root及修改路径，保留其他Limine映射；guard、只读NX ACPI/UC NX APIC
   窗口不依赖frame allocator。M3后完整克隆所有活动表到受管frame。
 - `anova-platform` 按有界字节/校验和/长度解析 RSDP/XSDT或RSDT/MADT/FADT；检查APIC CPU
-  feature/MSR base/MADT身份/NX/PAT。
+  feature/LAPIC MSR基址与BSP身份/MADT拓扑/NX/PAT。
 - 双PIC和IOAPIC路由全屏蔽，仅LAPIC向量64；spurious255无EOI返回。20ms PM采样校准100Hz，
   handler只加原子计数/一次EOI，不日志/分配。
+- I/O APIC 按已校验的 MADT 地址和 GSI 范围访问。所有屏蔽位读回通过后，记录固件与寄存器
+  编号差异；在仅屏蔽外部中断的初始化中不因此中止，也不改写编号寄存器。实际外部 IRQ
+  路由仍需单独完成控制器身份、拓扑及投递验收。
 - COM1普通BSP调用串行化且保留IF，panic/fatal独立有界无锁输出，无AP启动；M5加BSP调度，
   timer验证后普通idle用sti;hlt。
 - xtask生成q35/TCG、256MiB/单CPU UEFI El Torito ISO，临时固件变量、无网络；M7默认临时盘。

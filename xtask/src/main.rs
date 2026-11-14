@@ -76,6 +76,7 @@ enum Mode {
     DesktopTest,
     Gpu,
     Boot,
+    IoApicIdMismatch,
     Panic,
     Timeout,
     InvalidOpcode,
@@ -105,6 +106,7 @@ impl Mode {
             Self::DesktopTest => "desktop-test",
             Self::Gpu => "gpu",
             Self::Boot => "boot",
+            Self::IoApicIdMismatch => "ioapic-id-mismatch",
             Self::Panic => "panic",
             Self::Timeout => "timeout",
             Self::InvalidOpcode => "invalid-opcode",
@@ -133,6 +135,7 @@ impl Mode {
             Self::DesktopTest => Some("desktop-test"),
             Self::Gpu => Some("graphics,gui,gpu-test"),
             Self::Boot => Some("qemu-test"),
+            Self::IoApicIdMismatch => Some("test-ioapic-id-mismatch"),
             Self::Panic => Some("test-panic"),
             Self::Timeout => Some("test-timeout"),
             Self::InvalidOpcode => Some("test-invalid-opcode"),
@@ -429,6 +432,7 @@ fn execute() -> Result<()> {
         "verify" => {
             for (mode, timeout, expected) in [
                 (Mode::Boot, 30, Ok(())),
+                (Mode::IoApicIdMismatch, 30, Ok(())),
                 (Mode::Panic, 30, Err(smoke::Failure::Panic)),
                 (Mode::Timeout, 30, Err(smoke::Failure::Timeout)),
                 (Mode::InvalidOpcode, 30, Err(smoke::Failure::Exception)),
@@ -547,7 +551,7 @@ fn execute() -> Result<()> {
         }
         "help" | "--help" | "-h" => {
             println!(
-                "AnovaOS host tools\n\n  cargo xtask doctor\n  cargo xtask fetch\n  cargo xtask build\n  cargo xtask image\n  cargo xtask run [--graphics | --gui | --gui-sdk | --desktop] [--network] [--toolchain | --rust] [--disk build/disks/NAME.ext2]\n  cargo xtask smoke [--case CASE] [--timeout-secs 1..300]\n  cargo xtask verify\n  cargo xtask test-host\n  cargo xtask test-compat\n  cargo xtask trace-compat\n  cargo xtask apps\n  cargo xtask check-apps\n  cargo xtask check-files\n  cargo xtask network-test\n  cargo xtask package-test\n  cargo xtask sdk\n  cargo xtask app-new <c|cpp|rust> PROJECT\n  cargo xtask app-build PROJECT\n  cargo xtask app-pack MANIFEST OUTPUT\n  cargo xtask app-image PACKAGE SHA256\n  cargo xtask app-run PACKAGE SHA256 [--disk build/disks/NAME.ext2]\n  cargo xtask app-test\n  cargo xtask sdk-test\n  cargo xtask package-v2-test\n  cargo xtask diagnostics-test\n  cargo xtask symbolize ELF [--base 0xBIAS] ADDRESS... | --log LOG [--pid PID]\n  cargo xtask toolchain-build\n  cargo xtask toolchain-image\n  cargo xtask toolchain-test\n  cargo xtask bootstrap-prepare\n  cargo xtask bootstrap-test\n  cargo xtask bootstrap-gcc-test\n  cargo xtask bootstrap-rust-test\n  cargo xtask bootstrap-kernel-test\n  cargo xtask bootstrap-repeat-test\n  cargo xtask rust-build\n  cargo xtask rust-image\n  cargo xtask rust-cross-test\n  cargo xtask rust-runtime-test\n  cargo xtask rust-test\n  cargo xtask rust-online-test\n  cargo xtask rust-public-test\n  cargo xtask terminal-test\n  cargo xtask root-image [--linux] build/disks/NAME.ext2\n  cargo xtask persistence-test\n  cargo xtask foundation-test\n  cargo xtask foundation-write-test\n  cargo xtask foundation-journal-test\n  cargo xtask foundation-migrate-test\n  cargo xtask foundation-capacity-test\n  cargo xtask ext4-journal-image [--linux] build/disks/NAME.ext4\n  cargo xtask ext4-migrate build/disks/SOURCE.ext2 build/disks/NEW.ext4\n  cargo xtask ext4-image [--linux] build/disks/NAME.ext4\n  cargo xtask run --ext4-write [--toolchain] --disk build/disks/NAME.ext4\n  cargo xtask graphics-image\n  cargo xtask graphics-test\n  cargo xtask gpu-test\n  cargo xtask gpu-fallback-test\n  cargo xtask input-test\n  cargo xtask desktop-build\n  cargo xtask desktop-image\n  cargo xtask desktop-development-image\n  cargo xtask desktop-test\n  cargo xtask desktop-monitor-test\n  cargo xtask desktop-workflow-test [--case c|cpp|rust]\n  cargo xtask desktop-build-test\n  cargo xtask desktop-files-test\n  cargo xtask desktop-files-fault-test [--case NAME]\n  cargo xtask desktop-pty-test [--without-toolchain]\n  cargo xtask terminal-image [--toolchain]\n  cargo xtask run --desktop [--toolchain | --rust] [--disk build/disks/work.ext4]\n  cargo xtask gui-image\n  cargo xtask gui-test\n  cargo xtask gui-sdk\n  cargo xtask gui-sdk-image\n  cargo xtask gui-sdk-test\n  cargo xtask gui-sdk-replay\n\nCASE: boot, panic, timeout, invalid-opcode, general-protection, page-fault, double-fault, stack-guard, read-only, no-execute, direct-no-execute, unmapped, oom.\nOutputs stay in build/; run uses disposable OVMF variables and a temporary data disk unless --disk is explicit. Use guest shutdown for persistent images. TCG is mandatory."
+                "AnovaOS host tools\n\n  cargo xtask doctor\n  cargo xtask fetch\n  cargo xtask build\n  cargo xtask image\n  cargo xtask run [--graphics | --gui | --gui-sdk | --desktop] [--network] [--toolchain | --rust] [--disk build/disks/NAME.ext2]\n  cargo xtask smoke [--case CASE] [--timeout-secs 1..300]\n  cargo xtask verify\n  cargo xtask test-host\n  cargo xtask test-compat\n  cargo xtask trace-compat\n  cargo xtask apps\n  cargo xtask check-apps\n  cargo xtask check-files\n  cargo xtask network-test\n  cargo xtask package-test\n  cargo xtask sdk\n  cargo xtask app-new <c|cpp|rust> PROJECT\n  cargo xtask app-build PROJECT\n  cargo xtask app-pack MANIFEST OUTPUT\n  cargo xtask app-image PACKAGE SHA256\n  cargo xtask app-run PACKAGE SHA256 [--disk build/disks/NAME.ext2]\n  cargo xtask app-test\n  cargo xtask sdk-test\n  cargo xtask package-v2-test\n  cargo xtask diagnostics-test\n  cargo xtask symbolize ELF [--base 0xBIAS] ADDRESS... | --log LOG [--pid PID]\n  cargo xtask toolchain-build\n  cargo xtask toolchain-image\n  cargo xtask toolchain-test\n  cargo xtask bootstrap-prepare\n  cargo xtask bootstrap-test\n  cargo xtask bootstrap-gcc-test\n  cargo xtask bootstrap-rust-test\n  cargo xtask bootstrap-kernel-test\n  cargo xtask bootstrap-repeat-test\n  cargo xtask rust-build\n  cargo xtask rust-image\n  cargo xtask rust-cross-test\n  cargo xtask rust-runtime-test\n  cargo xtask rust-test\n  cargo xtask rust-online-test\n  cargo xtask rust-public-test\n  cargo xtask terminal-test\n  cargo xtask root-image [--linux] build/disks/NAME.ext2\n  cargo xtask persistence-test\n  cargo xtask foundation-test\n  cargo xtask foundation-write-test\n  cargo xtask foundation-journal-test\n  cargo xtask foundation-migrate-test\n  cargo xtask foundation-capacity-test\n  cargo xtask ext4-journal-image [--linux] build/disks/NAME.ext4\n  cargo xtask ext4-migrate build/disks/SOURCE.ext2 build/disks/NEW.ext4\n  cargo xtask ext4-image [--linux] build/disks/NAME.ext4\n  cargo xtask run --ext4-write [--toolchain] --disk build/disks/NAME.ext4\n  cargo xtask graphics-image\n  cargo xtask graphics-test\n  cargo xtask gpu-test\n  cargo xtask gpu-fallback-test\n  cargo xtask input-test\n  cargo xtask desktop-build\n  cargo xtask desktop-image\n  cargo xtask desktop-development-image\n  cargo xtask desktop-test\n  cargo xtask desktop-monitor-test\n  cargo xtask desktop-workflow-test [--case c|cpp|rust]\n  cargo xtask desktop-build-test\n  cargo xtask desktop-files-test\n  cargo xtask desktop-files-fault-test [--case NAME]\n  cargo xtask desktop-pty-test [--without-toolchain]\n  cargo xtask terminal-image [--toolchain]\n  cargo xtask run --desktop [--toolchain | --rust] [--disk build/disks/work.ext4]\n  cargo xtask gui-image\n  cargo xtask gui-test\n  cargo xtask gui-sdk\n  cargo xtask gui-sdk-image\n  cargo xtask gui-sdk-test\n  cargo xtask gui-sdk-replay\n\nCASE: boot, ioapic-id-mismatch, panic, timeout, invalid-opcode, general-protection, page-fault, double-fault, stack-guard, read-only, no-execute, direct-no-execute, unmapped, oom.\nOutputs stay in build/; run uses disposable OVMF variables and a temporary data disk unless --disk is explicit. Use guest shutdown for persistent images. TCG is mandatory."
             );
             Ok(())
         }
@@ -564,6 +568,7 @@ fn smoke_args(args: &[String]) -> Result<(Mode, u64)> {
             "--case" => {
                 mode = match pair[1].as_str() {
                     "boot" => Mode::Boot,
+                    "ioapic-id-mismatch" => Mode::IoApicIdMismatch,
                     "panic" => Mode::Panic,
                     "timeout" => Mode::Timeout,
                     "invalid-opcode" => Mode::InvalidOpcode,
@@ -1072,7 +1077,11 @@ fn smoke(root: &Path, mode: Mode, seconds: u64) -> Result<std::result::Result<()
     if let Some(start) = transcript.find("[BOOT:ENTRY]") {
         print!("{}", &transcript[start..]);
     }
-    let result = smoke::assess(&transcript, code, timed_out);
+    let result = if mode == Mode::IoApicIdMismatch {
+        smoke::assess_ioapic_id_mismatch(&transcript, code, timed_out)
+    } else {
+        smoke::assess(&transcript, code, timed_out)
+    };
     println!(
         "QEMU case={} exit={code:?} timed_out={timed_out} result={result:?}",
         mode.name()

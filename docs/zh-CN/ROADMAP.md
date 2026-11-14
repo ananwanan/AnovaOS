@@ -64,6 +64,8 @@
 - [x] GDT/TSS/IDT、独立异常栈、double fault 的 IST 与 guard page。
 - [x] page fault/GP fault/非法指令报告寄存器、地址和错误位。
 - [x] 解析并校验 RSDP/XSDT（或 RSDT）/MADT/FADT；配置 LAPIC 定时器与保持屏蔽的 IOAPIC 路由。
+- [x] 仅屏蔽外部中断的初始化允许固件与寄存器 I/O APIC 编号不同；保留屏蔽位读回检查，
+  以及在解析后的 MADT 中注入差异的 `ioapic-id-mismatch` 启动回归。
 - [ ] 外设 IRQ、MADT source override/NMI 路由随首个对应驱动启用并验证；当前不宣称外设中断可用。
 - [x] 使用 ACPI PM 时钟校准 LAPIC，提供粗粒度单调 IRQ 时间、周期中断和正确 EOI。
 - [x] 区分 trap/IRQ/普通 BSP 上下文，记录 IF 和无锁/不分配规则；线程上下文尚未存在。

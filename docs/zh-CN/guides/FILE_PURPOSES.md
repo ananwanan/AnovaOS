@@ -137,7 +137,7 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `docs/en/validation/M15.5.md` | 记录 M15.5 的实际本地执行、命令和产物身份、失败/恢复证据、当时限制与未测范围（英文）。 |
 | `docs/en/validation/M15.6.md` | 记录 M15.6 的实际本地执行、命令和产物身份、失败/恢复证据、当时限制与未测范围（英文）。 |
 | `docs/en/validation/M16.md` | 记录 M16 部分依赖获取、guest 构建实测、后端/缓存和受控 ext4 只读验收。 |
-| `docs/en/validation/M2.md` | 记录 M2 的实际本地执行、命令和产物身份、失败/恢复证据、当时限制与未测范围（英文）。 |
+| `docs/en/validation/M2.md` | 记录历史 CPU/计时器/trap 证据及另行注明日期的 I/O APIC 编号启动修复复现、检查和限制（英文）。 |
 | `docs/en/validation/M3.md` | 记录 M3 的实际本地执行、命令和产物身份、失败/恢复证据、当时限制与未测范围（英文）。 |
 | `docs/en/validation/M4.md` | 记录 M4 的实际本地执行、命令和产物身份、失败/恢复证据、当时限制与未测范围（英文）。 |
 | `docs/en/validation/M5.md` | 记录 M5 的实际本地执行、命令和产物身份、失败/恢复证据、当时限制与未测范围（英文）。 |
@@ -207,7 +207,7 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `docs/zh-CN/validation/M15.5.md` | 记录 M15.5 的实际本地执行、命令和产物身份、失败/恢复证据、当时限制与未测范围（简体中文，与英文对应）。 |
 | `docs/zh-CN/validation/M15.6.md` | 记录 M15.6 的实际本地执行、命令和产物身份、失败/恢复证据、当时限制与未测范围（简体中文，与英文对应）。 |
 | `docs/zh-CN/validation/M16.md` | 提供同步的 M16 部分验收中文证据及剩余阶段边界。 |
-| `docs/zh-CN/validation/M2.md` | 记录 M2 的实际本地执行、命令和产物身份、失败/恢复证据、当时限制与未测范围（简体中文，与英文对应）。 |
+| `docs/zh-CN/validation/M2.md` | 记录历史 CPU/计时器/trap 证据及另行注明日期的 I/O APIC 编号启动修复复现、检查和限制（简体中文，与英文对应）。 |
 | `docs/zh-CN/validation/M3.md` | 记录 M3 的实际本地执行、命令和产物身份、失败/恢复证据、当时限制与未测范围（简体中文，与英文对应）。 |
 | `docs/zh-CN/validation/M4.md` | 记录 M4 的实际本地执行、命令和产物身份、失败/恢复证据、当时限制与未测范围（简体中文，与英文对应）。 |
 | `docs/zh-CN/validation/M5.md` | 记录 M5 的实际本地执行、命令和产物身份、失败/恢复证据、当时限制与未测范围（简体中文，与英文对应）。 |
@@ -216,12 +216,12 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `docs/zh-CN/validation/M8.md` | 记录 M8 的实际本地执行、命令和产物身份、失败/恢复证据、当时限制与未测范围（简体中文，与英文对应）。 |
 | `docs/zh-CN/validation/M8_OPTIMIZATION.md` | 记录 M8_OPTIMIZATION 的实际本地执行、命令和产物身份、失败/恢复证据、当时限制与未测范围（简体中文，与英文对应）。 |
 | `docs/zh-CN/validation/M9.md` | 记录 M9 的实际本地执行、命令和产物身份、失败/恢复证据、当时限制与未测范围（简体中文，与英文对应）。 |
-| `kernel/Cargo.toml` | 构建裸机内核、带资源采样的桌面会话及可选隔离 QEMU 故障测试。 |
+| `kernel/Cargo.toml` | 构建裸机内核、带资源采样的桌面会话及可选隔离 QEMU 拓扑/故障测试。 |
 | `kernel/build.rs` | 拒绝宿主 target 内核构建，选择仅用于内核的 linker script。 |
 | `kernel/src/abi/mod.rs` | 适配原生系统查询；进程生命周期归 task，描述符调用归 fs。 |
 | `kernel/src/arch/mod.rs` | 选择已实现的 x86_64 硬件架构边界。 |
 | `kernel/src/arch/x86_64/acpi.rs` | 仅读取 q35 BSP 中断基线所需 firmware tables。 |
-| `kernel/src/arch/x86_64/apic.rs` | 实现 BSP xAPIC 周期计时器，按 3.579545 MHz ACPI PM timer 校准；外部 I/O APIC 和传统 PIC 在驱动就绪前保持屏蔽。 |
+| `kernel/src/arch/x86_64/apic.rs` | 校准 BSP xAPIC 计时器，屏蔽外部 I/O APIC/PIC 并检查读回；记录固件/寄存器编号差异，不启用中断路由。 |
 | `kernel/src/arch/x86_64/clock.rs` | 稳定采样 binary/BCD CMOS UTC，并按已校准单调时钟推进 realtime。 |
 | `kernel/src/arch/x86_64/cpu.rs` | 提供单 BSP 特权操作；此处不启用 FPU/SIMD。 |
 | `kernel/src/arch/x86_64/interrupts.S` | 为 CPU traps、IRQ 和原生 syscall 入口构造统一 saved-GPR frame，用 IRETQ 恢复 checked frame；long mode 总保存 SS:RSP。 |
@@ -241,7 +241,7 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `kernel/src/fs/tty.rs` | 实现有界 COM1/四 PTY line discipline、准确写入/poll/唤醒条件、配置、前台信号和 hangup。 |
 | `kernel/src/graphics.rs` | 验证显示映射，显示/回收引导缓冲，管理诊断光标并复制已检查用户合成器损伤区。 |
 | `kernel/src/gui.rs` | 认证 executable/server 和 process/client 身份，复制有界 IPC/scanout 并清理生命周期。 |
-| `kernel/src/main.rs` | 启动自有 CPU/内存/设备、可选 checked 软件图形和隔离用户负载。 |
+| `kernel/src/main.rs` | 启动自有硬件和隔离负载，报告可选源码构建身份，并将拓扑/故障注入限定在互斥的 QEMU 特性中。 |
 | `kernel/src/mm/lock.rs` | 提供不睡眠 BSP 锁，顺序先 memory manager 后 heap；固定堆不调用 frame allocator，IRQ/NMI/fatal 路径不得获取任一锁。 |
 | `kernel/src/mm/mod.rs` | 管理 BSP 内存所有权：checked USABLE frames、全自有页表层级、guarded stacks、可回收 buddy heap 和私有进程内存集成。 |
 | `kernel/src/mm/uaccess.rs` | 以页检查和 REP MOVSB 异常恢复复制有界用户字节；IF=0 固定共享映射，复制不跨调度/阻塞边界。 |
@@ -435,7 +435,7 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `xtask/src/gui_sdk_build.rs` | 导出含双语指南和校验清单的 GUI 源码 SDK，打包 guest 编译器/显示镜像。 |
 | `xtask/src/input.rs` | 注入 QMP 键鼠序列，比较全部光标/背景像素，并要求缺设备时串口恢复和正常关机。 |
 | `xtask/src/linux.rs` | 构建并记录锁定 musl/BusyBox 静态/动态夹具哈希，打包上游源码，保存有界 Linux 宿主追踪。 |
-| `xtask/src/main.rs` | 提供可复现内核/应用构建、ISO 组装和 QEMU 验证的宿主命令行入口。 |
+| `xtask/src/main.rs` | 提供可复现内核/应用构建、ISO 组装和 QEMU 验证的宿主命令行入口，包括解析后 MADT 的 I/O APIC 编号差异启动用例。 |
 | `xtask/src/network.rs` | 运行受控本地回环对端，用 watchdog 驱动真实 QEMU 网络验收。 |
 | `xtask/src/packages.rs` | 锁定并构建用户态 TLS 客户端、生成锁定包，验证安装、重启和 HTTPS 行为。 |
 | `xtask/src/purposes.rs` | 检查现存已跟踪/未跟踪文件的用途清单和自有文件头，忽略移动后已不存在的索引路径；职责是否准确仍由人工审阅。 |
@@ -443,7 +443,7 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `xtask/src/rust_online.rs` | 验证真实 guest HTTPS sparse-registry/Git 获取、严格传输失败及无网络重启后的缓存复用。 |
 | `xtask/src/rust_public.rs` | 验证 crates.io/GitHub 公共源码获取、锁定 revision、实际 guest 编译和离线重启复用。 |
 | `xtask/src/sdk.rs` | 导出包含双语指南的原生 SDK，创建/构建目标隔离的 C/C++/离线 Rust 项目。 |
-| `xtask/src/smoke.rs` | 要求真实 CPU、内存、用户态和进程证据与 QEMU 退出结果同时符合约定。 |
+| `xtask/src/smoke.rs` | 要求完整 CPU/内存/运行时/存储证据和 QEMU 退出结果；检查实际到达 I/O APIC 编号注入点、真实寄存器编号与屏蔽位读回。 |
 | `xtask/src/terminal.rs` | 驱动普通 UART 编辑/EOF、动态 musl 启动、真实 Ctrl+C 中断及易失数据重启检查。 |
 | `xtask/src/toolchain.rs` | 构建并打包可选开发 ISO，验证 guest 编辑、编译、make、失败场景与重启哈希。 |
 | `xtask/src/transcript.rs` | 捕获有序 guest stdout，保留 UART 证据，独立于文件系统快照或不完整 UTF-8 匹配原始字节。 |
