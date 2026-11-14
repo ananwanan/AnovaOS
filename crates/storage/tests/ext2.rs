@@ -5,8 +5,28 @@ use anova_abi::*;
 use anova_storage::{
     BlockDevice, SECTOR, check_range,
     ext2::{BLOCK, Ext2, MAX_FILE},
+    filesystem::Filesystem,
 };
 use std::{cell::RefCell, rc::Rc};
+
+#[test]
+fn space_reports_current_allocations_without_io_and_withholds_failed_counts() {
+    let device = fixture();
+    let mut fs = mount(&device);
+    let empty = Filesystem::space(&fs).unwrap();
+    assert_eq!(empty.free, Some((119, 118)));
+    let inode = fs.create(2, "use-space", false).unwrap();
+    fs.write(inode, 0, b"x").unwrap();
+    let reads = device.0.borrow().reads;
+    assert_eq!(Filesystem::space(&fs).unwrap().free, Some((118, 117)));
+    assert_eq!(device.0.borrow().reads, reads);
+    fs.unlink(2, "use-space").unwrap();
+    fs.release_unlinked(inode).unwrap();
+    assert_eq!(Filesystem::space(&fs), Some(empty));
+    device.0.borrow_mut().fail_flush = true;
+    assert_eq!(fs.sync(), Err(IO_ERROR));
+    assert_eq!(Filesystem::space(&fs).unwrap().free, None);
+}
 
 struct State {
     bytes: Vec<u8>,

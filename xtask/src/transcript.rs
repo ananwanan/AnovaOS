@@ -95,6 +95,11 @@ impl Transcript {
         String::from_utf8_lossy(&self.bytes)
     }
 
+    /// Mark the exact byte boundary before a new input, independently of lossy UTF-8 decoding.
+    pub fn position(&self) -> usize {
+        self.bytes.len()
+    }
+
     /// Return the absolute byte position, never an index into lossy UTF-8 text.
     pub fn find_from(&self, start: usize, marker: &str) -> Option<usize> {
         let tail = self.bytes.get(start..)?;

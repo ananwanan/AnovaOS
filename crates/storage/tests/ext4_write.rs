@@ -221,10 +221,20 @@ fn bytes(fs: &mut Ext4, n: u32) -> Vec<u8> {
 fn allocation_peaks_include_freed_files_and_exclude_rejected_changes() {
     let fixture = Fixture::new();
     let mut disk = fixture.mount();
+    let initial_space = disk.space().unwrap();
     let baseline = disk.usage().unwrap();
     let node = disk.create(2, "temporary", false).unwrap();
     disk.write(node, 0, &[42; BLOCK * 3]).unwrap();
     let high = disk.usage().unwrap();
+    let reads = fixture.faults.reads.get();
+    assert_eq!(
+        disk.space().unwrap().free,
+        Some((
+            initial_space.blocks - high.allocated_blocks,
+            initial_space.inodes - high.allocated_inodes
+        ))
+    );
+    assert_eq!(fixture.faults.reads.get(), reads);
     assert!(high.allocated_blocks >= baseline.allocated_blocks + 3);
     assert_eq!(high.allocated_inodes, baseline.allocated_inodes + 1);
     FAIL_ALLOC.with(|f| f.set(Some(0)));
@@ -235,6 +245,7 @@ fn allocation_peaks_include_freed_files_and_exclude_rejected_changes() {
     let removed = disk.unlink(2, "temporary").unwrap();
     disk.release_unlinked(removed).unwrap();
     let released = disk.usage().unwrap();
+    assert_eq!(disk.space(), Some(initial_space));
     assert_eq!(released.allocated_blocks, baseline.allocated_blocks);
     assert_eq!(released.allocated_inodes, baseline.allocated_inodes);
     assert_eq!(released.peak_blocks, high.peak_blocks);

@@ -70,3 +70,7 @@ cargo xtask persistence-test
 - [Linux AMD64 signal context](https://github.com/torvalds/linux/blob/master/arch/x86/include/uapi/asm/sigcontext.h)
 - [Linux futex UAPI](https://github.com/torvalds/linux/blob/master/include/uapi/linux/futex.h)
 - [musl 1.2.4 source](https://git.musl-libc.org/cgit/musl/tree/?h=v1.2.4)
+
+## M17.2 有界终端扩展
+
+单独准入的 M17.2 ash 增加真实 WUNTRACED/WNOHANG 停止子进程报告，以及按 PTY 进程族控制会话解析 `/dev/tty`。成功复制后消费一次停止事件，继续运行会清除过期停止状态。上文历史 M9 配置和证据不变；WCONTINUED、进程组等待及完整后台/多线程作业控制仍不在验收范围，见 [M17 PTY](M17_PTY.md)。

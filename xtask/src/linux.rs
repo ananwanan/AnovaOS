@@ -6,7 +6,23 @@ use sha2::{Digest, Sha256};
 use std::io::Write;
 const COMMIT: &str = "1a64f6a20aaf6ea4dbba68bbfa8cc1ab7e5c57c4";
 pub fn build(root: &Path, apps: &Path) -> Result<()> {
-    let work = directory(root, "compat")?;
+    build_busybox(root, apps, false)
+}
+
+/// Build a separate pinned ash with foreground job control; keep the M8/M9 seed unchanged.
+pub fn build_terminal(root: &Path, apps: &Path) -> Result<()> {
+    build_busybox(root, apps, true)
+}
+
+fn build_busybox(root: &Path, apps: &Path, terminal: bool) -> Result<()> {
+    let work = directory(
+        root,
+        if terminal {
+            "compat-terminal"
+        } else {
+            "compat"
+        },
+    )?;
     let source = work.join("busybox");
     if !source.exists() {
         command(
@@ -50,10 +66,11 @@ pub fn build(root: &Path, apps: &Path) -> Result<()> {
     )?;
     let config_path = source.join(".config");
     let mut config = fs::read_to_string(&config_path)?;
-    for line in fs::read_to_string(root.join("user/linux/busybox.config"))?
-        .lines()
-        .filter(|l| l.starts_with("CONFIG_"))
-    {
+    let mut selected = fs::read_to_string(root.join("user/linux/busybox.config"))?;
+    if terminal {
+        selected.push_str("\nCONFIG_ASH_JOB_CONTROL=y\n");
+    }
+    for line in selected.lines().filter(|l| l.starts_with("CONFIG_")) {
         let key = line.split_once('=').ok_or("Invalid BusyBox profile")?.0;
         let disabled = format!("# {key} is not set");
         if config.contains(&disabled) {
@@ -144,7 +161,11 @@ pub fn build(root: &Path, apps: &Path) -> Result<()> {
         Command::new("gzip")
             .args(["-n", "-c"])
             .arg(archive)
-            .stdout(File::create(images.join("busybox-1.36.1-source.tar.gz"))?),
+            .stdout(File::create(images.join(if terminal {
+                "busybox-terminal-1.36.1-source.tar.gz"
+            } else {
+                "busybox-1.36.1-source.tar.gz"
+            }))?),
     )?;
     Ok(())
 }
@@ -199,19 +220,7 @@ pub fn build_m9(root: &Path, apps: &Path) -> Result<()> {
             return Err("musl shared-library linker input is missing; install musl-dev with its matching shared libc (see M9_RUNTIME.md)".into());
         }
     }
-    let runtime = env::var_os("ANOVA_MUSL_LIBC")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("/usr/lib/x86_64-linux-musl/libc.so"));
-    checked_file(&runtime)?;
-    let runtime_permissions = fs::metadata(&runtime)?.permissions();
-    let runtime = fs::read(runtime)?;
-    if format!("{:x}", Sha256::digest(&runtime))
-        != "6e8ff8ad02f4a3a0b70029577e2eb9df8f6526aea302a60a8d649874d6fa45ea"
-    {
-        return Err(
-            "M9 requires the pinned Ubuntu musl 1.2.4-2 runtime; see docs/en/milestones/M9_RUNTIME.md".into(),
-        );
-    }
+    let (runtime, runtime_permissions) = musl_runtime()?;
     fs::write(apps.join("ld-musl-x86_64.so.1"), runtime)?;
     fs::set_permissions(apps.join("ld-musl-x86_64.so.1"), runtime_permissions)?;
     for (name, flags) in [
@@ -282,6 +291,24 @@ pub fn build_m9(root: &Path, apps: &Path) -> Result<()> {
         )?;
     }
     Ok(())
+}
+
+/// Load the pinned interpreter independently of the M9 application fixtures.
+pub(super) fn musl_runtime() -> Result<(Vec<u8>, fs::Permissions)> {
+    let runtime = env::var_os("ANOVA_MUSL_LIBC")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/usr/lib/x86_64-linux-musl/libc.so"));
+    checked_file(&runtime)?;
+    let permissions = fs::metadata(&runtime)?.permissions();
+    let bytes = fs::read(runtime)?;
+    if format!("{:x}", Sha256::digest(&bytes))
+        != "6e8ff8ad02f4a3a0b70029577e2eb9df8f6526aea302a60a8d649874d6fa45ea"
+    {
+        return Err(
+            "M9 requires the pinned Ubuntu musl 1.2.4-2 runtime; see docs/en/milestones/M9_RUNTIME.md".into(),
+        );
+    }
+    Ok((bytes, permissions))
 }
 
 /// Trace the exact guest binaries against a Linux host without requiring ptrace permissions.

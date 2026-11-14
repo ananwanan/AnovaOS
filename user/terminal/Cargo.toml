@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: Apache-2.0
+# Build the native graphical PTY client independently of the admitted Linux shell/tools.
+[package]
+name = "terminal"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+
+[dependencies]
+anova-rt = { path = "../rt" }
+anova-gui-user = { path = "../gui-common" }
+anova-gui-runtime = { path = "../../crates/gui-runtime" }
+anova-terminal = { path = "../../crates/terminal" }
+anova-gui = { path = "../../crates/gui" }

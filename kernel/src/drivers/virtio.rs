@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Own one modern virtio-blk split queue and coherent DMA page, with bounded polled completion.
 //! A timeout resets the device; DMA is freed only after reset acknowledgement, otherwise quarantined.
+//! Report failed completion/timeout metadata before the filesystem enters its fail-closed state.
 use super::pci::VirtioConfig;
 use crate::{arch::x86_64::cpu, mm, serial};
 use anova_abi::*;
@@ -222,10 +223,18 @@ impl Block {
                 break;
             }
             if used != self.index.wrapping_sub(1) || self.get8(20) & (64 | 128) != 0 {
+                serial::write(format_args!(
+                    "[BLK:QUEUE_ERROR] operation={kind} sector={sector} used={used} expected={} device_status={}\n",
+                    self.index,
+                    self.get8(20)
+                ));
                 self.failed = true;
                 return Err(IO_ERROR);
             }
             if self.expired(start) {
+                serial::write(format_args!(
+                    "[BLK:TIMEOUT] operation={kind} sector={sector} deadline_ms=2000\n"
+                ));
                 self.failed = true;
                 // Keep the page owned even if reset cannot be acknowledged; Drop handles quarantine.
                 let _ = self.reset();
@@ -250,6 +259,9 @@ impl Block {
             || length > expected
             || status == 0 && length != expected
         {
+            serial::write(format_args!(
+                "[BLK:COMPLETION_ERROR] operation={kind} sector={sector} id={id} length={length} status={status}\n"
+            ));
             self.failed = true;
             return Err(IO_ERROR);
         }

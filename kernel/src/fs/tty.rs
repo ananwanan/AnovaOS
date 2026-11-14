@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Provide bounded canonical/raw line disciplines for COM1 and four PTY pairs.
 //! Buffers allocate fallibly at initialization; UART polling and foreground events never allocate.
+//! Writes and wake/poll readiness share exact CRLF/echo reservation and EOF predicates.
+#[path = "tty_ready.rs"]
+mod readiness;
 use crate::serial;
 use anova_abi::{IO_ERROR, WOULD_BLOCK};
 use anova_vfs::{Device, Vfs};
@@ -30,7 +33,7 @@ impl TerminalSignal {
     }
 }
 struct Queue {
-    bytes: [u8; 1024],
+    bytes: [u8; readiness::QUEUE_CAPACITY],
     head: usize,
     count: usize,
 }
@@ -106,6 +109,9 @@ impl Tty {
             serial::bytes(bytes);
         } else {
             for b in bytes {
+                if *b == b'\n' && self.termios[4] & 5 == 5 {
+                    self.output.push(b'\r');
+                }
                 self.output.push(*b);
             }
         }
@@ -211,9 +217,16 @@ impl Terminal {
     }
     pub fn reset_pty(&mut self, n: usize) {
         self.ttys[n + 1] = Tty::new();
+        self.signals[n + 1] = 0;
+        self.masters[n] = false;
     }
     pub fn session(&self, d: Device) -> u64 {
         self.ttys[Self::index(d)].session
+    }
+    pub fn controlling_pty(&self, session: u64) -> Option<usize> {
+        self.ttys[1..]
+            .iter()
+            .position(|tty| session != 0 && tty.session == session)
     }
     pub fn attach(&mut self, d: Device, session: u64, group: u64) {
         let tty = &mut self.ttys[Self::index(d)];
@@ -292,8 +305,15 @@ impl Terminal {
         let tty = &self.ttys[Self::index(d)];
         match d {
             Device::PtyMaster(n) if !writing => tty.output.count > 0 || !vfs.pty_present(n, false),
-            Device::PtyMaster(_) => tty.input.count < 768,
-            Device::PtySlave(n) if writing => tty.output.count < 1024 || !vfs.pty_present(n, true),
+            Device::PtyMaster(_) => readiness::master_writable(
+                tty.input.count,
+                tty.eof,
+                tty.termios[12] & 8 != 0,
+                tty.output.count,
+            ),
+            Device::PtySlave(n) if writing => {
+                readiness::slave_writable(tty.output.count) || !vfs.pty_present(n, true)
+            }
             _ => {
                 writing
                     || tty.input.count > 0
@@ -341,10 +361,12 @@ impl Terminal {
         let mut count = 0;
         if matches!(d, Device::PtyMaster(_)) {
             for b in bytes {
-                if tty.input.count > 768
-                    || tty.eof
-                    || (tty.termios[12] & 8 != 0 && tty.output.count > 1016)
-                {
+                if !readiness::master_writable(
+                    tty.input.count,
+                    tty.eof,
+                    tty.termios[12] & 8 != 0,
+                    tty.output.count,
+                ) {
                     break;
                 }
                 if let Some(signal) = tty.feed(*b, false) {
@@ -357,7 +379,7 @@ impl Terminal {
                 return Err(IO_ERROR);
             }
             for b in bytes {
-                if tty.output.count > 1022 {
+                if !readiness::slave_writable(tty.output.count) {
                     break;
                 }
                 if *b == b'\n' && tty.termios[4] & 5 == 5 {

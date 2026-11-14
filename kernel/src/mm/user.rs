@@ -244,12 +244,15 @@ impl UserSpace {
 }
 
 pub fn free_frames() -> usize {
+    frame_usage().free
+}
+
+pub fn frame_usage() -> anova_memory::frames::Stats {
     MEMORY.with(|slot| {
         slot.as_ref()
             .expect("Memory not initialized")
             .frames
             .stats()
-            .free
     })
 }
 

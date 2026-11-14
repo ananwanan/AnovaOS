@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# Package an allocation-free source buffer and conservative work-disk publication policy.
+[package]
+name = "anova-editor"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+
+[dependencies]
+anova-abi = { path = "../abi" }

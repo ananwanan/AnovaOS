@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Define persistent volume capabilities, stable inode identities and bounded directory cursors.
+//! Define persistent volume capabilities, allocation counters, stable inodes and directory cursors.
 //! Device ownership stays in each backend; unsupported mutations fail before touching the disk.
 use crate::ext2::Ext2;
 use alloc::boxed::Box;
@@ -67,6 +67,19 @@ pub struct Usage {
     pub peak_inodes: u32,
 }
 
+/// In-memory geometry and free counts from the mounted backend. A failed mount retains
+/// its geometry while withholding allocation counts that may differ from the device.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Space {
+    pub format: Format,
+    pub block_bytes: u32,
+    pub blocks: u32,
+    pub inodes: u32,
+    pub free: Option<(u32, u32)>,
+    pub read_only: bool,
+    pub journaled: bool,
+}
+
 pub struct Entry {
     pub inode: u32,
     pub name: [u8; 256],
@@ -78,6 +91,10 @@ pub trait Filesystem {
     fn capabilities(&self) -> Capabilities;
     /// In-memory accounting only; sampling must not allocate or perform device I/O.
     fn usage(&self) -> Option<Usage> {
+        None
+    }
+    /// Does not allocate, refresh media or read through the block device.
+    fn space(&self) -> Option<Space> {
         None
     }
     fn directory_moves(&self) -> bool {
@@ -154,6 +171,9 @@ pub trait Filesystem {
 }
 
 impl Filesystem for Ext2 {
+    fn space(&self) -> Option<Space> {
+        Some(Ext2::space(self))
+    }
     fn capabilities(&self) -> Capabilities {
         Capabilities {
             format: Format::Ext2,

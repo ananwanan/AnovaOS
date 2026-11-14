@@ -540,6 +540,22 @@ impl Filesystem for Ext4 {
     fn usage(&self) -> Option<Usage> {
         Some(self.usage)
     }
+    fn space(&self) -> Option<crate::filesystem::Space> {
+        Some(crate::filesystem::Space {
+            format: Format::Ext4,
+            block_bytes: BLOCK as u32,
+            blocks: self.blocks,
+            inodes: self.inodes,
+            free: (!self.failed).then(|| {
+                (
+                    self.blocks - self.usage.allocated_blocks,
+                    self.inodes - self.usage.allocated_inodes,
+                )
+            }),
+            read_only: !self.writable,
+            journaled: self.journal.is_some(),
+        })
+    }
     fn directory_moves(&self) -> bool {
         self.writable
     }

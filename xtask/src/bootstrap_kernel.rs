@@ -3,6 +3,7 @@
 //! Host-assisted image packaging and inherited compiler/target libraries are recorded separately.
 //! The opt-in M16 profile uses fresh JBD2 storage and separate pressure/build measurements.
 //! Release packaged input buffers before QEMU so host RAM retention does not compete with guest RAM.
+//! The ISO byte comparison opens only a verified regular file, including on RAM-backed hosts.
 use super::*;
 use bootstrap::{checked, hash, hashes, mount, session};
 use serde_json::{Value, json};
@@ -150,12 +151,13 @@ fn read_files(
 }
 
 fn verify_packaged(root: &Path, iso: &Path, expected: &[u8]) -> Result<()> {
+    checked_file(iso)?;
     let temporary = Temporary::new(root, "kernel-extract")?;
     let extracted = temporary.0.join("kernel.elf");
     command(
         Command::new("xorriso")
             .args(["-osirrox", "on", "-indev"])
-            .arg(iso)
+            .arg(format!("stdio:{}", iso.display()))
             .args(["-extract", "/boot/kernel.elf"])
             .arg(&extracted),
     )?;

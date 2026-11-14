@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Require CPU/memory/native/Linux runtime, process, filesystem and storage proof plus QEMU exits.
+//! Require CPU/memory/native/Linux runtime, checked file publication and storage proof plus exits.
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Failure {
@@ -116,6 +116,7 @@ pub fn assess(log: &str, code: Option<i32>, timed_out: bool) -> Result<(), Failu
         "[DISK:TEST] offsets=true fork=true indirect=true sparse=true unlink=true reuse=true negatives=true",
         "[BLK:RESET] acknowledged=true dma_released=true",
         "[FS:CASE] paths-copy-offset-fork-exec-cwd passed=true",
+        "[FS:PUBLICATION] checked inputs; no-clobber and replacement passed",
         "[FS:CASE] pipe-block-drain-eof-broken passed=true",
         "[FS:CASE] limits-rollback-reuse passed=true",
         "[FS:CASE] tmpfs-oom-rollback passed=true",
@@ -359,6 +360,7 @@ mod tests {
     use super::*;
     macro_rules! runtime_markers {()=>{"[M9:THREADS] pthread=true TLS=true mutex=true cond=true join=true shared_fd=true futex_timeout=true\n[M9:SHARED] fork_mapping=true futex_cross_process=true\n[M9:SIGNALS] frame=true sigreturn=true SSE=true EINTR=true SA_RESTART=true ppoll_mask=true\n[M9:POLL] nonblocking=true readiness=true timeout=true EOF=true HUP=true NVAL=true\n[M9:LIFECYCLE] exec_thread=true identity=true missing_interpreter=true fault_group=true exit_group=true bad_sigreturn=true\n[M9:TTY] PTY=true lock=true canonical=true raw=true poll=true foreground=true CtrlC=true hangup=true\n"};}
     const GOOD: &str = concat!(
+        "[FS:PUBLICATION] checked inputs; no-clobber and replacement passed\n",
         runtime_markers!(),
         runtime_markers!(),
         runtime_markers!(),
@@ -515,6 +517,7 @@ mod tests {
     fn m6_gate_requires_real_file_pipe_shell_and_cleanup_evidence() {
         for (old, new) in [
             ("[FS:TEST] passed=true", "[FS:TEST] passed=false"),
+            ("[FS:PUBLICATION]", "[FS:SKIPPED]"),
             ("pipeline_bytes=5000", "pipeline_bytes=0"),
             ("blocks=3", "blocks=0"),
             ("wakes=3", "wakes=0"),

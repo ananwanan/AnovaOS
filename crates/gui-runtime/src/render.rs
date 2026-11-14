@@ -5,7 +5,9 @@
 
 use crate::GuiRect;
 
-pub(crate) struct Canvas<'a> {
+/// Low-level CPU rasterizer for private, width*height-sized caller storage. This Rust
+/// utility grants no window/transport authority and does not extend the frozen C ABI.
+pub struct Canvas<'a> {
     pub pixels: &'a mut [u32],
     pub width: u32,
     pub height: u32,

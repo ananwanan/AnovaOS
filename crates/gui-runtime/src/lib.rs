@@ -22,7 +22,7 @@ use core::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
-mod render;
+pub mod render;
 mod runtime;
 // Reuse the internal, explicit little-endian codec without linking compositor policy.
 #[allow(dead_code)]

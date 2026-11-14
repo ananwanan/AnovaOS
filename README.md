@@ -40,6 +40,11 @@ claim of a complete desktop OS or complete self-hosting.
 | M15.5 | Actual guest kernel compilation with inherited tools/target libraries, exact retained-ELF host-assisted packaging and verified boot identity/recovery |
 | M15.6 | Two independent clean builds each of bzip2 and kernel, identical final artifacts, archived evidence and all 12 boot/rejection/recovery sessions |
 | M16 (bounded local profile) | Verified inputs, backend/cache isolation, controlled ext4 readonly/writes and JBD2 recovery; fresh-disk bzip2/UART acceptance and actual kernel reconstruction after heap/VFS/fd/task/disk exhaustion; remote CI tracked separately |
+| M17.1 | Supervised desktop, simultaneous C/C++/Rust input/windows, actual client/compositor faults, bounded restart, resource reuse and five persistence/fallback boots |
+| M17.2 | Real Linux-musl PTY, bounded ANSI/history, Ctrl+C/resize, actual GCC compilation, exhaustion cleanup and exact reboot bytes |
+| M17.3 | File browsing, bounded source editing and protected saves on the PTY work disk; real GUI size/inode/disk-full/write/flush failures, recovery copies, retry and clean reboot accepted locally |
+| M17.4 | Bounded build diagnostics, current resource and task monitoring, scoped stops and live compositor recovery |
+| M17.5 | Fixed graphical C, C++ and Rust workflows, concurrent interaction, cancellation, and publication/reboot recovery verified locally in QEMU |
 
 Evidence is recorded per stage in the [validation index](docs/en/index.md#validation).
 Each record identifies its executed checks. Configured CI, actual remote CI execution
@@ -62,16 +67,17 @@ real resource exhaustion/recovery. The actual kernel build used 9,494,480 heap b
 
 The owner-approved order is **M16 resources/VFS/ext4 → M17 development desktop →
 M18 conditional compiler and image self-hosting**. M16 now has a locally verified backend/cache and
-controlled ext4 readonly/writes, JBD2 recovery and opt-in migration/build acceptance. M17/M18 remain planned.
+controlled ext4 readonly/writes, JBD2 recovery and opt-in migration/build acceptance.
+M17.1–M17.5 have local QEMU evidence for their declared desktop profiles,
+including live resource/task controls and the ten-boot compiler workflow.
+Remote CI, physical hardware and M18 are tracked independently.
 
-1. [M16 foundation](docs/en/milestones/M16_FOUNDATION.md): finish remote CI acceptance; the declared kernel capacity profile passed locally.
+1. [M16 foundation](docs/en/milestones/M16_FOUNDATION.md): remote CI acceptance is paused by owner request; the declared kernel capacity profile passed locally.
    Broader workload sizing remains independent. JBD2 and fresh-image migration now have separate
    [M16.5](docs/en/validation/M16.5.md)/[M16.6](docs/en/validation/M16.6.md) local gates. Backend
    isolation, on-demand directories, reclaimable file nodes and controlled ext4 readonly
    access are implemented; see [local evidence](docs/en/validation/M16.md) and [M16.4 writes](docs/en/validation/M16.4.md).
-2. [M17 desktop](docs/en/milestones/M17_DESKTOP.md): deliver a real PTY terminal,
-   reliable editing, file browsing and diagnostics, then complete C/C++/Rust
-   edit/build/run/error-repair/reboot entirely through the desktop using existing tools.
+2. [M17 desktop](docs/en/milestones/M17_DESKTOP.md): use the monitor and the fixed C/C++/Rust recipes, then verify concurrent interaction and fault recovery.
 3. [M18 follow-up](docs/en/ROADMAP.md#m18-conditional-self-hosting): independently
    reassess GCC, LLVM/rustc/Cargo and guest-only image generation after their
    measured prerequisites are met. Full compiler bootstrap does not gate M17.
@@ -80,6 +86,8 @@ Preserve prior runtime, storage, GUI and M15 reconstruction gates. Native `std`,
 SMP, device IRQ/async I/O, physical hardware and a new filesystem format remain
 separate work. [STATUS](docs/en/guides/STATUS.md) records the observed failed
 toolchain dependency download separately from local acceptance.
+
+The owner deferred M16 remote closeout and authorized M17 development on `feat/m17-desktop`. `cargo xtask desktop-build` builds the launcher and existing host-built C/C++/Rust clients, plus an explicit Linux boundary fixture; `cargo xtask run --desktop [--disk build/disks/work.ext4]` selects the opt-in session. `cargo xtask desktop-test` verifies the accepted bounded profile. See [M17.1 local acceptance](docs/en/validation/M17.1.md). M17.2 adds the real PTY terminal: focus the launcher and press `t`; use `F5` for a new shell and `F4` to close. `cargo xtask run --desktop --toolchain --disk build/disks/pty-work.ext4` adds the verified M11 tools to an explicitly Linux-personality work disk. See [PTY contract](docs/en/milestones/M17_PTY.md) and [M17.2 evidence](docs/en/validation/M17.2.md). M17.3 adds the [bounded file/editor loop](docs/en/milestones/M17_FILES.md); `cargo xtask desktop-files-fault-test` verifies real GUI boundary/storage failures, exact recovery copies and retry. See [local validation](docs/en/validation/M17.3.md).
 
 ## Build and boot
 
@@ -113,6 +121,13 @@ image files. The kernel uses `no_std` + `alloc`, UEFI/Limine, four-level paging
 and separate kernel/user compilation flags. The native ABI and Linux-musl
 personality are explicit and independent.
 
+M17.4 first-batch [build diagnostics](docs/en/milestones/M17_BUILD.md) uses launcher `b`/`g` for saved `/persist/build.c`; `cargo xtask desktop-build-test` verifies the controlled GCC/failure loop. See [actual validation](docs/en/validation/M17.4.md).
+
+Press `m` in the launcher for Resources, Tasks and Services. With a Linux-personality
+JBD2 work disk, `cargo xtask run --desktop --rust --disk build/disks/development.ext4`
+admits the three fixed compiler recipes. See the [workflow](docs/en/milestones/M17_WORKFLOW.md)
+and [local acceptance](docs/en/validation/M17.5.md).
+
 ## Development profiles and checks
 
 | Profile | Commands and scope |
@@ -124,6 +139,7 @@ personality are explicit and independent.
 | Native SDK | `cargo xtask sdk`, `app-new <c\|cpp\|rust> PROJECT`, `app-build PROJECT`, `app-pack MANIFEST OUTPUT`, `app-image PACKAGE SHA256`, `app-run PACKAGE SHA256`, `symbolize ELF ADDRESS...`; `sdk-test`, `app-test`, `package-v2-test`, `diagnostics-test` |
 | Display/input/compositor | `cargo xtask graphics-test`, `input-test`, `gui-test`; interactive `run --graphics` or `run --gui` |
 | GUI runtime | `cargo xtask gui-sdk`, `gui-sdk-image`, `gui-sdk-test`, `gui-sdk-replay`; `run --gui-sdk` with a native disk |
+| Desktop | `cargo xtask desktop-test`, `desktop-pty-test`, `desktop-files-test`, `desktop-files-fault-test`, `desktop-build-test`; `run --desktop --toolchain` with a Linux work disk |
 | GPU | `cargo xtask gpu-test` requires a verified hardware GL renderer; `gpu-fallback-test` is headless |
 | Writable ext4 (opt-in) | `cargo xtask foundation-write-test`; `ext4-image [--linux] build/disks/work.ext4`, then `run --ext4-write [--toolchain] --disk build/disks/work.ext4`; [profile and evidence](docs/en/validation/M16.4.md) |
 | JBD2 / fresh work disk | `cargo xtask foundation-journal-test`; `cargo xtask foundation-migrate-test`; [M16.5](docs/en/validation/M16.5.md), [M16.6](docs/en/validation/M16.6.md) |
@@ -147,7 +163,7 @@ and diagrams belong under `docs/assets/` when added.
 | [Project outline](docs/en/PROJECT_OUTLINE.md), [roadmap](docs/en/ROADMAP.md) | Goals, dependencies, acceptance and remaining work |
 | [Architecture](docs/en/ARCHITECTURE.md), [compatibility](docs/en/COMPATIBILITY.md) | Subsystem ownership, ABIs, limits and tested software |
 | [Guides](docs/en/index.md#guides) | Setup, style, toolchains, licensing, requirements, status and file inventory |
-| [Milestones](docs/en/index.md#milestone-designs), [validation](docs/en/index.md#validation) | Accepted contracts/evidence through M15.6, partial M16 implementation and M17 plans |
+| [Milestones](docs/en/index.md#milestone-designs), [validation](docs/en/index.md#validation) | Accepted contracts/evidence through M15.6, bounded local M16 and M17 evidence, and remaining self-hosting work |
 | [Third-party inputs](docs/en/index.md#third-party-inputs-and-notices) | Provenance and preserved upstream license texts |
 | [Native SDK](sdk/README.md), [GUI SDK](sdk/gui/README.md), [bootstrap recipes](ports/bootstrap/README.md) | Adjacent development entry points, each with a Chinese companion |
 

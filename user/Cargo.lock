@@ -7,6 +7,13 @@ name = "anova-abi"
 version = "0.1.0"
 
 [[package]]
+name = "anova-editor"
+version = "0.1.0"
+dependencies = [
+ "anova-abi",
+]
+
+[[package]]
 name = "anova-graphics"
 version = "0.1.0"
 
@@ -16,6 +23,10 @@ version = "0.1.0"
 dependencies = [
  "anova-graphics",
 ]
+
+[[package]]
+name = "anova-gui-runtime"
+version = "0.1.0"
 
 [[package]]
 name = "anova-gui-user"
@@ -33,6 +44,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "anova-terminal"
+version = "0.1.0"
+dependencies = [
+ "anova-abi",
+]
+
+[[package]]
 name = "compositor"
 version = "0.1.0"
 dependencies = [
@@ -42,9 +60,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "desktop"
+version = "0.1.0"
+dependencies = [
+ "anova-gui",
+ "anova-gui-runtime",
+ "anova-gui-user",
+ "anova-rt",
+ "anova-terminal",
+]
+
+[[package]]
 name = "edit"
 version = "0.1.0"
 dependencies = [
+ "anova-rt",
+]
+
+[[package]]
+name = "files"
+version = "0.1.0"
+dependencies = [
+ "anova-editor",
+ "anova-gui",
+ "anova-gui-runtime",
+ "anova-gui-user",
  "anova-rt",
 ]
 
@@ -115,4 +155,15 @@ name = "shell"
 version = "0.1.0"
 dependencies = [
  "anova-rt",
+]
+
+[[package]]
+name = "terminal"
+version = "0.1.0"
+dependencies = [
+ "anova-gui",
+ "anova-gui-runtime",
+ "anova-gui-user",
+ "anova-rt",
+ "anova-terminal",
 ]

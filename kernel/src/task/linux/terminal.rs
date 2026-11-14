@@ -4,6 +4,36 @@
 use super::*;
 use anova_vfs::Device;
 impl Kernel {
+    /// Consume one real child stop notification only after checked status copying.
+    /// This bounded WUNTRACED extension does not add wait-by-group or WCONTINUED.
+    pub(in crate::task) fn linux_wait_stopped(
+        &mut self,
+        caller: usize,
+        pid: u64,
+        output: UserAddr,
+    ) -> Option<i64> {
+        let parent = self.process(caller).thread.tgid;
+        let child = (0..CAPACITY).find(|&k| {
+            let e = self.policy.entry(k);
+            e.state != State::Empty
+                && e.parent == parent
+                && (pid == 0 || e.pid == pid)
+                && self.processes[k]
+                    .as_ref()
+                    .is_some_and(|p| p.image.is_some() && p.thread.stop_status.is_some())
+        })?;
+        let signal = self.process(child).thread.stop_status.unwrap();
+        let space = &self.process(caller).image.as_ref().unwrap().space;
+        if output.0 != 0
+            && let Err(e) = space.with_active(|| {
+                uaccess::to_user(space, output, &((signal << 8) | 0x7f).to_le_bytes())
+            })
+        {
+            return Some(e);
+        }
+        self.process_mut(child).thread.stop_status = None;
+        Some(self.policy.entry(child).pid as i64)
+    }
     pub(in crate::task) fn poll_descriptors(&mut self, i: usize, f: &TrapFrame) -> i64 {
         if f.rsi > 32 {
             return -22;
