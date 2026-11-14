@@ -220,19 +220,7 @@ pub fn build_m9(root: &Path, apps: &Path) -> Result<()> {
             return Err("musl shared-library linker input is missing; install musl-dev with its matching shared libc (see M9_RUNTIME.md)".into());
         }
     }
-    let runtime = env::var_os("ANOVA_MUSL_LIBC")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("/usr/lib/x86_64-linux-musl/libc.so"));
-    checked_file(&runtime)?;
-    let runtime_permissions = fs::metadata(&runtime)?.permissions();
-    let runtime = fs::read(runtime)?;
-    if format!("{:x}", Sha256::digest(&runtime))
-        != "6e8ff8ad02f4a3a0b70029577e2eb9df8f6526aea302a60a8d649874d6fa45ea"
-    {
-        return Err(
-            "M9 requires the pinned Ubuntu musl 1.2.4-2 runtime; see docs/en/milestones/M9_RUNTIME.md".into(),
-        );
-    }
+    let (runtime, runtime_permissions) = musl_runtime()?;
     fs::write(apps.join("ld-musl-x86_64.so.1"), runtime)?;
     fs::set_permissions(apps.join("ld-musl-x86_64.so.1"), runtime_permissions)?;
     for (name, flags) in [
@@ -303,6 +291,24 @@ pub fn build_m9(root: &Path, apps: &Path) -> Result<()> {
         )?;
     }
     Ok(())
+}
+
+/// Load the pinned interpreter independently of the M9 application fixtures.
+pub(super) fn musl_runtime() -> Result<(Vec<u8>, fs::Permissions)> {
+    let runtime = env::var_os("ANOVA_MUSL_LIBC")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/usr/lib/x86_64-linux-musl/libc.so"));
+    checked_file(&runtime)?;
+    let permissions = fs::metadata(&runtime)?.permissions();
+    let bytes = fs::read(runtime)?;
+    if format!("{:x}", Sha256::digest(&bytes))
+        != "6e8ff8ad02f4a3a0b70029577e2eb9df8f6526aea302a60a8d649874d6fa45ea"
+    {
+        return Err(
+            "M9 requires the pinned Ubuntu musl 1.2.4-2 runtime; see docs/en/milestones/M9_RUNTIME.md".into(),
+        );
+    }
+    Ok((bytes, permissions))
 }
 
 /// Trace the exact guest binaries against a Linux host without requiring ptrace permissions.

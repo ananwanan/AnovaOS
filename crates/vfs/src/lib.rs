@@ -2169,6 +2169,51 @@ impl<'a> Vfs<'a> {
     pub fn node_slots(&self) -> usize {
         self.nodes.len()
     }
+    /// Count live/cache entries and unreclaimed orphans once, even when multiple FDs
+    /// hold the same node. Backing slots available for reuse do not count as occupied.
+    pub fn occupied_nodes(&self) -> usize {
+        let mut open_nodes = [false; NODE_LIMIT];
+        for open in self.opens.iter().flatten() {
+            if let Target::Node(node) = open.target {
+                open_nodes[node] = true;
+            }
+        }
+        self.nodes
+            .iter()
+            .zip(open_nodes)
+            .filter(|(node, open)| {
+                node.linked
+                    || node.inode.is_some()
+                    || *open
+                    || node.mapping.as_ref().is_some_and(MappedFile::active)
+            })
+            .count()
+    }
+    /// PTY capacity is the master allocator's capacity, including Linux openers.
+    pub fn pty_master_usage(&self) -> (usize, usize) {
+        let total = self.pty_unlocked.len();
+        (
+            total,
+            (0..total).filter(|&n| self.pty_present(n, true)).count(),
+        )
+    }
+    pub fn storage_space(&self) -> Option<anova_storage::filesystem::Space> {
+        self.disk.as_ref().and_then(|disk| disk.space())
+    }
+    /// Check the mounted work disk before a controlled software build reserves staging.
+    pub fn check_linux_work_disk(&self) -> Result<(), i64> {
+        let disk = self.storage_space().ok_or(READ_ONLY)?;
+        if disk.free.is_none() {
+            return Err(IO_ERROR);
+        }
+        if disk.read_only {
+            return Err(READ_ONLY);
+        }
+        if !self.policy_node.is_some_and(|node| self.linux[node]) {
+            return Err(PERMISSION_DENIED);
+        }
+        Ok(())
+    }
     /// Backend counters include committed transient allocations, independently of cache slots.
     pub fn storage_usage(&self) -> Option<anova_storage::filesystem::Usage> {
         self.disk.as_ref().and_then(|disk| disk.usage())

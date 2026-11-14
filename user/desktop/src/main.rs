@@ -1,23 +1,26 @@
 // SPDX-License-Identifier: Apache-2.0
 #![no_std]
 #![no_main]
-//! Supervise a compositor and three admitted GUI clients alongside an independent COM1 shell.
-//! Bound restarts, reap owned children and protect the files client's explicit close dialog.
-//! Pump controlled build diagnostics and acknowledged GUI uploads in bounded turns.
+//! Supervise the compositor and desktop clients alongside an independent COM1 shell.
+//! Bound replacements and preserve Files during compositor recovery.
+//! Pump monitor samples, build diagnostics and acknowledged GUI uploads in bounded turns.
 
 mod build_checks;
 mod checks;
 mod diagnostics;
+mod monitor;
+mod monitor_checks;
 #[path = "../../terminal/src/window.rs"]
 mod window;
 
 use anova_gui_runtime::{Error, GuiRect};
 use anova_gui_user as gui;
 use anova_rt::{self as rt, abi::*};
+use monitor::{Action, Page, Panel};
 use window::Window;
 
 const APPLICATIONS: [&str; 3] = ["/bin/desktop-c", "/bin/desktop-cpp", "/bin/desktop-rust"];
-const RESTARTS: usize = 3;
+const RESTARTS: usize = gui::MAX_SESSION_REPLACEMENTS;
 
 struct Session {
     server: u64,
@@ -26,7 +29,19 @@ struct Session {
     files_running: bool,
 }
 
+#[derive(Clone, Copy)]
+enum Replacement {
+    Compositor,
+    Fault,
+    Session,
+}
+
 impl Session {
+    fn cooperative(&self, pid: u64) -> bool {
+        (self.files_running && self.clients[1] == Some(pid))
+            || (self.terminal_running && self.clients[2] == Some(pid))
+    }
+
     fn files(&mut self) -> Result<(), i64> {
         if self.files_running {
             return Err(BUSY);
@@ -68,12 +83,12 @@ impl Session {
         if index == 1 && self.files_running {
             return Err(BUSY);
         }
-        if index == 2 {
-            self.terminal_running = false;
-        }
         if let Some(pid) = self.clients[index] {
             stop(pid)?;
             self.clients[index] = None;
+            if index == 2 {
+                self.terminal_running = false;
+            }
         } else {
             let pid = rt::spawn(APPLICATIONS[index], "")?;
             self.clients[index] = Some(pid);
@@ -82,7 +97,7 @@ impl Session {
         Ok(())
     }
 
-    fn observe(&mut self) -> Result<bool, i64> {
+    fn observe(&mut self, panel: &mut Panel) -> Result<bool, i64> {
         for (index, slot) in self.clients.iter_mut().enumerate() {
             if let Some(pid) = *slot
                 && let Some(status) = rt::process::poll(pid)?
@@ -91,6 +106,12 @@ impl Session {
                     "[DESKTOP:EXIT] app={index} pid={pid} reason={} code={}\n",
                     status.status.reason, status.status.code
                 ));
+                let name = match index {
+                    1 if self.files_running => "Files",
+                    2 if self.terminal_running => "Terminal",
+                    _ => ["C client", "C++ client", "Rust client"][index],
+                };
+                panel.remember(name, status);
                 *slot = None;
                 if index == 2 {
                     self.terminal_running = false;
@@ -105,25 +126,41 @@ impl Session {
                 "[DESKTOP:COMPOSITOR_EXIT] reason={} code={}\n",
                 status.status.reason, status.status.code
             ));
+            panel.remember("Compositor", status);
             self.server = 0;
             return Ok(false);
         }
         Ok(true)
     }
 
-    fn cleanup(&mut self) -> Result<(), i64> {
-        for slot in &mut self.clients {
-            if let Some(pid) = *slot {
-                stop(pid)?;
-                *slot = None;
+    fn cleanup(&mut self, recover: bool) -> Result<(), i64> {
+        let mut result = Ok(());
+        let keep_files = recover && self.files_running;
+        let keep_terminal = recover && self.terminal_running;
+        for (index, slot) in self.clients.iter_mut().enumerate() {
+            if !(index == 1 && keep_files || index == 2 && keep_terminal)
+                && let Some(pid) = slot.take()
+                && let Err(error) = stop(pid)
+            {
+                result = Err(error);
             }
         }
-        if self.server != 0 {
-            stop(self.server)?;
-            self.server = 0;
+        if !keep_terminal {
+            self.terminal_running = false;
         }
-        rt::write(b"[DESKTOP:CLEANUP] owned_children_reaped=true\n");
-        Ok(())
+        if !keep_files {
+            self.files_running = false;
+        }
+        if self.server != 0
+            && let Err(error) = stop(core::mem::take(&mut self.server))
+        {
+            result = Err(error);
+        }
+        gui::log(format_args!(
+            "[DESKTOP:CLEANUP] owned_children_reaped={} retained_files={keep_files} retained_terminal={keep_terminal}\n",
+            result.is_ok(),
+        ));
+        result
     }
 }
 
@@ -145,9 +182,9 @@ fn render(window: &mut Window, session: &Session) -> Result<(), Error> {
         12,
         62,
         if session.files_running {
-            "Close Files with F4 before stop/restart/exit"
+            "F4 in Files to close; m monitor"
         } else {
-            "f files; t terminal; b builds; q exit"
+            "f files; t terminal; b builds; m monitor"
         },
         0xffffff,
     )?;
@@ -181,7 +218,9 @@ fn render(window: &mut Window, session: &Session) -> Result<(), Error> {
         window.text(
             164,
             y + 5,
-            if session.clients[index].is_some() {
+            if index == 1 && session.files_running {
+                "F4 closes"
+            } else if session.clients[index].is_some() {
                 "Stop"
             } else {
                 "Launch"
@@ -195,34 +234,65 @@ fn render(window: &mut Window, session: &Session) -> Result<(), Error> {
 fn gui_error(error: Error) -> i64 {
     match error {
         Error::Disconnected => BROKEN_PIPE,
+        Error::Limit => NO_SPACE,
         _ => IO_ERROR,
     }
 }
 
-fn run(test: bool) -> Result<(), i64> {
-    let mut diagnostics = diagnostics::Diagnostics::new();
+fn service_action(
+    session: &Session,
+    panel: &mut Panel,
+    action: Action,
+    generation: usize,
+    build_active: bool,
+) -> Option<Option<Replacement>> {
+    match action {
+        Action::None => {}
+        Action::Compositor if generation == RESTARTS => {
+            panel.report("Replacement limit reached", Err(BUSY));
+        }
+        Action::Compositor => return Some(Some(Replacement::Compositor)),
+        _ if session.files_running => panel.report("Close Files with F4", Err(BUSY)),
+        Action::Poweroff if build_active => {
+            panel.report("Finish or cancel the active build", Err(BUSY));
+        }
+        Action::Session => return Some(Some(Replacement::Session)),
+        Action::Quit => return Some(None),
+        Action::Poweroff => panel.report("Shutdown", rt::shutdown()),
+    }
+    None
+}
+
+fn run(test: bool, legacy: bool) -> Result<(), i64> {
+    let mut diagnostics = diagnostics::Diagnostics::new(legacy);
+    let mut panel = Panel::new();
+    let mut session = Session {
+        server: 0,
+        clients: [None; 3],
+        terminal_running: false,
+        files_running: false,
+    };
     for generation in 0..=RESTARTS {
-        let mut session = Session {
-            server: rt::spawn("compositor", if test { "desktop-test" } else { "desktop" })?,
-            clients: [None; 3],
-            terminal_running: false,
-            files_running: false,
-        };
-        let outcome = (|| -> Result<bool, i64> {
+        let outcome = (|| -> Result<Option<Replacement>, i64> {
+            session.server =
+                rt::spawn("compositor", if test { "desktop-test" } else { "desktop" })?;
             // Drop the launcher window before replacing its compositor/session.
             let mut window = Window::create_at(20, 20, 320, 200).map_err(gui_error)?;
             let identity = window.session;
             for index in 0..3 {
-                session.toggle(index)?;
+                if session.clients[index].is_none() {
+                    session.toggle(index)?;
+                }
             }
             let mut dirty = true;
             gui::log(format_args!(
                 "[DESKTOP:READY] generation={generation} session={identity} clients=3 quota=4\n"
             ));
             loop {
+                let mut deferred = None;
                 let old_clients = session.clients;
-                if !session.observe()? {
-                    return Ok(true);
+                if !session.observe(&mut panel)? {
+                    return Ok(Some(Replacement::Fault));
                 }
                 dirty |= old_clients != session.clients;
                 for _ in 0..16 {
@@ -231,12 +301,31 @@ fn run(test: bool) -> Result<(), i64> {
                         Err(Error::WouldBlock) => {
                             break;
                         }
-                        Err(Error::Disconnected) => return Ok(true),
+                        Err(Error::Disconnected) => return Ok(Some(Replacement::Fault)),
                         Err(_) => return Err(IO_ERROR),
                     };
-                    dirty |= event.kind != 0;
+                    dirty |= event.kind != 0 || window.needs_full_redraw();
+                    if panel.page.is_some() {
+                        let action = panel.event(&session, &event);
+                        if let Some(outcome) = service_action(
+                            &session,
+                            &mut panel,
+                            action,
+                            generation,
+                            diagnostics.active(),
+                        ) {
+                            return Ok(outcome);
+                        }
+                        continue;
+                    }
                     if diagnostics.visible {
-                        diagnostics.event(&event);
+                        if let Some(command) = diagnostics.event(&event) {
+                            deferred = Some(command);
+                        }
+                        continue;
+                    }
+                    if test && event.kind == 2 && event.state == 1 && event.key == 64 {
+                        session.files()?;
                         continue;
                     }
                     let mut action = 0;
@@ -253,8 +342,23 @@ fn run(test: bool) -> Result<(), i64> {
                     if event.kind == 2 && event.state == 1 {
                         match event.codepoint {
                             49..=51 => action = event.codepoint - 48,
-                            114 if !session.files_running => return Ok(true),
-                            113 if !session.files_running => return Ok(false),
+                            114 | 113 => {
+                                let action = if event.codepoint == 114 {
+                                    Action::Session
+                                } else {
+                                    Action::Quit
+                                };
+                                if let Some(outcome) = service_action(
+                                    &session,
+                                    &mut panel,
+                                    action,
+                                    generation,
+                                    diagnostics.active(),
+                                ) {
+                                    return Ok(outcome);
+                                }
+                            }
+                            109 => panel.open(Page::Resources),
                             102 if !test => {
                                 if let Err(error) = session.files() {
                                     gui::log(format_args!(
@@ -282,11 +386,14 @@ fn run(test: bool) -> Result<(), i64> {
                     }
                 }
                 dirty |= diagnostics.turn();
+                dirty |= panel.sample();
                 if dirty && window.idle() {
-                    if diagnostics.visible {
+                    if panel.page.is_some() {
+                        panel.render(&mut window, &session, generation)
+                    } else if diagnostics.visible {
                         diagnostics.render(&mut window)
                     } else {
-                        render(&mut window, &session)
+                        render(&mut window, &session).and_then(|()| panel.notice(&mut window))
                     }
                     .map_err(gui_error)?;
                     window.begin();
@@ -294,15 +401,40 @@ fn run(test: bool) -> Result<(), i64> {
                 }
                 window.advance().map_err(gui_error)?;
                 rt::sleep(1)?;
+                if let Some(command) = deferred {
+                    diagnostics.command(command);
+                    dirty = true;
+                }
             }
         })();
-        session.cleanup()?;
+        let outcome = match outcome {
+            Err(BROKEN_PIPE) => Ok(Some(Replacement::Fault)),
+            outcome => outcome,
+        };
+        let recover = generation < RESTARTS
+            && matches!(
+                outcome,
+                Ok(Some(Replacement::Compositor | Replacement::Fault))
+            );
+        session.cleanup(recover)?;
         match outcome {
-            Ok(false) => return Ok(()),
-            Ok(true) | Err(BROKEN_PIPE) if generation < RESTARTS => {
-                rt::write(b"[DESKTOP:RESTART] unsaved_buffers_discarded=true\n");
+            Ok(None) => return Ok(()),
+            Ok(Some(replacement)) if generation < RESTARTS => {
+                let reason = match replacement {
+                    Replacement::Compositor => "Compositor replaced",
+                    Replacement::Fault => "Recovered compositor loss",
+                    Replacement::Session => {
+                        panel.page = None;
+                        "Session restarted"
+                    }
+                };
+                panel.replaced(reason);
+                gui::log(format_args!(
+                    "[DESKTOP:RESTART] cause={reason} retained_files={} retained_terminal={}\n",
+                    session.files_running, session.terminal_running
+                ));
             }
-            Ok(true) | Err(BROKEN_PIPE) => return Err(BUSY),
+            Ok(Some(_)) => return Err(BUSY),
             Err(error) => return Err(error),
         }
     }
@@ -358,6 +490,14 @@ unsafe extern "C" fn anova_main(argc: usize, argv: *const *const u8) -> u32 {
         build_checks::run();
         return 0;
     }
+    if argument == b"workflow-check" {
+        build_checks::workflow();
+        return 0;
+    }
+    if argument == b"monitor-check" {
+        monitor_checks::run();
+        return 0;
+    }
     if argument == b"connect-full" {
         assert_eq!(gui::connect(), Err(NO_SPACE));
         rt::write(b"[DESKTOP:CONNECT_FULL_PASS] quota=4 error_retained=true\n");
@@ -372,7 +512,7 @@ unsafe extern "C" fn anova_main(argc: usize, argv: *const *const u8) -> u32 {
         ));
         return 0;
     }
-    match run(argument == b"test") {
+    match run(argument == b"test", argument == b"legacy-build") {
         Ok(()) => 0,
         Err(error) => {
             gui::log(format_args!(
@@ -384,7 +524,8 @@ unsafe extern "C" fn anova_main(argc: usize, argv: *const *const u8) -> u32 {
 }
 
 #[panic_handler]
-fn panic(_: &core::panic::PanicInfo<'_>) -> ! {
+fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
+    gui::log(format_args!("[DESKTOP:ASSERT] {info}\n"));
     rt::write(b"[DESKTOP:FAIL]\n");
     rt::exit(101)
 }

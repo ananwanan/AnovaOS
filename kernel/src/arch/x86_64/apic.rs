@@ -16,6 +16,7 @@ use core::{
 
 pub const TICK_NS: u64 = 10_000_000;
 static TICKS: AtomicU64 = AtomicU64::new(0);
+static PM_CONFIG: AtomicU64 = AtomicU64::new(0);
 
 fn read(offset: u64) -> u32 {
     // SAFETY: init maps this aligned architectural LAPIC page UC, NX, RW before
@@ -49,8 +50,19 @@ fn pm_now(timer: PmTimer) -> u32 {
     cpu::in32(timer.port) & timer.mask
 }
 
+/// Calibrated hardware counter for short intervals, including time spent with IF clear.
+pub fn pm_counter() -> (u32, u32) {
+    let config = PM_CONFIG.load(Ordering::Relaxed);
+    let mask = (config >> 32) as u32;
+    (cpu::in32(config as u16) & mask, mask)
+}
+
 pub fn init(platform: &Platform, mapper: &mut EarlyMapper<'_>) {
     assert_eq!(cpu::flags() & (1 << 9), 0, "APIC setup requires IF=0");
+    PM_CONFIG.store(
+        (u64::from(platform.pm_timer.mask) << 32) | u64::from(platform.pm_timer.port),
+        Ordering::Relaxed,
+    );
     // SAFETY: CPUID leaf 1 exists on x86_64; no memory is touched.
     let features = unsafe { __cpuid(1) };
     assert!(features.edx & (1 << 9) != 0, "CPU lacks local APIC");

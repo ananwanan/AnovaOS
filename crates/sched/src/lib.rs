@@ -48,6 +48,11 @@ impl Scheduler {
         self.entries[index]
     }
 
+    /// Read the bounded table during a single scheduler-owner turn.
+    pub fn entries(&self) -> &[Entry; CAPACITY] {
+        &self.entries
+    }
+
     /// Resolve an exact immediate child without blocking or changing scheduling state.
     pub fn child(&self, parent: usize, pid: u64) -> Result<usize, i64> {
         if pid == 0 {

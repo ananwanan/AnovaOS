@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Fixed compiler-attempt records and raw merged-output tails, independent of task-slot reuse.
+//! Fixed recipe-attempt records and raw merged-output tails, independent of task-slot reuse.
 //! Evict oldest bytes/records explicitly; bounded line iteration never allocates or parses status.
 
-use anova_abi::ExitStatus;
+use anova_abi::{ExitStatus, workflow::Recipe};
 pub const RECORDS: usize = 4;
 pub const CAPACITY: usize = 8192;
 pub const COLUMNS: usize = 50;
@@ -13,6 +13,7 @@ pub enum Phase {
     Starting,
     Running,
     Draining,
+    Publishing,
     Finished,
     StartFailed,
     CaptureFailed,
@@ -21,6 +22,7 @@ pub enum Phase {
 pub struct Record {
     pub attempt: u64,
     pub id: u64,
+    pub recipe: Recipe,
     pub phase: Phase,
     pub status: Option<ExitStatus>,
     pub error: i64,
@@ -36,6 +38,7 @@ impl Record {
         Self {
             attempt: 0,
             id: 0,
+            recipe: Recipe::C,
             phase: Phase::Empty,
             status: None,
             error: 0,
@@ -129,6 +132,7 @@ impl History {
         // Reset metadata in place; no large stack temporary and no stale bytes exposed.
         r.attempt = attempt;
         r.id = 0;
+        r.recipe = Recipe::C;
         r.phase = Phase::Starting;
         r.status = None;
         r.error = 0;

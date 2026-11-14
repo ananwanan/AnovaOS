@@ -30,6 +30,18 @@ pub struct Gui {
     admitted: [u64; 32],
 }
 impl Gui {
+    /// Occupied transport reservations can briefly outlive their disconnected clients.
+    pub fn usage(&self) -> (usize, usize, usize, u64) {
+        (
+            CLIENTS,
+            self.clients.len(),
+            self.clients
+                .iter()
+                .filter(|client| client.connected)
+                .count(),
+            self.server.map_or(0, |_| self.session),
+        )
+    }
     pub fn set_image(&mut self, pid: u64, bytes: &[u8], native: bool) {
         self.close_process(pid);
         if native

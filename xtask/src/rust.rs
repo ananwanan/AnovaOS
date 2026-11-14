@@ -85,24 +85,37 @@ pub fn image(root: &Path) -> Result<PathBuf> {
 }
 pub(super) fn pack(root: &Path, c_toolchain: bool) -> Result<PathBuf> {
     apps::build(root, false)?;
-    command(
-        Command::new("python3")
-            .arg(root.join("ports/rust/build.py"))
-            .arg("--verify"),
-    )?;
     let base = if c_toolchain {
         toolchain::pack(root)?
     } else {
         root.join("build/apps/initramfs.anovafs")
     };
-    let work = root.join("build/rust");
     let mut bytes = fs::read(base)?;
+    append_profile(root, &mut bytes)?;
+    let work = root.join("build/rust");
+    let archive = work.join("initramfs.anovafs");
+    fs::write(&archive, &bytes)?;
+    fs::write(
+        work.join("archive.sha256"),
+        format!("{:x}\n", Sha256::digest(&bytes)),
+    )?;
+    Ok(archive)
+}
+
+/// Append the same checksum-verified Rust tools and std to an explicitly selected archive.
+pub(super) fn append_profile(root: &Path, bytes: &mut Vec<u8>) -> Result<()> {
+    command(
+        Command::new("python3")
+            .arg(root.join("ports/rust/build.py"))
+            .arg("--verify"),
+    )?;
+    let work = root.join("build/rust");
     let stage = work.join("stage");
     let mut paths = vec![stage.join("rs")];
     while let Some(path) = paths.pop() {
         let guest = format!("/{}", path.strip_prefix(&stage)?.display());
         if path.is_dir() {
-            toolchain::append(&mut bytes, 2, &guest, &[]);
+            toolchain::append(bytes, 2, &guest, &[]);
             let mut children = fs::read_dir(&path)?
                 .map(|p| p.map(|p| p.path()))
                 .collect::<std::io::Result<Vec<_>>>()?;
@@ -118,17 +131,12 @@ pub(super) fn pack(root: &Path, c_toolchain: bool) -> Result<PathBuf> {
             } else {
                 1
             };
-            toolchain::append(&mut bytes, kind, &guest, &data);
+            toolchain::append(bytes, kind, &guest, &data);
         }
     }
     let wrapper = work.join("launcher.elf");
-    toolchain::append(&mut bytes, 3, "/rs/lib/libgcc_s.so", b"libgcc_s.so.1");
-    toolchain::append(
-        &mut bytes,
-        3,
-        "/rs/lib/libc.so",
-        b"/lib/ld-musl-x86_64.so.1",
-    );
+    toolchain::append(bytes, 3, "/rs/lib/libgcc_s.so", b"libgcc_s.so.1");
+    toolchain::append(bytes, 3, "/rs/lib/libc.so", b"/lib/ld-musl-x86_64.so.1");
     command(
         Command::new("musl-gcc")
             .args([
@@ -144,23 +152,17 @@ pub(super) fn pack(root: &Path, c_toolchain: bool) -> Result<PathBuf> {
             .arg("-o")
             .arg(&wrapper),
     )?;
-    toolchain::append(&mut bytes, 5, "/bin/rustc", &fs::read(wrapper)?);
-    toolchain::append(&mut bytes, 3, "/bin/cargo", b"rustc");
-    toolchain::append(&mut bytes, 3, "/bin/cargo-online", b"rustc");
+    toolchain::append(bytes, 5, "/bin/rustc", &fs::read(wrapper)?);
+    toolchain::append(bytes, 3, "/bin/cargo", b"rustc");
+    toolchain::append(bytes, 3, "/bin/cargo-online", b"rustc");
     let mut archive =
-        anova_vfs::archive::Archive::new(&bytes).map_err(|e| format!("Rust archive: {e}"))?;
+        anova_vfs::archive::Archive::new(bytes).map_err(|e| format!("Rust archive: {e}"))?;
     while archive
         .entry()
         .map_err(|e| format!("Rust entry: {e}"))?
         .is_some()
     {}
-    let archive = work.join("initramfs.anovafs");
-    fs::write(&archive, &bytes)?;
-    fs::write(
-        work.join("archive.sha256"),
-        format!("{:x}\n", Sha256::digest(&bytes)),
-    )?;
-    Ok(archive)
+    Ok(())
 }
 
 pub(super) fn image_profile(root: &Path, c_toolchain: bool) -> Result<PathBuf> {

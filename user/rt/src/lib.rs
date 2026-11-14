@@ -6,6 +6,7 @@ pub use anova_abi as abi;
 pub mod build;
 pub mod files;
 mod memory;
+pub mod monitor;
 pub mod process;
 pub mod pty;
 pub mod v1;

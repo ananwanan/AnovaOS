@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Admit the native PTY UI, pinned interactive Linux ash and independently built test inputs.
 //! Optional GCC packing reuses the M11 checked source-build recipe and immutable ABI policy.
+//! The developer image also admits the verified M12 Rust profile.
 
 use super::*;
 use sha2::{Digest, Sha256};
@@ -95,4 +96,26 @@ pub fn image(root: &Path, compiler: bool) -> Result<PathBuf> {
             "desktop"
         },
     )
+}
+
+pub fn development_image(root: &Path) -> Result<PathBuf> {
+    let mut bytes = fs::read(desktop::prepare(root)?)?;
+    toolchain::append_profile(root, &mut bytes)?;
+    // Rust's dynamic compiler uses the same pinned musl interpreter as the M9/M12 image.
+    let (runtime, _) = linux::musl_runtime()?;
+    toolchain::append(&mut bytes, 2, "/lib", &[]);
+    toolchain::append(
+        &mut bytes,
+        anova_vfs::archive::LINUX_EXECUTABLE,
+        "/lib/ld-musl-x86_64.so.1",
+        &runtime,
+    );
+    rust::append_profile(root, &mut bytes)?;
+    anova_vfs::Vfs::new(&bytes).map_err(|e| format!("Developer archive: {e}"))?;
+    let archive = directory(root, "terminal")?.join("development.anovafs");
+    output_path(&archive)?;
+    fs::write(&archive, bytes)?;
+    assets::check(root)?;
+    let kernel = build(root, Mode::Desktop)?;
+    image_contents(root, &kernel, Some(&archive), "desktop-development")
 }

@@ -4,6 +4,7 @@
 //! Run a real Linux PTY shell through bounded I/O turns and an independently polled GUI.
 //! Fixed cell/history/input storage prevents output-driven allocation. F5 replaces the shell;
 //! F4 closes the terminal. COM1 carries diagnostics independently of the merged PTY stream.
+//! A bounded compositor reconnect preserves the live shell and terminal history.
 
 mod checks;
 mod window;
@@ -11,7 +12,7 @@ mod window;
 use anova_gui_runtime::{Error, GuiEvent, GuiRect};
 use anova_gui_user as gui;
 use anova_rt::{self as rt, abi::*, pty::Session};
-use anova_terminal::{PALETTE, Screen};
+use anova_terminal::{COLUMNS, Cell, PALETTE, ROWS, Screen};
 use core::{
     cell::UnsafeCell,
     fmt::{self, Write},
@@ -34,6 +35,70 @@ struct Input {
 struct Label {
     bytes: [u8; 64],
     length: usize,
+}
+
+struct RowDamage {
+    cells: [[Cell; COLUMNS]; ROWS],
+    notice: [u8; 64],
+    notice_len: usize,
+    cursor: Option<(usize, usize)>,
+    valid: bool,
+}
+
+impl RowDamage {
+    fn new() -> Self {
+        Self {
+            cells: [[Cell {
+                byte: 0,
+                foreground: 0,
+                background: 0,
+            }; COLUMNS]; ROWS],
+            notice: [0; 64],
+            notice_len: 0,
+            cursor: None,
+            valid: false,
+        }
+    }
+
+    fn upload(&mut self, window: &mut Window, screen: &Screen, notice: &str) {
+        let (first, end) = self.update(screen);
+        if !self.valid
+            || window.needs_full_redraw()
+            || &self.notice[..self.notice_len] != notice.as_bytes()
+        {
+            self.valid = true;
+            self.notice_len = notice.len();
+            self.notice[..self.notice_len].copy_from_slice(notice.as_bytes());
+            window.begin();
+        } else if first < end {
+            window.begin_rows(24 + first as u32 * 8, 24 + end as u32 * 8);
+        }
+    }
+
+    fn update(&mut self, screen: &Screen) -> (usize, usize) {
+        let (rows, columns) = screen.dimensions();
+        let cursor = screen.cursor();
+        let mut first = rows;
+        let mut end = 0;
+        for row in 0..rows {
+            let mut changed = self.cursor != cursor
+                && [self.cursor, cursor]
+                    .into_iter()
+                    .flatten()
+                    .any(|(y, _)| y == row);
+            for column in 0..columns {
+                let cell = screen.cell(row, column);
+                changed |= self.cells[row][column] != cell;
+                self.cells[row][column] = cell;
+            }
+            if changed {
+                first = first.min(row);
+                end = row + 1;
+            }
+        }
+        self.cursor = cursor;
+        (first, end)
+    }
 }
 impl fmt::Write for Label {
     fn write_str(&mut self, value: &str) -> fmt::Result {
@@ -144,7 +209,6 @@ fn render(window: &mut Window, screen: &Screen, notice: &str) -> Result<(), Erro
             PALETTE[7],
         )?;
     }
-    window.begin();
     Ok(())
 }
 
@@ -189,17 +253,25 @@ fn run() -> Result<(), Error> {
     let mut output = [0; 1024];
     let mut turns = 0_u64;
     let mut history_dropped = 0;
+    let mut reconnects = 0;
+    let mut damage = RowDamage::new();
     gui::log(format_args!(
         "[TERMINAL:READY] pid={} history=256 input=256 read_turn=4096 events_turn=16\n",
         rt::info().unwrap().process_id
     ));
-    loop {
+    'terminal: loop {
         turns += 1;
         // Drain a bounded number of events before every bounded PTY transfer batch.
         for _ in 0..16 {
             let event = match window.poll() {
                 Ok(event) => event,
                 Err(Error::WouldBlock) => break,
+                Err(Error::Disconnected) => {
+                    window = reconnect(window, &mut reconnects)?;
+                    damage.valid = false;
+                    dirty = true;
+                    continue 'terminal;
+                }
                 Err(e) => return Err(e),
             };
             if event.kind == 1 {
@@ -211,6 +283,7 @@ fn run() -> Result<(), Error> {
                 let columns = event.width.saturating_sub(8) as usize / 6;
                 if screen.dimensions() != (rows.clamp(1, 26), columns.clamp(1, 52)) {
                     screen.resize(rows, columns);
+                    damage.valid = false;
                     let (rows, columns) = screen.dimensions();
                     if let Some(session) = &session {
                         session
@@ -223,12 +296,17 @@ fn run() -> Result<(), Error> {
                     ));
                     dirty = true;
                 }
+                dirty |= window.needs_full_redraw();
             }
             if event.kind != 2 || !matches!(event.state, 1 | 3) {
                 continue;
             }
             if event.key == 62 {
-                window.close()?;
+                if let Err(error) = window.close()
+                    && error != Error::Disconnected
+                {
+                    return Err(error);
+                }
                 return Ok(());
             }
             if event.key == 63 {
@@ -337,9 +415,20 @@ fn run() -> Result<(), Error> {
                 "PTY: F5 shell; F4 close; Shift-PgUp history"
             };
             render(&mut window, screen, notice)?;
+            damage.upload(&mut window, screen, notice);
             dirty = false;
         }
-        if window.advance()? {
+        let presented = match window.advance() {
+            Ok(presented) => presented,
+            Err(Error::Disconnected) => {
+                window = reconnect(window, &mut reconnects)?;
+                damage.valid = false;
+                dirty = true;
+                continue;
+            }
+            Err(e) => return Err(e),
+        };
+        if presented {
             gui::log(format_args!(
                 "[TERMINAL:PRESENT] turns={turns} received={} history={} dropped={}\n",
                 screen.received,
@@ -349,6 +438,24 @@ fn run() -> Result<(), Error> {
         }
         rt::sleep(1).map_err(|_| Error::Transport)?;
     }
+}
+
+fn reconnect(window: Window, attempts: &mut usize) -> Result<Window, Error> {
+    if *attempts == gui::MAX_SESSION_REPLACEMENTS {
+        return Err(Error::Disconnected);
+    }
+    *attempts += 1;
+    let old = window.session;
+    drop(window);
+    let window = Window::create_at(450, 20, 312, 232)?;
+    if window.session <= old {
+        return Err(Error::Disconnected);
+    }
+    gui::log(format_args!(
+        "[TERMINAL:RECONNECTED] old={old} session={}\n",
+        window.session
+    ));
+    Ok(window)
 }
 
 #[unsafe(no_mangle)]

@@ -418,6 +418,9 @@ impl Kernel {
         let leader = (0..CAPACITY)
             .find(|&k| self.policy.entry(k).pid == group && self.processes[k].is_some());
         let parent = leader.map_or(self.policy.entry(i).parent, |k| self.policy.entry(k).parent);
+        let started_tick = leader.map_or(self.process(i).started_tick, |k| {
+            self.process(k).started_tick
+        });
         for k in 0..CAPACITY {
             if k != i
                 && self.processes[k]
@@ -456,6 +459,7 @@ impl Kernel {
         }
         p.context = user::Context::new(image.entry, image.stack);
         p.image = Some(image);
+        p.started_tick = started_tick;
         p.thread.blocked = None;
         p.thread.saved_mask = None;
         p.thread.altstack = signals::AltStack::default();

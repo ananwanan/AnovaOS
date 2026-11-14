@@ -195,8 +195,10 @@ pub fn image(root: &Path) -> Result<PathBuf> {
     image_contents(root, &kernel, Some(&archive), "desktop")
 }
 
-pub fn run(root: &Path, disk: Option<&Path>, compiler: bool) -> Result<()> {
-    let iso = if compiler {
+pub fn run(root: &Path, disk: Option<&Path>, compiler: bool, rust: bool) -> Result<()> {
+    let iso = if rust {
+        pty_terminal::development_image(root)?
+    } else if compiler {
         pty_terminal::image(root, true)?
     } else {
         image(root)?

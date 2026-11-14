@@ -2,6 +2,7 @@
 //! Read and update one-group, 4 KiB/128-byte-inode ext2 with bounded 4 MiB regular files.
 //! Writes snapshot one indirect table locally to bound device reads during small compiler writes.
 //! Reject unsupported features and dirty images. Ordered writes fail closed; this is not a journal.
+//! Keep mount geometry and current free counters available without device reads.
 use crate::{BlockDevice, SECTOR, check_range};
 use alloc::{boxed::Box, vec::Vec};
 use anova_abi::*;
@@ -58,6 +59,18 @@ pub struct Ext2 {
     clock: u32,
 }
 impl Ext2 {
+    pub(crate) fn space(&self) -> crate::filesystem::Space {
+        crate::filesystem::Space {
+            format: crate::filesystem::Format::Ext2,
+            block_bytes: BLOCK as u32,
+            blocks: self.blocks,
+            inodes: self.inodes,
+            free: (!self.failed)
+                .then(|| (u32_at(&self.superblock, 12), u32_at(&self.superblock, 16))),
+            read_only: self.read_only(),
+            journaled: false,
+        }
+    }
     pub fn read_only(&self) -> bool {
         self.device.read_only()
     }

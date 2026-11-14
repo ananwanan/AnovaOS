@@ -1,18 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Keep bounded compiler attempts in the launcher across compositor replacements.
+//! Keep fixed recipe attempts in the launcher across compositor replacements.
 //! Completion comes only from the job wait record; raw merged output never drives status.
 
 use super::{Window, gui, rt};
 use anova_gui_runtime::{Error, GuiEvent};
 use anova_terminal::build_log::{History, Phase};
 use core::{cell::UnsafeCell, fmt::Write};
-use rt::abi::{build as b, *};
+use rt::abi::{build as b, workflow::Recipe, *};
 
 struct Storage(UnsafeCell<History>);
 // SAFETY: Only run's single UI owner borrows this BSS, once, without forking.
 unsafe impl Sync for Storage {}
 static HISTORY: Storage = Storage(UnsafeCell::new(History::new()));
 const MAX_DRAIN_TURNS: u8 = 3;
+
+pub enum Command {
+    Start(Recipe),
+    Cancel,
+}
 
 pub struct Diagnostics {
     history: &'static mut History,
@@ -22,6 +27,9 @@ pub struct Diagnostics {
     scroll: usize,
     drain_turns: u8,
     pub visible: bool,
+    legacy: bool,
+    action: Option<(&'static str, i64)>,
+    cancelled: bool,
 }
 struct Label {
     bytes: [u8; 128],
@@ -51,7 +59,7 @@ impl Write for Label {
 }
 impl Diagnostics {
     /// Caller enters once per launcher process, after all fork-based checks.
-    pub fn new() -> Self {
+    pub fn new(legacy: bool) -> Self {
         // SAFETY: run is called once by main; the borrow stays in its sole Diagnostics.
         let history = unsafe { &mut *HISTORY.0.get() };
         Self {
@@ -62,12 +70,18 @@ impl Diagnostics {
             scroll: 0,
             drain_turns: 0,
             visible: false,
+            legacy,
+            action: None,
+            cancelled: false,
         }
     }
-    fn start(&mut self) {
+    fn start(&mut self, recipe: Recipe) {
         if self.job.is_some() {
+            self.action = Some(("Compiler already active", BUSY));
             return;
         }
+        self.action = None;
+        self.cancelled = false;
         let Some(index) = self.history.begin() else {
             return;
         };
@@ -76,16 +90,37 @@ impl Diagnostics {
         self.scroll = 0;
         self.drain_turns = 0;
         let r = &mut self.history.records[index];
-        match rt::build::Job::start() {
+        r.recipe = recipe;
+        let result = if self.legacy {
+            rt::build::Job::start()
+        } else {
+            rt::build::Job::start_recipe(recipe)
+        };
+        match result {
             Ok(job) => {
                 r.id = job.id();
                 r.phase = Phase::Running;
-                gui::log(format_args!(
-                    "[BUILD:START] attempt={} id={} command={} merged=true\n",
-                    r.attempt,
-                    r.id,
-                    b::COMMAND
-                ));
+                if self.legacy {
+                    gui::log(format_args!(
+                        "[BUILD:START] attempt={} id={} command={} merged=true\n",
+                        r.attempt,
+                        r.id,
+                        b::COMMAND
+                    ));
+                } else {
+                    let args = recipe.args();
+                    let mut command = Label::new();
+                    for arg in args {
+                        let _ = write!(command, "{arg} ");
+                    }
+                    gui::log(format_args!(
+                        "[BUILD:START] attempt={} id={} recipe={} command={}merged=true\n",
+                        r.attempt,
+                        r.id,
+                        recipe.label(),
+                        command.text()
+                    ));
+                }
                 self.job = Some(job);
             }
             Err(error) => {
@@ -98,9 +133,29 @@ impl Diagnostics {
             }
         }
     }
-    pub fn event(&mut self, event: &GuiEvent) {
-        if event.kind != 2 || event.state != 1 {
+    fn cancel(&mut self) {
+        let Some(job) = &self.job else {
             return;
+        };
+        let result = job.cancel();
+        self.cancelled |= result.is_ok();
+        self.action = Some((
+            if result.is_ok() {
+                "Cancellation requested"
+            } else {
+                "Cancellation failed"
+            },
+            result.err().unwrap_or(0),
+        ));
+        gui::log(format_args!(
+            "[BUILD:CANCEL] id={} result={result:?}\n",
+            job.id()
+        ));
+    }
+
+    pub fn event(&mut self, event: &GuiEvent) -> Option<Command> {
+        if event.kind != 2 || event.state != 1 {
+            return None;
         }
         match event.key {
             1 => self.visible = false,
@@ -117,9 +172,30 @@ impl Diagnostics {
                 )
             }
             0x151 => self.scroll = self.scroll.saturating_sub(10),
-            _ if event.codepoint == 103 => self.start(),
+            _ if event.codepoint == u32::from(b'g') => return Some(Command::Start(Recipe::C)),
+            _ if !self.legacy && event.codepoint == u32::from(b'c') => {
+                return Some(Command::Start(Recipe::Cpp));
+            }
+            _ if !self.legacy && event.codepoint == u32::from(b'r') => {
+                return Some(Command::Start(Recipe::Rust));
+            }
+            _ if !self.legacy && event.codepoint == u32::from(b'x') => {
+                return Some(Command::Cancel);
+            }
             _ => {}
         }
+        None
+    }
+
+    pub fn command(&mut self, command: Command) {
+        match command {
+            Command::Start(recipe) => self.start(recipe),
+            Command::Cancel => self.cancel(),
+        }
+    }
+
+    pub fn active(&self) -> bool {
+        self.job.is_some()
     }
     pub fn turn(&mut self) -> bool {
         let Some(job) = &self.job else {
@@ -159,22 +235,37 @@ impl Diagnostics {
                 assert_eq!(status.pid, r.id);
                 changed |= r.status != Some(status.status);
                 r.status = Some(status.status);
-                self.drain_turns = self.drain_turns.saturating_add(1);
-                if r.phase != Phase::CaptureFailed {
+                if r.phase != Phase::Publishing {
+                    self.drain_turns = self.drain_turns.saturating_add(1);
+                }
+                if !matches!(r.phase, Phase::CaptureFailed | Phase::Publishing) {
                     r.phase = Phase::Draining;
                 }
                 // A detached continuous writer must not hold a completed leader's
                 // task/PTY forever. Preserve bounded tail work, then explicitly cut.
-                if quiet || r.phase == Phase::CaptureFailed || self.drain_turns >= MAX_DRAIN_TURNS {
+                if quiet
+                    || matches!(r.phase, Phase::CaptureFailed | Phase::Publishing)
+                    || self.drain_turns >= MAX_DRAIN_TURNS
+                {
                     r.incomplete |= !eof;
                     r.phase = Phase::Finished;
                     if status.status.reason == 0
                         && status.status.code == 0
+                        && !self.cancelled
                         && r.error == 0
                         && !r.incomplete
                     {
-                        match rt::files::replace(b::STAGING, b::OUTPUT) {
+                        let publication = if self.legacy {
+                            rt::files::replace(b::STAGING, b::OUTPUT)
+                        } else {
+                            job.publish()
+                        };
+                        match publication {
                             Ok(()) => r.published = true,
+                            Err(WOULD_BLOCK) if !self.legacy => {
+                                r.phase = Phase::Publishing;
+                                return true;
+                            }
                             Err(error) => r.error = error,
                         }
                     }
@@ -184,7 +275,7 @@ impl Diagnostics {
                         r.error = error;
                     }
                     gui::log(format_args!(
-                        "[BUILD:END] attempt={} id={} reason={} code={} bytes={} dropped={} published={} error={} incomplete={} drain_turns={}\n",
+                        "[BUILD:END] attempt={} id={} reason={} code={} bytes={} dropped={} published={} error={} incomplete={} drain_turns={} cancelled={}\n",
                         r.attempt,
                         r.id,
                         status.status.reason,
@@ -194,7 +285,8 @@ impl Diagnostics {
                         r.published,
                         r.error,
                         r.incomplete,
-                        self.drain_turns
+                        self.drain_turns,
+                        self.cancelled
                     ));
                     changed = true;
                 }
@@ -213,13 +305,16 @@ impl Diagnostics {
         let r = &self.history.records[self.selected];
         w.clear(0x182838)?;
         w.text(4, 16, "BUILD DIAGNOSTICS - MERGED STDOUT/STDERR", 0xffffff)?;
-        w.text(4, 32, "/bin/gcc -fdiagnostics-color=never", 0xffffff)?;
-        w.text(
-            4,
-            40,
-            "/persist/build.c -o /persist/build-app.next",
-            0xffffff,
-        )?;
+        let (line1, line2) = match r.recipe {
+            Recipe::C => ("/bin/gcc -fdiagnostics-color=never", "/persist/build.c"),
+            Recipe::Cpp => (
+                "/bin/g++ -std=c++11",
+                "/persist/build.cpp + /persist/helper.cpp",
+            ),
+            Recipe::Rust => ("/bin/rustc --edition=2024", "/persist/build.rs"),
+        };
+        w.text(4, 32, line1, 0xffffff)?;
+        w.text(4, 40, line2, 0xffffff)?;
         let mut label = Label::new();
         let _ = write!(label, "Attempt {}  task {}  {:?}", r.attempt, r.id, r.phase);
         w.text(4, 56, label.text(), 0xffffff)?;
@@ -241,17 +336,27 @@ impl Diagnostics {
             let _ = write!(label, "Exit pending/unknown  error={}", r.error);
         }
         w.text(4, 64, label.text(), 0xffffff)?;
+        let mut publication = Label::new();
+        if r.published {
+            let _ = write!(
+                publication,
+                "Published {} (sync separately)",
+                r.recipe.output()
+            );
+        }
         w.text(
             4,
             72,
             if r.published {
-                "Published /persist/build-app (sync separately)"
+                publication.text()
+            } else if r.phase == Phase::Publishing {
+                "Publishing to work disk"
             } else if r.incomplete {
-                "Capture cut; prior build-app retained"
+                "Capture cut; prior output retained"
             } else if r.error != 0 && r.status.is_some_and(|s| s.reason == 0 && s.code == 0) {
                 "Publication/capture error: inspect storage"
             } else {
-                "Prior build-app retained; no new publication"
+                "Prior output retained; no new publication"
             },
             0xffffff,
         )?;
@@ -261,9 +366,9 @@ impl Diagnostics {
                 80,
                 match r.error {
                     FILE_LIMIT | PROCESS_LIMIT | NO_MEMORY | NO_SPACE => {
-                        "Resource limit; release capacity, then g retries"
+                        "Resource limit; release capacity and retry"
                     }
-                    ALREADY_EXISTS => "Inspect/remove build-app.next before retry",
+                    ALREADY_EXISTS => "Inspect existing staging file before retry",
                     NOT_FOUND | PERMISSION_DENIED => {
                         "Compiler missing/unadmitted; select toolchain"
                     }
@@ -273,11 +378,19 @@ impl Diagnostics {
             )?;
         } else if r.phase == Phase::Finished && r.error != 0 {
             w.text(4, 80, "Task I/O/cleanup error: inspect storage", 0xffcc66)?;
+        } else if let Some((label, error)) = self.action {
+            let mut action = Label::new();
+            let _ = write!(action, "{label} ({error})");
+            w.text(4, 80, action.text(), 0xffcc66)?;
         }
         w.text(
             4,
             88,
-            "g build; [/] records; PgUp/Dn logs; Esc back",
+            if self.legacy {
+                "g build; [/] records; PgUp/Dn logs; Esc back"
+            } else {
+                "g C; c C++; r Rust; x cancel; [/] logs; Esc"
+            },
             0xffffff,
         )?;
         let mut label = Label::new();

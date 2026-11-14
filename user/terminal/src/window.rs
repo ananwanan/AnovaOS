@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Pump one acknowledged GUI upload at a time for terminal, files and desktop diagnostics.
+//! Pump one acknowledged GUI upload at a time with optional damage row bounds.
 //! Raster snapshots stay immutable until PRESENT; geometry invalidates an in-flight frame.
 //! This raw checked GUI protocol client leaves the shared C/C++/Rust runtime ABI unchanged.
+//! Release connection reservations when an initial CREATE fails or times out.
 
 use anova_gui::{Request, op, reply_kind, status, transport as t};
 use anova_gui_runtime::{Error, GuiEvent, GuiRect, render::Canvas};
@@ -37,46 +38,33 @@ pub(super) struct Window {
     invalidated: bool,
     complete: bool,
     y: u32,
+    end: u32,
 }
 
 impl Window {
+    pub fn needs_full_redraw(&self) -> bool {
+        self.invalidated
+    }
     pub fn create_at(x: i32, y: i32, width: u32, height: u32) -> Result<Self, Error> {
         if !(32..=320).contains(&width) || !(24..=240).contains(&height) {
             return Err(Error::Limit);
         }
         assert!(!CLAIMED.load(Ordering::Acquire));
         let session = gui::connect().map_err(error)?;
-        let mut request = Request::new(op::CREATE, session);
-        request.sequence = 1;
-        request.x = x;
-        request.y = y;
-        request.width = width;
-        request.height = height;
-        request.flags = 1;
-        gui::send(&request, &[]).map_err(error)?;
-        let reply = loop {
-            match gui::poll() {
-                Ok(reply) => break reply,
-                Err(WOULD_BLOCK) => rt::sleep(1).map_err(error)?,
-                Err(e) => return Err(error(e)),
+        let handle = match Self::open(session, x, y, width, height) {
+            Ok(handle) => handle,
+            Err(error) => {
+                let _ = gui::scalar(t::CLOSE);
+                return Err(error);
             }
         };
-        if reply.kind != reply_kind::ACK
-            || reply.sequence != 1
-            || reply.session != session
-            || !reply.is_ok()
-        {
-            return Err(Error::Transport);
-        }
-        // Claim only after fallible connection/creation succeeds, so a failed
-        // constructor does not poison a launcher's next compositor replacement.
         assert!(!CLAIMED.swap(true, Ordering::AcqRel));
         // SAFETY: CLAIMED establishes sole ownership for the lifetime of this window.
         // The process is single-threaded, never forks, and no other reference is formed.
         let pixels = unsafe { &mut *PIXELS.0.get() };
         Ok(Self {
             session,
-            handle: reply.window,
+            handle,
             sequence: 1,
             width,
             height,
@@ -86,7 +74,37 @@ impl Window {
             invalidated: false,
             complete: false,
             y: 0,
+            end: 0,
         })
+    }
+
+    fn open(session: u64, x: i32, y: i32, width: u32, height: u32) -> Result<u64, Error> {
+        let mut request = Request::new(op::CREATE, session);
+        request.sequence = 1;
+        request.x = x;
+        request.y = y;
+        request.width = width;
+        request.height = height;
+        request.flags = 1;
+        gui::send(&request, &[]).map_err(error)?;
+        for _ in 0..100 {
+            match gui::poll() {
+                Ok(reply) => {
+                    if reply.kind == reply_kind::ACK
+                        && reply.sequence == 1
+                        && reply.session == session
+                        && reply.is_ok()
+                        && reply.window != 0
+                    {
+                        return Ok(reply.window);
+                    }
+                    return Err(Error::Transport);
+                }
+                Err(WOULD_BLOCK) => rt::sleep(1).map_err(error)?,
+                Err(e) => return Err(error(e)),
+            }
+        }
+        Err(Error::Transport)
     }
 
     pub fn clear(&mut self, color: u32) -> Result<(), Error> {
@@ -112,8 +130,17 @@ impl Window {
         !self.active && self.pending.is_none()
     }
     pub fn begin(&mut self) {
+        self.begin_rows(0, self.height);
+    }
+
+    pub fn begin_rows(&mut self, first: u32, end: u32) {
+        let end = end.min(self.height);
+        if first >= end {
+            return;
+        }
         self.active = true;
-        self.y = 0;
+        self.y = first;
+        self.end = end;
         self.invalidated = false;
     }
 
@@ -122,8 +149,8 @@ impl Window {
         if self.pending.is_some() || !self.active {
             return Ok(completed);
         }
-        let rows = (1008 / self.width).min(self.height - self.y);
-        let opcode = if self.y == self.height {
+        let rows = (1008 / self.width).min(self.end - self.y);
+        let opcode = if self.y == self.end {
             op::PRESENT
         } else {
             op::UPLOAD

@@ -4,6 +4,7 @@
 //! Browse the shared work volume and edit bounded ASCII sources with explicit save/leave checks.
 //! One acknowledged raster chunk per turn keeps physical keyboard input independently polled.
 //! Error diagnostics observe complete buffer fingerprints and bounded short-buffer hex bytes.
+//! Keep the editor and save dialog through a bounded reconnect to a replacement compositor.
 
 mod fs;
 #[path = "../../terminal/src/window.rs"]
@@ -540,6 +541,29 @@ fn run() -> Result<(), Error> {
     gui::log(format_args!(
         "[FILES:READY] cwd=/persist limit=16384 entries=64\n"
     ));
+    for _ in 0..gui::MAX_SESSION_REPLACEMENTS {
+        match edit(&mut window, &mut ui, editor) {
+            Err(Error::Disconnected) => {
+                let old = window.session;
+                drop(window);
+                window = Window::create_at(270, 250, 318, 240)?;
+                if window.session <= old {
+                    return Err(Error::Disconnected);
+                }
+                gui::log(format_args!(
+                    "[FILES:RECONNECTED] old={old} session={} dirty={} bytes={}\n",
+                    window.session,
+                    editor.dirty(),
+                    editor.bytes().len()
+                ));
+            }
+            result => return result,
+        }
+    }
+    edit(&mut window, &mut ui, editor)
+}
+
+fn edit(window: &mut Window, ui: &mut Ui, editor: &mut Editor) -> Result<(), Error> {
     let mut dirty = true;
     loop {
         for _ in 0..16 {
@@ -551,7 +575,12 @@ fn run() -> Result<(), Error> {
             if event.kind == 2 && matches!(event.state, 1 | 3) {
                 match ui.event(&event, editor) {
                     Ok(true) => {
-                        window.close()?;
+                        // The editor already completed the cooperative close.
+                        if let Err(error) = window.close()
+                            && error != Error::Disconnected
+                        {
+                            return Err(error);
+                        }
                         return Ok(());
                     }
                     Ok(false) => {}
@@ -559,12 +588,12 @@ fn run() -> Result<(), Error> {
                 }
                 dirty = true;
             }
-            if event.kind == 3 {
+            if event.kind == 3 || window.needs_full_redraw() {
                 dirty = true;
             }
         }
         if dirty && window.idle() {
-            ui.render(&mut window, editor)?;
+            ui.render(window, editor)?;
             dirty = false;
         }
         if window.advance()? {

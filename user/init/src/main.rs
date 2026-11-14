@@ -2,7 +2,7 @@
 #![no_std]
 #![no_main]
 //! Start the native shell, wait for child status and restart interactive sessions after exit.
-//! Test mode runs the filesystem suite; desktop mode keeps COM1 and GUI children independent.
+//! Test mode runs the filesystem suite; desktop modes keep COM1 and GUI children independent.
 use anova_rt as rt;
 #[unsafe(no_mangle)]
 unsafe extern "C" fn anova_main(argc: usize, argv: *const *const u8) -> u32 {
@@ -21,9 +21,18 @@ unsafe extern "C" fn anova_main(argc: usize, argv: *const *const u8) -> u32 {
         );
     }
     if mode == b"desktop" || mode == b"desktop-test" {
+        // The separately admitted negative-test compiler exercises the legacy ABI.
+        let legacy = rt::open("/etc/desktop-legacy-build", rt::abi::OPEN_READ)
+            .is_ok_and(|fd| rt::close(fd).is_ok());
         let desktop = rt::spawn(
             "/bin/desktop",
-            if mode == b"desktop-test" { "test" } else { "" },
+            if mode == b"desktop-test" {
+                "test"
+            } else if legacy {
+                "legacy-build"
+            } else {
+                ""
+            },
         )
         .unwrap();
         let mut shell = rt::spawn("/bin/shell", "").unwrap();

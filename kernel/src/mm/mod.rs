@@ -57,6 +57,10 @@ pub fn heap_used() -> usize {
     HEAP.with(|heap| heap.used())
 }
 
+pub fn heap_usage() -> (usize, usize) {
+    HEAP.with(|heap| (heap.capacity(), heap.used()))
+}
+
 /// Verify each inherited video page after owned table import. The caller has
 /// already checked its complete physical reservation; no mapping is created.
 #[cfg(feature = "graphics")]

@@ -6,8 +6,10 @@
 pub mod build;
 pub mod files;
 pub mod linux;
+pub mod monitor;
 pub mod process;
 pub mod pty;
+pub mod workflow;
 
 pub const VERSION: u32 = 1;
 /// SDK releases are independent from the frozen native syscall wire version.

@@ -8,6 +8,8 @@ use anova_gui::{Reply, Request, transport as t};
 use anova_rt as rt;
 use core::fmt::{self, Write};
 
+pub const MAX_SESSION_REPLACEMENTS: usize = 3;
+
 /// Invoke the experimental kernel boundary with raw user addresses.
 /// # Safety
 /// The selected operation's output range must be exclusively writable and input ranges

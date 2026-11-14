@@ -194,6 +194,8 @@ impl Kernel {
         let process = Process {
             pty_member: self.process(i).pty_member,
             image: Some(image),
+            linux: true,
+            started_tick: apic::ticks(),
             stack: Some(stack),
             context,
             files,
