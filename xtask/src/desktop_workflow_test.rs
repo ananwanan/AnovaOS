@@ -234,6 +234,12 @@ fn test_recipe(
 
     // Cancelling uses the exact current task identity and leaves the published ELF intact.
     let build = start(&mut d, p, 4, evidence)?;
+    // The C fixture can finish before a focus round-trip. Use the longer actual
+    // compiler jobs to observe the peer both before cancellation and after it.
+    if p.recipe != Recipe::C {
+        live_peer(&mut d, work, &build, "before-cancel", Peer::Shell, evidence)?;
+        d.click(35, 60)?;
+    }
     require_compiler_live(&mut d, &build)?;
     let from = d.output.position();
     let cancelled_at = Instant::now();
