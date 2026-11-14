@@ -78,6 +78,8 @@ Screenshots supplement serial/exit evidence.
 - [x] GDT/TSS/IDT, exception stacks, double-fault IST and guards.
 - [x] Registers/addresses/error-bit diagnostics for #PF/#GP/#UD.
 - [x] Checked RSDP/XSDT-or-RSDT/MADT/FADT, LAPIC timer and masked IOAPIC routes.
+- [x] Tolerate firmware/register I/O APIC ID differences during masked-only setup;
+  preserve mask readback and the parsed-MADT `ioapic-id-mismatch` boot regression.
 - [ ] Enable/verify peripheral IRQ, MADT source overrides/NMI with the first relevant drivers.
 - [x] Calibrate LAPIC with ACPI PM clock; periodic IRQ time and proper EOI.
 - [x] Separate trap/IRQ/BSP contexts, IF state and allocation/locking rules in the historical pre-thread baseline.

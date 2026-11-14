@@ -59,11 +59,15 @@ QEMU PS/2 input does not establish real USB keyboard support.
   into checked frame storage before switching to the owned hierarchy.
 - The shared `anova-platform` crate decodes bounded ACPI bytes with checksum and
   length checks. Required tables are RSDP, XSDT/RSDT, MADT and FADT. The APIC CPU
-  feature, MSR base, MADT identity, NX and PAT assumptions are checked.
+  feature, LAPIC MSR base/BSP identity, MADT topology, NX and PAT assumptions are checked.
 - Both PICs and every discovered I/O APIC redirection remain masked. Only local
   APIC vector 64 is enabled; spurious vector 255 returns without EOI. A 20 ms
   ACPI PM-counter sample calibrates the 100 Hz periodic timer. Its handler
   increments an atomic count, sends one EOI, and never logs or allocates.
+- I/O APIC access uses the validated MADT address and GSI range. A difference
+  between firmware and register IDs is reported after every mask readback passes;
+  it does not abort this masked-only setup or cause an ID-register write. Actual
+  external IRQ routing still requires separate identity/topology admission.
 - COM1 output preserves IF while serializing normal BSP calls. Panic and fatal
   exception paths use independent bounded, lock-free emergency output. There is
   no AP startup; M5 adds the BSP scheduler below. Normal idle uses `sti; hlt` after timer validation.

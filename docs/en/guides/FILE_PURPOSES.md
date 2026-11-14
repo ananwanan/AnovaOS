@@ -139,7 +139,7 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `docs/en/validation/M15.5.md` | Record actual guest kernel compilation, exact retained-ELF boot and recovery evidence, capacity regressions and host-assistance limits. |
 | `docs/en/validation/M15.6.md` | Record actual two-round guest reconstruction, artifact comparison and recovery execution evidence. |
 | `docs/en/validation/M16.md` | Record partial M16 acquisition, measured guest build, backend/cache and controlled ext4 readonly acceptance. |
-| `docs/en/validation/M2.md` | Historical local CPU/timer/trap validation evidence and limitations. |
+| `docs/en/validation/M2.md` | Historical CPU/timer/trap evidence and the separately dated I/O APIC identity boot-fix reproduction, checks and limits. |
 | `docs/en/validation/M3.md` | Historical local memory/protection/OOM validation evidence and limitations. |
 | `docs/en/validation/M4.md` | Local native app/isolation/teardown results, environment, artifacts and limitations. |
 | `docs/en/validation/M5.md` | Record actual M5 host/QEMU acceptance, resource recovery, inputs, outputs and limitations. |
@@ -218,12 +218,12 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `docs/zh-CN/validation/M8.md` | Provide the complete Simplified Chinese counterpart of `docs/en/validation/M8.md`, preserving technical scope, commands, evidence and original legal texts. |
 | `docs/zh-CN/validation/M8_OPTIMIZATION.md` | Provide the complete Simplified Chinese counterpart of `docs/en/validation/M8_OPTIMIZATION.md`, preserving technical scope, commands, evidence and original legal texts. |
 | `docs/zh-CN/validation/M9.md` | Provide the complete Simplified Chinese counterpart of `docs/en/validation/M9.md`, preserving technical scope, commands, evidence and original legal texts. |
-| `kernel/Cargo.toml` | Build the bare-metal kernel, sampled desktop sessions and opt-in isolated QEMU failure tests. |
+| `kernel/Cargo.toml` | Build the bare-metal kernel, sampled desktop sessions and opt-in isolated QEMU topology/failure tests. |
 | `kernel/build.rs` | Reject host-target kernel builds and select the kernel-only linker script. |
 | `kernel/src/abi/mod.rs` | Adapt native system queries; task owns process lifecycle and fs owns descriptor calls. |
 | `kernel/src/arch/mod.rs` | Select the implemented x86_64 hardware architecture boundary. |
 | `kernel/src/arch/x86_64/acpi.rs` | Read only the firmware tables needed by the q35 BSP interrupt baseline. |
-| `kernel/src/arch/x86_64/apic.rs` | BSP xAPIC periodic timer, calibrated against the 3.579545 MHz ACPI PM timer. External I/O APIC lines and legacy PICs remain masked until device drivers exist. |
+| `kernel/src/arch/x86_64/apic.rs` | Calibrate the BSP xAPIC timer; mask external I/O APIC/PIC lines with checked readback, reporting firmware/register ID differences without enabling routes. |
 | `kernel/src/arch/x86_64/clock.rs` | Sample stable binary/BCD CMOS UTC and advance realtime from calibrated monotonic ticks. |
 | `kernel/src/arch/x86_64/cpu.rs` | Privileged operations for the single BSP. No FPU/SIMD is enabled here. |
 | `kernel/src/arch/x86_64/interrupts.S` | Build uniform saved-GPR frames for CPU traps, IRQs and the native syscall entry; restore the checked frame with IRETQ. Long mode always saves SS:RSP. |
@@ -243,7 +243,7 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `kernel/src/fs/tty.rs` | Bounded COM1/four-PTY line disciplines, exact write/poll/wakeup progress conditions, settings, foreground signals and hangup. |
 | `kernel/src/graphics.rs` | Validate display mappings, present/reclaim the boot buffer, manage the diagnostic cursor and copy checked user compositor damage. |
 | `kernel/src/gui.rs` | Authenticate executable/server and process/client identities, copy bounded IPC/scanout and clean up lifetimes. |
-| `kernel/src/main.rs` | Boot owned CPU/memory/devices, optional checked software graphics, and isolated user workloads. |
+| `kernel/src/main.rs` | Boot owned hardware and isolated workloads, report optional source-build identity and confine topology/fault injections to mutually exclusive QEMU features. |
 | `kernel/src/mm/lock.rs` | Non-sleeping BSP locks. Order: memory manager before heap; the fixed heap never calls the frame allocator. IRQ/NMI/fatal paths must not take either. |
 | `kernel/src/mm/mod.rs` | BSP memory ownership: checked USABLE frames, fully owned table hierarchy, guarded stacks, reclaiming buddy heap and private process memory integration. |
 | `kernel/src/mm/uaccess.rs` | Copy bounded user bytes with page checks and REP MOVSB fault recovery; IF=0 pins shared mappings and no copy spans a scheduling/blocking boundary. |
@@ -437,7 +437,7 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `xtask/src/gui_sdk_build.rs` | Export a checksummed GUI source SDK with both language guides and package its guest compiler/display image. |
 | `xtask/src/input.rs` | Inject QMP keyboard/mouse sequences, compare all cursor/background pixels and require missing-device serial recovery and clean shutdown. |
 | `xtask/src/linux.rs` | Build and hash pinned static/dynamic musl/BusyBox fixtures, package upstream sources and record bounded Linux-host traces. |
-| `xtask/src/main.rs` | Host CLI for reproducible kernel/app builds, ISO assembly and QEMU validation. |
+| `xtask/src/main.rs` | Host CLI for reproducible kernel/app builds, ISO assembly and QEMU validation, including the parsed-MADT I/O APIC ID mismatch boot case. |
 | `xtask/src/network.rs` | Run controlled loopback peers and watchdog-driven real QEMU network acceptance. |
 | `xtask/src/packages.rs` | Pin/build user TLS clients, construct locked packages and verify install/reboot/HTTPS behavior. |
 | `xtask/src/purposes.rs` | Check file-purpose inventory and first-party headers for existing tracked/untracked files, ignoring cached paths removed during a move; human review verifies responsibility accuracy. |
@@ -445,7 +445,7 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `xtask/src/rust_online.rs` | Verify real guest HTTPS sparse-registry/Git acquisition, strict transport failures and offline reboot cache reuse. |
 | `xtask/src/rust_public.rs` | Verify public crates.io/GitHub source acquisition, pinned revisions, actual guest compilation and offline reboot reuse. |
 | `xtask/src/sdk.rs` | Export the native SDK with both language guides and create/build isolated C/C++/offline Rust projects. |
-| `xtask/src/smoke.rs` | Require real CPU/memory/user/process evidence together with the QEMU exit result. |
+| `xtask/src/smoke.rs` | Require complete CPU/memory/runtime/storage proof and QEMU exits; check reached I/O APIC ID injection, actual register identity and mask readback. |
 | `xtask/src/terminal.rs` | Drive ordinary UART editing/EOF, dynamic musl launch, real Ctrl+C interruption and volatile reboot checks. |
 | `xtask/src/toolchain.rs` | Build/package the optional development ISO and verify guest editing, compilation, make, failures and reboot hashes. |
 | `xtask/src/transcript.rs` | Capture ordered guest stdout, preserve UART evidence and match raw bytes independently of filesystem snapshots or partial UTF-8. |

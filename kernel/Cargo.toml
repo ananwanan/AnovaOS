@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Builds the bare-metal kernel, opt-in resource sampling and isolated QEMU failure injection.
+# Builds the bare-metal kernel, opt-in resource sampling and isolated QEMU regression injections.
 [package]
 name = "anova-kernel"
 version.workspace = true
@@ -41,6 +41,7 @@ gpu = ["gui"]
 gpu-test = ["gpu"]
 input-test = ["graphics"]
 qemu-test = []
+test-ioapic-id-mismatch = ["qemu-test"]
 test-panic = ["qemu-test"]
 test-timeout = ["qemu-test"]
 test-invalid-opcode = ["qemu-test"]

@@ -92,6 +92,16 @@ source override, polarity, trigger mode, NMI route or device IRQ is enabled.
 Those routes require the first actual device driver and separate delivery tests.
 This explicit M2 boundary avoids enabling interrupts without a servicing driver.
 
+The 2026-11-14 boot fix keeps the MADT I/O APIC ID separate from the register ID.
+The checked physical address selects the controller; a firmware/register ID
+difference is diagnostic while every external line remains masked. Setup does
+not rewrite the ID register. Address/topology checks, GSI bounds/overflow and
+per-pin mask readback remain mandatory. Future external IRQ delivery must
+separately admit controller identities and routes. Intel's
+[82093AA datasheet, sections 3.2.1 and 3.2.4](https://pdos.csail.mit.edu/6.828/2017/readings/ia32/ioapic.pdf)
+describes the programmable controller ID and interrupt mask; this bounded
+workaround does not establish general external interrupt compatibility.
+
 ## Time and execution contexts
 
 The FADT must expose a System I/O PM timer with a four-byte register. A usable
@@ -124,8 +134,9 @@ their own context, locking, per-CPU and table ownership rules.
 
 ## Fault validation
 
-The original M2 gate booted seven independent images. M3 expands the current
-`cargo xtask verify` gate to 13 images; the original seven keep these requirements. Standalone negative cases
+The original M2 gate booted seven independent images. M3 expanded it to 13;
+the 2026-11-14 firmware ID regression adds a second successful boot, making
+14 cases in `cargo xtask verify`. The original seven keep these requirements. Standalone negative cases
 always return 1; QEMU exit 37 never counts as successful smoke. The gate requires
 the actual expected vector, error, stack, injection and terminal exit. #PF also
 matches CR2 to the injected guard address and checks decoded error bits. #DF
@@ -136,6 +147,17 @@ The #DF image temporarily removes #PF's IST selection, points RSP to a guard top
 and executes a real failing push. A second stack fault during #PF delivery
 escalates to #DF. The normal image keeps #PF on IST2. All injection features are
 mutually exclusive and imply the test-only QEMU exit feature.
+
+`cargo xtask smoke --case ioapic-id-mismatch` selects the exclusive
+`test-ioapic-id-mismatch` feature, which implies `qemu-test`. After ordinary ACPI
+validation, it changes only the first parsed MADT I/O APIC ID from 0 to 128.
+QEMU's real controller at `0xfec00000` retains register ID 0 and GSI base 0.
+The gate requires the reached injection, all 24 pins masked, exact
+firmware/register/address/GSI/destination diagnostics, the complete normal
+CPU/memory/application/storage smoke evidence and exit 33. It exercises real
+MMIO/mask readback; it is not a firmware replacement or a rerun of the reported
+virtual machine. The original failure and actual follow-up results are recorded
+separately in [M2 evidence](../validation/M2.md).
 
 ## Primary specifications
 

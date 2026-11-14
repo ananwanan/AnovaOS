@@ -2,6 +2,7 @@
 #![no_std]
 #![no_main]
 //! Boot owned hardware and isolated workloads, reporting an optional source-build identity.
+//! Confine topology/fault injections to explicit, mutually exclusive QEMU test features.
 
 extern crate alloc;
 
@@ -39,8 +40,9 @@ const _: () = assert!(
         + cfg!(feature = "test-direct-no-execute") as u8
         + cfg!(feature = "test-unmapped") as u8
         + cfg!(feature = "test-oom") as u8
+        + cfg!(feature = "test-ioapic-id-mismatch") as u8
         <= 1,
-    "Select only one fault injection feature"
+    "Select only one boot injection feature"
 );
 
 static PHASE: AtomicU8 = AtomicU8::new(0);
@@ -81,6 +83,20 @@ pub extern "C" fn _start() -> ! {
     }
 
     let platform = acpi::discover(&info, &mut mapper);
+    #[cfg(feature = "test-ioapic-id-mismatch")]
+    let platform = {
+        let mut platform = platform;
+        let io = platform.madt.ioapics[0]
+            .as_mut()
+            .expect("I/O APIC mismatch fixture requires a controller");
+        assert_eq!(io.id, 0, "I/O APIC mismatch fixture requires q35 ID 0");
+        // Change only the parsed firmware ID; real MMIO, GSI and mask checks stay active.
+        io.id = 128;
+        serial::write(format_args!(
+            "[TEST:INJECT] ioapic-id-mismatch original_id=0 firmware_id=128\n"
+        ));
+        platform
+    };
     apic::init(&platform, &mut mapper);
     drivers::prepare(&mut mapper, platform.pm_timer);
     PHASE.store(4, Ordering::Relaxed);

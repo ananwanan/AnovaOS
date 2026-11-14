@@ -3,6 +3,22 @@
 
 **English** | [简体中文](../../zh-CN/guides/STATUS.md)
 
+## Firmware I/O APIC ID boot fix (2026-11-14)
+
+The reported early panic compared I/O APIC register ID 0 with MADT ID 128.
+Initialization now records that difference after masking every external pin;
+it retains checked addresses/topology, GSI bounds and actual mask readback,
+and leaves the controller ID unchanged. LAPIC identity checks still apply.
+The dedicated `ioapic-id-mismatch` smoke case changes only the parsed firmware
+ID, then exercises real QEMU MMIO and the complete normal boot gate. `verify`
+includes this additional successful boot alongside all 13 existing cases.
+All 14 cases and 271 host tests passed locally; strict host/kernel Clippy and
+the documentation/purpose checks passed. The initial Windows-mounted timeout
+is retained separately from the Linux-filesystem rerun with unchanged deadlines.
+See the dated follow-up in [M2 validation](../validation/M2.md) for reproduction
+and actual checks. The original VM and physical hardware require separate
+retesting; external IRQ routing and the main-push-only CI policy are unchanged.
+
 ## M17 monitor and fixed recipes (2026-11-14)
 
 M17.4 resources, task controls and service recovery passed a dedicated local

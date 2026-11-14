@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! BSP xAPIC periodic timer, calibrated against the 3.579545 MHz ACPI PM timer.
 //! External I/O APIC lines and legacy PICs remain masked until device drivers exist.
+//! Firmware/register I/O APIC ID differences are diagnostic within this masked-only boundary.
 use super::{
     acpi::Platform,
     cpu,
@@ -91,11 +92,10 @@ pub fn init(platform: &Platform, mapper: &mut EarlyMapper<'_>) {
     for (index, io) in platform.madt.ioapics.iter().flatten().enumerate() {
         let base = IOAPIC_WINDOW + index as u64 * 4096;
         mapper.mmio(PhysAddr(io.address), VirtAddr(base));
-        assert_eq!(
-            io_read(base, 0) >> 24,
-            u32::from(io.id),
-            "MADT/I/O APIC identity mismatch"
-        );
+        // The validated MADT address selects the controller. Its programmable ID
+        // can differ from firmware's ID; masking every pin does not depend on it.
+        // Leave the ID unchanged. External IRQ routing needs separate admission.
+        let register_id = io_read(base, 0) >> 24;
         let count = ((io_read(base, 1) >> 16) & 0xff) + 1;
         assert!(
             count <= 120 && io.gsi_base >= gsi_end,
@@ -112,8 +112,11 @@ pub fn init(platform: &Platform, mapper: &mut EarlyMapper<'_>) {
             );
         }
         serial::write(format_args!(
-            "[CPU:IOAPIC] id={} gsi={}..{gsi_end} destination={apic_id} all_masked=true\n",
-            io.id, io.gsi_base
+            "[CPU:IOAPIC] id={} register_id={register_id} address={:#x} gsi={}..{gsi_end} destination={apic_id} all_masked=true id_mismatch={}\n",
+            io.id,
+            io.address,
+            io.gsi_base,
+            register_id != u32::from(io.id)
         ));
     }
     // Divide by 16. Count for at least 20 ms of the independent PM clock.

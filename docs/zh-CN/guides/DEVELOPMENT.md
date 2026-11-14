@@ -49,6 +49,7 @@ Cargo.lock 固定 registry 版本/校验和；`boot/dependencies.toml` 固定 Li
 | `cargo xtask image` | `build/images/anova-normal.iso` | 缺少/损坏输入即停止 |
 | `cargo xtask run` | UEFI 工作负载、原生 PID 1、交互串口 shell | 进程错误传播；Ctrl+C 停 QEMU |
 | `cargo xtask smoke` | 内存/CPU、11 项隔离、CPU/FPU/进程与 VFS/管道/shell/tmpfs-OOM | 缺隔离/回收证据、内核故障、退出码/期限错误 |
+| `cargo xtask smoke --case ioapic-id-mismatch` | 完整启动，解析后的 MADT 编号注入为 128，真实 I/O APIC 寄存器编号为 0 | 缺精确注入/编号差异/屏蔽证据或正常冒烟失败均返回 1 |
 | `cargo xtask smoke --case panic` | 受控 panic，QEMU 35 | 故意返回 1 |
 | `cargo xtask smoke --case timeout --timeout-secs 8` | 看门狗终止受控挂起 | 故意返回 1 |
 | `cargo xtask smoke --case page-fault` | 实际 guard 写入到 IST2，QEMU 37 | 故意返回 1 |
@@ -59,14 +60,14 @@ Cargo.lock 固定 registry 版本/校验和；`boot/dependencies.toml` 固定 Li
 | `cargo xtask smoke --case stack-guard` | 写普通栈 guard，QEMU 37 | 故意返回 1 |
 | `cargo xtask smoke --case unmapped` | unmap/TLB flush 后访问，QEMU 37 | 故意返回 1 |
 | `cargo xtask smoke --case oom` | infallible 分配 panic，QEMU 35 | 故意返回 1 |
-| `cargo xtask verify` | 正常启动通过，十二种实际失败注入均拒绝 | 向量/error/IST/地址/结果错误或未到注入点 |
+| `cargo xtask verify` | 正常与 I/O APIC 编号差异两次启动通过，十二种实际失败注入均拒绝 | 缺编号差异证据、向量/error/IST/地址/结果错误或未到注入点 |
 | `cargo xtask terminal-test` | 两次启动：UART 编辑/CRLF/EOF、动态 musl、Ctrl+C/EINTR、shell 重启、tmpfs 丢失 | 缺输出、guest 失败、每会话 30 秒超时 |
 | `cargo xtask root-image build/disks/NAME.ext2` | 新 16 MiB native-v1 ext2 盘 | 拒绝已有文件和不安全路径 |
 | `cargo xtask run --disk build/disks/NAME.ext2` | 复用显式镜像，guest shutdown 关机 | 不格式化缺少/已有镜像 |
 | `cargo xtask persistence-test` | 编辑器/源码/二进制跨重启、e2fsck、设备错误 | 缺字节/哈希/mount/错误/真实退出，或每会话 60 秒超时 |
 | `cargo xtask test-host` | frame/buddy/页表、VFS/pipe/FD、调度、archive/parser、记录判定 | 测试失败传播 |
 
-smoke 支持 boot/panic/timeout/invalid-opcode/general-protection/page-fault/double-fault/
+smoke 支持 boot/ioapic-id-mismatch/panic/timeout/invalid-opcode/general-protection/page-fault/double-fault/
 stack-guard/read-only/no-execute/direct-no-execute/unmapped/oom；`--timeout-secs` 为 1..300，
 默认 30 秒。verify 每项 30 秒（含故意挂起），较大 M9 镜像仍须真正到达注入点才能分类。
 期限限制 QEMU 进程，编译/下载另有自己的失败行为。
@@ -121,7 +122,7 @@ gate 逐项验证预期注入，不能把异常视为成功。IRQ/映射/时间�
 
 ## CI 与证据
 
-[boot.yml](../../../.github/workflows/boot.yml) 在 Ubuntu 24.04 运行基础检查、13 项 QEMU、
+[boot.yml](../../../.github/workflows/boot.yml) 在 Ubuntu 24.04 运行基础检查、14 项 QEMU、
 双启动串口及持久/设备错误回归，失败仍上传日志；Actions 固定提交。
 配置 CI 不等于远端执行通过。最新历史证据截至 M15.6，见[验收索引](../index.md#验收记录)；
 [M7](../validation/M7.md)、[M6](../validation/M6.md)、[M5](../validation/M5.md)、
