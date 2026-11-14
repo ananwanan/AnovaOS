@@ -539,3 +539,22 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `docs/zh-CN/validation/M17.4.md` | Translate actual first-batch acceptance, measurements and remaining M17.4 limitations. |
 | `docs/assets/validation/M17_BUILD_LOCAL.json` | Retain exact source identities, checks, genuine scanouts, transcripts, artifact bytes and failed attempts; purpose is a JSON field. |
 | `kernel/src/fs/tty_ready.rs` | Share exact PTY write/poll/wakeup progress predicates and host-test CRLF, echo and EOF boundaries. |
+
+## M17 monitor and compiler workflow
+
+| File | Purpose |
+| --- | --- |
+| `crates/abi/src/monitor.rs` | Define fixed monitor records, task state and checked operation encoding. |
+| `crates/abi/src/workflow.rs` | Define allowed compiler recipes, versioned owner operations and fixed publication paths. |
+| `kernel/src/task/monitor.rs` | Read bounded allocator/storage/service counters and enforce exact task visibility and stop authority. |
+| `user/desktop/src/monitor.rs` | Render sampled resource/task/service pages and retain exact selected PIDs. |
+| `user/desktop/src/monitor_checks.rs` | Check real task and resource pressure, wait retention, user copy and owner boundaries. |
+| `user/rt/src/monitor.rs` | Wrap checked monitor snapshots and nonconsuming child stop. |
+| `xtask/src/desktop_monitor_test.rs` | Verify live resource counts, task identity, compositor faults and dirty Files/PTY recovery in QEMU. |
+| `xtask/src/desktop_workflow_test.rs` | Drive three guest compilers with physical GUI input and retain responsive scanouts and exact reboot bytes. |
+| `docs/en/milestones/M17_WORKFLOW.md` | Describe the desktop monitor, fixed build, publication and recovery contracts. |
+| `docs/zh-CN/milestones/M17_WORKFLOW.md` | Translate the desktop monitor, build and recovery contracts. |
+| `docs/en/validation/M17.5.md` | Record the executed graphical build, concurrency, persistence and recovery acceptance. |
+| `docs/zh-CN/validation/M17.5.md` | Translate the executed graphical build, concurrency and recovery acceptance. |
+| `docs/assets/validation/M17_MONITOR_LOCAL.json` | Retain exact resource and recovery logs with decoded hashes and scanout fingerprints. |
+| `docs/assets/validation/M17_WORKFLOW_LOCAL.json` | Retain compiler workflow measurements, input identities and relevant raw transcripts. |

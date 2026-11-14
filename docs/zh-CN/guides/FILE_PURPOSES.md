@@ -537,3 +537,22 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `docs/zh-CN/validation/M17.4.md` | 以简体中文记录首批实际验收、测量和 M17.4 剩余限制。 |
 | `docs/assets/validation/M17_BUILD_LOCAL.json` | 保留准确源码身份、检查、真实画面、会话、产物字节与失败尝试；用途存于 JSON 字段。 |
 | `kernel/src/fs/tty_ready.rs` | 共用准确 PTY 写入/poll/唤醒条件，并在宿主测试 CRLF、回显和 EOF 边界。 |
+
+## M17 监控与编译流程
+
+| 文件 | 用途 |
+| --- | --- |
+| `crates/abi/src/monitor.rs` | 定义固定监控记录、任务状态和受检操作编码。 |
+| `crates/abi/src/workflow.rs` | 定义准入编译配方、版本化所有者操作与固定发布路径。 |
+| `kernel/src/task/monitor.rs` | 读取有界分配器、存储和服务计数，校验任务可见性和停止权限。 |
+| `user/desktop/src/monitor.rs` | 显示资源、任务与服务采样，保留选中的精确 PID。 |
+| `user/desktop/src/monitor_checks.rs` | 检查实际任务与资源耗尽、等待结果保留、用户复制和所有权边界。 |
+| `user/rt/src/monitor.rs` | 封装受检监控快照和不消耗退出状态的子进程终止。 |
+| `xtask/src/desktop_monitor_test.rs` | 在 QEMU 核验实时资源计数、任务身份、合成器故障及脏 Files 和 PTY 恢复。 |
+| `xtask/src/desktop_workflow_test.rs` | 以物理图形输入驱动三种 guest 编译器并保留响应画面和重启精确字节。 |
+| `docs/en/milestones/M17_WORKFLOW.md` | 说明桌面监控、固定构建、发布和恢复契约。 |
+| `docs/zh-CN/milestones/M17_WORKFLOW.md` | 提供桌面监控、构建和恢复契约的中文版本。 |
+| `docs/en/validation/M17.5.md` | 记录实际图形构建、并发、持久化和恢复验收。 |
+| `docs/zh-CN/validation/M17.5.md` | 提供实际图形构建、并发和恢复验收的中文记录。 |
+| `docs/assets/validation/M17_MONITOR_LOCAL.json` | 保留精确资源和恢复日志、解码校验和及画面指纹。 |
+| `docs/assets/validation/M17_WORKFLOW_LOCAL.json` | 保留编译工作流实测、输入身份及相关原始记录。 |

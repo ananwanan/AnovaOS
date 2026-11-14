@@ -81,3 +81,8 @@ actual wait status and reads bounded merged output with exact creator ownership.
 CLOSE invalidates/reaps even when staging cleanup reports an error. The launcher
 owns volatile per-attempt records and separately requests file publication.
 See [controlled-build contract](../docs/en/milestones/M17_BUILD.md).
+
+Experimental native monitor `0x105` provides global counts and authorized task
+inspection/stop. Fixed build recipe `0x106` provides owned GCC, G++ and rustc jobs,
+cancellation and checked publication. The existing `0x101`–`0x104` interfaces
+and SDK v1 retain their records. See the [desktop contract](../docs/en/milestones/M17_WORKFLOW.md).

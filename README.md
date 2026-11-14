@@ -43,7 +43,8 @@ claim of a complete desktop OS or complete self-hosting.
 | M17.1 | Supervised desktop, simultaneous C/C++/Rust input/windows, actual client/compositor faults, bounded restart, resource reuse and five persistence/fallback boots |
 | M17.2 | Real Linux-musl PTY, bounded ANSI/history, Ctrl+C/resize, actual GCC compilation, exhaustion cleanup and exact reboot bytes |
 | M17.3 | File browsing, bounded source editing and protected saves on the PTY work disk; real GUI size/inode/disk-full/write/flush failures, recovery copies, retry and clean reboot accepted locally |
-| M17.4 batch one | Controlled GCC jobs in the launcher, exact task exit status, bounded merged logs and tested record/family cleanup; resource panels and general controls remain pending |
+| M17.4 | Bounded build diagnostics, current resource and task monitoring, scoped stops and live compositor recovery |
+| M17.5 | Fixed graphical C, C++ and Rust workflows, concurrent interaction, cancellation, and publication/reboot recovery verified locally in QEMU |
 
 Evidence is recorded per stage in the [validation index](docs/en/index.md#validation).
 Each record identifies its executed checks. Configured CI, actual remote CI execution
@@ -66,16 +67,17 @@ real resource exhaustion/recovery. The actual kernel build used 9,494,480 heap b
 
 The owner-approved order is **M16 resources/VFS/ext4 → M17 development desktop →
 M18 conditional compiler and image self-hosting**. M16 now has a locally verified backend/cache and
-controlled ext4 readonly/writes, JBD2 recovery and opt-in migration/build acceptance. M17.1 now has local five-boot acceptance for supervised sessions, physical input, actual client/compositor faults, resource reuse and persisted work. M17.2 now has local real-PTY shell/build/reboot acceptance; M17.3 now has local file/editor and real GUI storage-fault acceptance; M17.4 batch one has bounded local build-diagnostic acceptance; remaining M17.4, M17.5 and M18 stay pending.
+controlled ext4 readonly/writes, JBD2 recovery and opt-in migration/build acceptance.
+M17.1–M17.5 have local QEMU evidence for their declared desktop profiles,
+including live resource/task controls and the ten-boot compiler workflow.
+Remote CI, physical hardware and M18 are tracked independently.
 
 1. [M16 foundation](docs/en/milestones/M16_FOUNDATION.md): remote CI acceptance is paused by owner request; the declared kernel capacity profile passed locally.
    Broader workload sizing remains independent. JBD2 and fresh-image migration now have separate
    [M16.5](docs/en/validation/M16.5.md)/[M16.6](docs/en/validation/M16.6.md) local gates. Backend
    isolation, on-demand directories, reclaimable file nodes and controlled ext4 readonly
    access are implemented; see [local evidence](docs/en/validation/M16.md) and [M16.4 writes](docs/en/validation/M16.4.md).
-2. [M17 desktop](docs/en/milestones/M17_DESKTOP.md): continue remaining resource/task/service controls after the accepted PTY,
-   Files and first diagnostic batch, then complete C/C++/Rust
-   edit/build/run/error-repair/reboot entirely through the desktop using existing tools.
+2. [M17 desktop](docs/en/milestones/M17_DESKTOP.md): use the monitor and the fixed C/C++/Rust recipes, then verify concurrent interaction and fault recovery.
 3. [M18 follow-up](docs/en/ROADMAP.md#m18-conditional-self-hosting): independently
    reassess GCC, LLVM/rustc/Cargo and guest-only image generation after their
    measured prerequisites are met. Full compiler bootstrap does not gate M17.
@@ -119,7 +121,12 @@ image files. The kernel uses `no_std` + `alloc`, UEFI/Limine, four-level paging
 and separate kernel/user compilation flags. The native ABI and Linux-musl
 personality are explicit and independent.
 
-M17.4 first-batch [build diagnostics](docs/en/milestones/M17_BUILD.md) uses launcher `b`/`g` for saved `/persist/build.c`; `cargo xtask desktop-build-test` verifies the controlled GCC/failure loop. See [actual validation and remaining work](docs/en/validation/M17.4.md).
+M17.4 first-batch [build diagnostics](docs/en/milestones/M17_BUILD.md) uses launcher `b`/`g` for saved `/persist/build.c`; `cargo xtask desktop-build-test` verifies the controlled GCC/failure loop. See [actual validation](docs/en/validation/M17.4.md).
+
+Press `m` in the launcher for Resources, Tasks and Services. With a Linux-personality
+JBD2 work disk, `cargo xtask run --desktop --rust --disk build/disks/development.ext4`
+admits the three fixed compiler recipes. See the [workflow](docs/en/milestones/M17_WORKFLOW.md)
+and [local acceptance](docs/en/validation/M17.5.md).
 
 ## Development profiles and checks
 
@@ -156,7 +163,7 @@ and diagrams belong under `docs/assets/` when added.
 | [Project outline](docs/en/PROJECT_OUTLINE.md), [roadmap](docs/en/ROADMAP.md) | Goals, dependencies, acceptance and remaining work |
 | [Architecture](docs/en/ARCHITECTURE.md), [compatibility](docs/en/COMPATIBILITY.md) | Subsystem ownership, ABIs, limits and tested software |
 | [Guides](docs/en/index.md#guides) | Setup, style, toolchains, licensing, requirements, status and file inventory |
-| [Milestones](docs/en/index.md#milestone-designs), [validation](docs/en/index.md#validation) | Accepted contracts/evidence through M15.6, bounded local M16/M17.1–M17.4 batch one and remaining M17 work |
+| [Milestones](docs/en/index.md#milestone-designs), [validation](docs/en/index.md#validation) | Accepted contracts/evidence through M15.6, bounded local M16 and M17 evidence, and remaining self-hosting work |
 | [Third-party inputs](docs/en/index.md#third-party-inputs-and-notices) | Provenance and preserved upstream license texts |
 | [Native SDK](sdk/README.md), [GUI SDK](sdk/gui/README.md), [bootstrap recipes](ports/bootstrap/README.md) | Adjacent development entry points, each with a Chinese companion |
 

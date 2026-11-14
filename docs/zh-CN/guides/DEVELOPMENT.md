@@ -510,3 +510,11 @@ GCC 配方编译已保存的 `/persist/build.c`。界面显示命令、准确任
 PTY/任务/FD 耗尽、用户复制保留、进程族清理和旧身份拒绝。见 [M17.4 契约](../milestones/M17_BUILD.md)
 及[验证](../validation/M17.4.md)。仅 main 推送触发的工具链任务加入本门禁；CI 配置
 不等于已执行的远端验收。保留所有原有桌面、PTY、文件和存储故障门禁。
+
+## 桌面监控和固定编译配方
+
+在启动器按 `m` 打开资源、任务和服务页。`cargo xtask desktop-monitor-test`
+在 JBD2 与 ext2 上检查任务身份、实际资源计数及 Files 和 PTY 恢复。
+执行 `cargo xtask rust-build` 后，`cargo xtask run --desktop --rust --disk build/disks/development.ext4`
+加入 GCC 和 Rust 工具。桌面流程门禁保存每轮 UART、TCP-QMP、精确产物和实际画面。
+详见[工作流程](../milestones/M17_WORKFLOW.md)与[验收](../validation/M17.5.md)。

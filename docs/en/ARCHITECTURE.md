@@ -3,11 +3,12 @@
 
 **English** | [简体中文](../zh-CN/ARCHITECTURE.md)
 
-This describes implemented boundaries through the accepted M15.6 reconstruction profile and
-separately scoped future architecture. Guest toolchains, native SDKs and bounded Rust GUI/GPU
-profiles are implemented; full compiler reconstruction, guest-only image generation, SMP and
-physical hardware remain separate. M16 now implements the backend/cache boundary and a
-controlled ext4 profiles, explicit JBD2 recovery and opt-in migration/build acceptance; M17.1 has bounded local session/input/fault/reboot acceptance; M17.2 adds the locally accepted PTY terminal; M17.3 has local bounded file/editor and real GUI storage-fault acceptance; M17.4 batch one has bounded local build-diagnostic acceptance; remaining M17.4 and M17.5 stay pending. Current evidence is in [STATUS](guides/STATUS.md).
+M15.6 covers repeated guest reconstruction with host-assisted packaging. M16
+adds the backend/cache boundary, controlled ext4 access, JBD2 recovery and
+opt-in migration and build profiles. M17 locally verifies the supervised GUI,
+PTY, Files, scoped monitor and fixed compiler workflows. Full compiler
+reconstruction, guest-only image generation, SMP and physical hardware have
+independent scope. See [STATUS](guides/STATUS.md).
 
 ## 1. Overall structure
 
@@ -755,5 +756,13 @@ error. PTY write/poll/wakeup predicates share exact CRLF/echo room and EOF
 checks to prevent a false-ready writer from starving the nonpreemptible kernel.
 Kernel block failures now report queue/completion/timeout metadata without
 changing the existing deadline or fail-closed policy. See [build contract](milestones/M17_BUILD.md)
-and [actual first-batch validation](validation/M17.4.md). Global resources,
-general task termination, broader recovery and M17.5 remain independent.
+and [actual first-batch validation](validation/M17.4.md).
+
+## Desktop monitoring and fixed recipes
+
+Native monitor v1 reads managed allocator, scheduler, VFS and transport state at
+one BSP boundary. The compositor still owns window policy in userspace. Scoped
+task control uses exact owner and PID identity and leaves the scheduler's wait
+result available. Fixed build recipe v1 reuses PTY-family lifecycle and stages
+publication through bounded copies to a checked persistent rename. See the
+[desktop contract](milestones/M17_WORKFLOW.md).

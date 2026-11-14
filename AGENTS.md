@@ -401,6 +401,17 @@ Keep 16 GUI events/4 KiB reads/one acknowledged upload per turn, four 8 KiB reco
 the existing capacities, 500 ms compiler observer, 35 s build deadline, 5 s
 interaction ceilings and the shared three-replacement limit. CLOSE errors must not
 prevent descriptor/task reclamation; report staging uncertainty. Keep Files dirty
-protection and independent COM1. Global resource inspection, general task controls,
-broader service recovery and M17.5 remain later work; this is not all of M17.4.
+protection and independent COM1. The subsequent monitor and fixed compiler recipes
+have their own contracts and evidence below.
 Main-push-only Actions, deferred M16 remote closeout and untested hardware remain.
+
+## M17 monitor and graphical development
+
+Preserve `cargo xtask desktop-monitor-test`, the scoped native monitor v1 and
+the separate compiler recipe v1. Maintain exact creator ownership, cooperative
+Files closure, live Files/PTY compositor reconnect and the shared three-replacement
+limit. Preserve `cargo xtask desktop-workflow-test`, the accepted ten-boot profile,
+physical input, strict elapsed-time guards, real guest compilation, original failures,
+exact SHAs across clean reboot and the real publication write/flush faults.
+Read [the desktop workflow](docs/en/milestones/M17_WORKFLOW.md) and
+[validation](docs/en/validation/M17.5.md) for local results and limits.

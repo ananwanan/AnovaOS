@@ -717,3 +717,12 @@ exhaustion, usercopy retention, family cleanup and stale identity rejection.
 See [M17.4 contract](../milestones/M17_BUILD.md) and [validation](../validation/M17.4.md).
 The main-push-only toolchain job includes this gate; configured CI is not executed
 remote acceptance. Preserve all original desktop/PTY/files/storage-fault gates.
+
+## Desktop monitor and fixed compiler recipes
+
+In the launcher, `m` opens Resources, Tasks and Services. `cargo xtask desktop-monitor-test`
+checks exact task identity, live counters and Files/PTY recovery on JBD2 and ext2.
+`cargo xtask run --desktop --rust --disk build/disks/development.ext4` includes the
+GCC and Rust tools after `cargo xtask rust-build`. The desktop workflow gate keeps
+per-run UART, TCP-QMP, exact artifact dumps and verified framebuffer samples.
+See the [workflow](../milestones/M17_WORKFLOW.md) and [acceptance](../validation/M17.5.md).

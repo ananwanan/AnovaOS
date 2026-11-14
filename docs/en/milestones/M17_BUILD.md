@@ -106,8 +106,7 @@ the existing asynchronous terminal/files transport without changing the GUI ABI.
 
 No persistent log files or unsaved-buffer crash recovery are promised. Runtime
 quotas remain 16 MiB heap, 32 task slots, 32 FDs/process, 128 shared descriptions,
-four PTYs and four GUI windows. Global resource panels, general task termination,
-broader service recovery, arbitrary build recipes and M17.5 remain later work.
+four PTYs and four GUI windows. See [desktop monitor and fixed recipes](M17_WORKFLOW.md) for the follow-up.
 
 ## Experimental native build v1
 
