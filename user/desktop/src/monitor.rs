@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Display bounded live samples, select exact task identities and retain recent wait status.
-//! Task buttons cannot bypass the Files dirty dialog or the session replacement budget.
+//! Show launch and service errors while protecting the Files buffer and replacement budget.
 
 use super::{Session, Window, gui, rt};
 use anova_gui_runtime::{Error, GuiEvent};
@@ -96,6 +96,13 @@ impl Panel {
         gui::log(format_args!(
             "[DESKTOP:SERVICE] action={action} result={code}\n"
         ));
+    }
+
+    pub fn application_result(&mut self, action: &'static str, result: Result<(), i64>) {
+        self.action = result.err().map(|error| {
+            gui::log(format_args!("[DESKTOP:LAUNCH_ERROR] error={error}\n"));
+            (action, error)
+        });
     }
 
     pub fn replaced(&mut self, reason: &'static str) {

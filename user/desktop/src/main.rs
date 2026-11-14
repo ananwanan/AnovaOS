@@ -359,30 +359,19 @@ fn run(test: bool, legacy: bool) -> Result<(), i64> {
                                 }
                             }
                             109 => panel.open(Page::Resources),
-                            102 if !test => {
-                                if let Err(error) = session.files() {
-                                    gui::log(format_args!(
-                                        "[DESKTOP:LAUNCH_ERROR] error={error}\n"
-                                    ));
-                                }
-                            }
-                            116 => {
-                                if let Err(error) = session.terminal() {
-                                    gui::log(format_args!(
-                                        "[DESKTOP:LAUNCH_ERROR] error={error}\n"
-                                    ));
-                                }
-                            }
+                            102 if !test => panel.application_result("Open Files", session.files()),
+                            116 => panel.application_result("Open Terminal", session.terminal()),
                             102 if test => session.probe(2, "red")?,
                             98 if test => session.probe(1, "blue")?,
                             98 => diagnostics.visible = true,
                             _ => {}
                         }
                     }
-                    if (1..=3).contains(&action)
-                        && let Err(error) = session.toggle(action as usize - 1)
-                    {
-                        gui::log(format_args!("[DESKTOP:LAUNCH_ERROR] error={error}\n"));
+                    if (1..=3).contains(&action) {
+                        panel.application_result(
+                            "Toggle application",
+                            session.toggle(action as usize - 1),
+                        );
                     }
                 }
                 dirty |= diagnostics.turn();

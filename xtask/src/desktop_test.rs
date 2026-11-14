@@ -420,6 +420,22 @@ fn scenario(d: &mut Driver, work: &Path, evidence: &mut String) -> Result<()> {
         d.ready(from, generation)?;
         d.click(35, 60)?;
     }
+    d.key("m")?;
+    d.key("3")?;
+    let from = d.output.position();
+    d.key("c")?;
+    d.wait_since(
+        from,
+        "[DESKTOP:SERVICE] action=Replacement limit reached result=-24",
+    )?;
+    desktop_build_test::capture(
+        d,
+        work,
+        "replacement-limit",
+        &[(200, "REPLACEMENT LIMIT REACHED"), (200, "BUSY")],
+        evidence,
+    )?;
+    d.key("esc")?;
     let from = d.output.position();
     d.key("r")?;
     d.wait_since(from, "[DESKTOP:STOPPED] error=-24 serial_recovery=true")?;

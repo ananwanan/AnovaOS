@@ -2,6 +2,7 @@
 //! Exercise graphical source editing, protected saves and the shared PTY work disk across clean reboot.
 //! Physical QMP input, independent UART reads and stopped-disk dumps provide separate observations.
 //! Consume only newline-complete operation records, including reopen and overwrite confirmation.
+//! Verify the launcher visibly refuses to stop Files while an edit remains open.
 
 use super::*;
 use desktop_test::Driver;
@@ -49,7 +50,7 @@ pub fn verify(root: &Path) -> Result<()> {
                     wait_record(&mut d, from, "[FILES:OPEN]", path, bytes.len())?;
                 }
             } else {
-                scenario(&mut d)?;
+                scenario(&mut d, &work, &mut evidence)?;
             }
             editor_scanout(
                 &mut d,
@@ -248,7 +249,7 @@ fn create(d: &mut Driver, path: &str, bytes: &str) -> Result<()> {
     save(d, path, bytes)
 }
 
-fn scenario(d: &mut Driver) -> Result<()> {
+fn scenario(d: &mut Driver, work: &Path, evidence: &mut String) -> Result<()> {
     prompt(d, "f8", "/persist/src")?;
     d.wait("[FILES:MKDIR]")?;
     prompt(d, "f1", "/persist/src")?;
@@ -263,6 +264,13 @@ fn scenario(d: &mut Driver) -> Result<()> {
     let from = d.output.position();
     d.key("2")?;
     d.wait_since(from, "[DESKTOP:LAUNCH_ERROR] error=-24")?;
+    desktop_build_test::capture(
+        d,
+        work,
+        "files-toggle-denied",
+        &[(200, "TOGGLE APPLICATION"), (200, "BUSY")],
+        evidence,
+    )?;
     d.key("r")?;
     d.key("q")?;
     focus_files(d)?;
