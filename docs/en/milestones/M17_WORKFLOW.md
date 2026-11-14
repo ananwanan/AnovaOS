@@ -40,13 +40,14 @@ recent observed client or service exit and displays stop errors.
 Files and Terminal close cooperatively with `F4` in their own window. Files
 uses its existing dirty-buffer dialog for explicit closure. The existing
 launcher key `3` can also terminate Terminal and reap its tagged PTY family.
-Services `c`
-replaces the compositor, `r` restarts the session, `q` closes the desktop
+Services `c` replaces the compositor, `r` restarts the session, `q` closes the desktop
 and `p` requests the existing clean shutdown. Full session restart, exit and
 shutdown require Files to close first. Graphical shutdown also requires any active
 build to finish or be cancelled. Compositor replacement and recovery reuse
-the same three-replacement limit. A live Files process reconnects with the same
-editor buffer and a live Terminal process reconnects with its PTY and history.
+the same three-replacement limit. The launcher shows application launch errors
+and the Services page shows when the replacement allowance is exhausted.
+A live Files process reconnects with the same editor buffer and a live Terminal
+process reconnects with its PTY and history.
 Other clients start again with fresh handles. Loss of the client process or
 exhaustion of the replacement path can still lose unsaved bytes. COM1 remains
 independent.
