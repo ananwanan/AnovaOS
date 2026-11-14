@@ -26,11 +26,10 @@ fn build_deadline(elapsed: Duration) -> Result<()> {
 }
 
 fn glyph(byte: u8) -> [u8; 7] {
-    // Independent literal V extends the PTY gate's deliberately smaller alphabet.
-    if byte == b'V' {
-        [17, 17, 17, 17, 17, 10, 4]
-    } else {
-        pty_terminal_test::glyph(byte)
+    // Independent literals extend the PTY gate's deliberately smaller alphabet.
+    match byte {
+        b'V' => [17, 17, 17, 17, 17, 10, 4],
+        _ => pty_terminal_test::glyph(byte),
     }
 }
 
@@ -357,7 +356,7 @@ fn artifact(d: &mut Driver, disk: &Path, work: &Path, name: &str) -> Result<Vec<
     Ok(fs::read(path)?)
 }
 
-fn capture(
+pub(super) fn capture(
     d: &mut Driver,
     work: &Path,
     name: &str,
@@ -442,6 +441,7 @@ fn fixtures(root: &Path, work: &Path, evidence: &mut String) -> Result<()> {
     anova_elf::parse_linux(&fixture).map_err(|e| format!("Build fixture ELF: {e:?}"))?;
     let mut bytes = fs::read(archive)?;
     toolchain::append(&mut bytes, 5, "/bin/gcc", &fixture);
+    toolchain::append(&mut bytes, 1, "/etc/desktop-legacy-build", b"fixture\n");
     let archive = work.join("fixture.anovafs");
     fs::write(&archive, bytes)?;
     let kernel = build_kernel(root)?;
@@ -598,6 +598,20 @@ fn fixtures(root: &Path, work: &Path, evidence: &mut String) -> Result<()> {
     resources(&d.output.text(), evidence)?;
     vars.cleanup()?;
     foundation_journal::check(&disk)?;
+    let workflow_disk = work.join("workflow-fixture.ext4");
+    foundation_journal::create(root, &workflow_disk, true)?;
+    let (mut d, vars) = Driver::boot(root, &iso, &workflow_disk, work, "workflow-fixture")?;
+    d.wait("anova> ")?;
+    let from = d.output.position();
+    d.command("desktop workflow-check", 0)?;
+    evidence.push_str(&desktop_files_test::wait_line(
+        &mut d,
+        from,
+        "[WORKFLOW:CHECK_PASS]",
+    )?);
+    d.shutdown()?;
+    vars.cleanup()?;
+    foundation_journal::check(&workflow_disk)?;
     // Ordinary shell-only desktop must report missing compiler as a failed attempt.
     let iso = desktop::image(root)?;
     let (mut d, vars) = Driver::boot(root, &iso, &disk, work, "missing-compiler")?;
@@ -725,7 +739,7 @@ fn implementation(root: &Path) -> Result<std::collections::BTreeMap<String, Stri
     })
     .collect()
 }
-fn resources(text: &str, evidence: &mut String) -> Result<()> {
+pub(super) fn resources(text: &str, evidence: &mut String) -> Result<()> {
     let line = text
         .lines()
         .rev()

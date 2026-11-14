@@ -624,7 +624,7 @@ fn device(root: &Path, iso: &Path, work: &Path, stamp: u128, case: DeviceCase) -
     }
     // M16 deliberately fails the mount closed after IO uncertainty. Terminate only
     // after the completed error/retry, preserving the original disk for audit.
-    d.qmp.command("quit", json!({}))?;
+    d.quit()?;
     drop(d);
     vars.cleanup()?;
     let raw = work.join("failed.ext4");

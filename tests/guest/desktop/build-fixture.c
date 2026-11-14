@@ -9,10 +9,23 @@
 int main(int argc, char **argv) {
     if (argc != 5 || strcmp(argv[1], "-fdiagnostics-color=never") ||
         strcmp(argv[2], "/persist/build.c") || strcmp(argv[3], "-o") ||
-        strcmp(argv[4], "/persist/build-app.next")) return 99;
+        (strcmp(argv[4], "/persist/build-app.next") &&
+        strcmp(argv[4], "/tmp/desktop-c.out"))) return 99;
     FILE *source = fopen(argv[2], "r");
     int mode = source ? fgetc(source) : 'x';
     if (source) fclose(source);
+    if (mode == 'p') {
+        FILE *output = fopen(argv[4], "wb");
+        if (!output || fwrite("PUBLISH-FIXTURE", 1, 15, output) != 15 ||
+            fclose(output)) return 92;
+        return 0;
+    }
+    if (mode == 'k') {
+        pid_t pid = fork();
+        if (pid < 0) return 91;
+        if (pid == 0 && setsid() < 0) _exit(90);
+        for (;;) usleep(10000);
+    }
     if (mode == 'c') { __asm__ volatile("ud2"); }
     if (mode == 'l') {
         for (int n = 0; n < 5000; ++n) {

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Produce independent stdout/stderr, long output, SIGWINCH and interrupt/cleanup workloads.
+// Produce stdout/stderr, SIGWINCH, job control and bounded compiler-load pressure fixtures.
 #define _POSIX_C_SOURCE 200809L
 #include <signal.h>
 #include <errno.h>
@@ -21,6 +21,37 @@ static void size(void) {
     fflush(stdout);
 }
 
+static int pressure(void) {
+    pid_t children[18];
+    int slots[2];
+    if (pipe(slots) != 0) return 80;
+    unsigned count = 0;
+    for (; count < sizeof(children) / sizeof(*children); ++count) {
+        pid_t pid = fork();
+        if (pid < 0) break;
+        if (pid == 0) {
+            char byte;
+            close(slots[1]);
+            _exit(read(slots[0], &byte, 1) == 0 ? 0 : 81);
+        }
+        children[count] = pid;
+    }
+    close(slots[0]);
+    int ok = count == sizeof(children) / sizeof(*children);
+    if (ok) {
+        printf("PRESSURE-%u\nHOLD ", count); fflush(stdout);
+        ok = getchar() == '\n';
+    }
+    close(slots[1]);
+    for (unsigned n = 0; n < count; ++n) {
+        int status;
+        if (waitpid(children[n], &status, 0) != children[n] || status != 0) ok = 0;
+    }
+    if (!ok) return 82;
+    puts("PRESSURE-FREE");
+    return 0;
+}
+
 int main(int argc, char **argv) {
     const char *mode = argc > 1 ? argv[1] : "streams";
     if (!strcmp(mode, "streams")) {
@@ -28,6 +59,7 @@ int main(int argc, char **argv) {
         fputs("\033[31mstderr-17\n\033[0m", stderr); return 23;
     }
     if (!strcmp(mode, "size")) { size(); return 0; }
+    if (!strcmp(mode, "pressure")) return pressure();
     if (!strcmp(mode, "jobs")) {
         int status;
         pid_t child = fork(); if (child < 0) return 95;

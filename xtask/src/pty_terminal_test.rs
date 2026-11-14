@@ -342,6 +342,7 @@ pub(super) fn type_text(d: &mut Driver, text: &str) -> Result<()> {
             b'\"' => ("apostrophe".into(), true),
             b'\'' => ("apostrophe".into(), false),
             b'!' => ("1".into(), true),
+            b'~' => ("grave_accent".into(), true),
             b'#' => ("3".into(), true),
             b'&' => ("7".into(), true),
             b'*' => ("8".into(), true),
@@ -438,8 +439,11 @@ fn screenshot_with_interval(
     }
 }
 
-fn contains(rgb: &[u8], text: &str) -> bool {
+pub(super) fn contains(rgb: &[u8], text: &str) -> bool {
     // Independent literal glyphs and palette: do not call the renderer/model under test.
+    if text.is_empty() || text.len() > 50 {
+        return false;
+    }
     for row in 0..26 {
         for column in 0..=50_usize.saturating_sub(text.len()) {
             let mut matches = true;
@@ -489,6 +493,7 @@ pub(super) fn glyph(byte: u8) -> [u8; 7] {
         b'D' => [30, 17, 17, 17, 17, 17, 30],
         b'E' => [31, 16, 16, 30, 16, 16, 31],
         b'F' => [31, 16, 16, 30, 16, 16, 16],
+        b'G' => [14, 17, 16, 23, 17, 17, 15],
         b'H' => [17, 17, 17, 31, 17, 17, 17],
         b'I' => [14, 4, 4, 4, 4, 4, 14],
         b'J' => [7, 2, 2, 2, 18, 18, 12],
@@ -518,6 +523,7 @@ pub(super) fn glyph(byte: u8) -> [u8; 7] {
         b'9' => [14, 17, 17, 15, 1, 1, 14],
         b'-' => [0, 0, 0, 31, 0, 0, 0],
         b'=' => [0, 0, 31, 0, 31, 0, 0],
+        b'$' => [4, 15, 20, 14, 5, 30, 4],
         b' ' => [0; 7],
         _ => [31; 7],
     }

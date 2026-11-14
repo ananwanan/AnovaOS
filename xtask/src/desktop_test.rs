@@ -197,6 +197,7 @@ fn session(
         pointer: (400, 300),
         buttons: 0,
         faults: Vec::new(),
+        deadline: DEADLINE,
     };
     d.wait("anova> ")?;
     if display && input {
@@ -465,6 +466,7 @@ pub(super) struct Driver {
     pointer: (u32, u32),
     buttons: u8,
     pub(super) faults: Vec<u64>,
+    deadline: Duration,
 }
 
 impl Driver {
@@ -475,7 +477,17 @@ impl Driver {
         work: &Path,
         name: &str,
     ) -> Result<(Self, Temporary)> {
-        Self::boot_configured(root, iso, disk, work, name, None)
+        Self::boot_with_watchdog(root, iso, disk, work, name, DEADLINE)
+    }
+    pub(super) fn boot_with_watchdog(
+        root: &Path,
+        iso: &Path,
+        disk: &Path,
+        work: &Path,
+        name: &str,
+        deadline: Duration,
+    ) -> Result<(Self, Temporary)> {
+        Self::boot_configured(root, iso, disk, work, name, None, deadline)
     }
     /// Keep storage-fault rules outside the guest and install them before creating its device.
     pub(super) fn boot_fault(
@@ -486,7 +498,7 @@ impl Driver {
         name: &str,
         configuration: &str,
     ) -> Result<(Self, Temporary)> {
-        Self::boot_configured(root, iso, disk, work, name, Some(configuration))
+        Self::boot_configured(root, iso, disk, work, name, Some(configuration), DEADLINE)
     }
     fn boot_configured(
         root: &Path,
@@ -495,6 +507,7 @@ impl Driver {
         work: &Path,
         name: &str,
         configuration: Option<&str>,
+        deadline: Duration,
     ) -> Result<(Self, Temporary)> {
         let vars = Temporary::new(root, "desktop-pty")?;
         if let Some(configuration) = configuration {
@@ -564,6 +577,7 @@ impl Driver {
                 pointer: (400, 300),
                 buttons: 0,
                 faults: Vec::new(),
+                deadline,
             },
             vars,
         ))
@@ -572,7 +586,7 @@ impl Driver {
         self.output.poll()?;
         check_guest(
             &self.output.text(),
-            self.start.elapsed() >= DEADLINE,
+            self.start.elapsed() >= self.deadline,
             &self.faults,
         )?;
         if let Some(status) = self.guest.0.try_wait()? {
@@ -745,11 +759,59 @@ impl Driver {
     }
     pub(super) fn shutdown(&mut self) -> Result<()> {
         self.serial(b"shutdown\r")?;
+        self.wait_poweroff()
+    }
+
+    /// Stop a guest after an observed fault. Wait for QEMU to close its disk graph
+    /// before callers copy the failed image for independent recovery.
+    pub(super) fn quit(&mut self) -> Result<()> {
+        self.qmp.command("quit", json!({}))?;
+        let deadline = Instant::now() + INTERACTION;
+        loop {
+            self.output.poll()?;
+            if let Some(status) = self.guest.0.try_wait()? {
+                self.output.finish()?;
+                return if status.success() {
+                    Ok(())
+                } else {
+                    Err(format!("QEMU fault-session quit failed: {status}").into())
+                };
+            }
+            if Instant::now() >= deadline {
+                return Err("QEMU did not close the fault-session disk graph".into());
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    pub(super) fn require_live(
+        &mut self,
+        since: usize,
+        marker: &str,
+        deadline: Instant,
+    ) -> Result<String> {
+        loop {
+            self.poll()?;
+            if Instant::now() > deadline {
+                return Err(format!("Desktop did not reach {marker} before its deadline").into());
+            }
+            let text = self.output.text();
+            if let Some(line) = text.get(since..).and_then(|tail| {
+                tail.split_inclusive('\n')
+                    .find(|line| line.ends_with('\n') && line.contains(marker))
+            }) {
+                return Ok(line.to_owned());
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    pub(super) fn wait_poweroff(&mut self) -> Result<()> {
         loop {
             self.output.poll()?;
             check_guest(
                 &self.output.text(),
-                self.start.elapsed() >= DEADLINE,
+                self.start.elapsed() >= self.deadline,
                 &self.faults,
             )?;
             if let Some(status) = self.guest.0.try_wait()? {
@@ -767,15 +829,27 @@ impl Driver {
             thread::sleep(Duration::from_millis(10));
         }
     }
+
+    /// A GUI shutdown key can power off on make, before QMP can accept its break.
+    /// The caller must still observe the real clean marker and QEMU exit status.
+    pub(super) fn power_key(&mut self) -> Result<()> {
+        self.qmp.command(
+            "input-send-event",
+            json!({"events":[
+                {"type":"key","data":{"down":true,"key":{"type":"qcode","data":"p"}}},
+                {"type":"key","data":{"down":false,"key":{"type":"qcode","data":"p"}}}
+            ]}),
+        )
+    }
 }
 
-fn last_line<'a>(text: &'a str, marker: &str) -> Result<&'a str> {
+pub(super) fn last_line<'a>(text: &'a str, marker: &str) -> Result<&'a str> {
     text.lines()
         .rev()
         .find(|line| line.contains(marker))
         .ok_or_else(|| format!("Missing desktop record {marker}").into())
 }
-fn field(line: &str, name: &str) -> Result<u64> {
+pub(super) fn field(line: &str, name: &str) -> Result<u64> {
     let prefix = format!("{name}=");
     let mut values = line
         .split_whitespace()
@@ -806,7 +880,7 @@ fn pid_field(text: &str, marker: &str, last: bool) -> Result<u64> {
 
 fn check_guest(text: &str, timed_out: bool, allowed: &[u64]) -> Result<()> {
     if timed_out {
-        return Err("Desktop exceeded its 180-second watchdog".into());
+        return Err("Desktop exceeded its session watchdog".into());
     }
     for marker in [
         "[PANIC]",

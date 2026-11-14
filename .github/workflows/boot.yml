@@ -85,6 +85,8 @@ jobs:
         run: cargo xtask gui-test
       - name: Verify supervised desktop, fault recovery, resource reuse and persisted work
         run: cargo xtask desktop-test
+      - name: Verify desktop resource counts, scoped task control and service recovery
+        run: cargo xtask desktop-monitor-test
       - name: Verify graphical files, protected saves, shared PTY paths and clean reboot
         run: cargo xtask desktop-files-test
       - name: Verify persistent sources, binaries, clean shutdown and device failures
@@ -112,6 +114,7 @@ jobs:
             build/gui/
             build/desktop/
             build/desktop-test/
+            build/desktop-monitor-test/
             build/desktop-files-test/
             build/terminal/
             build/compat-terminal/busybox.config
@@ -213,6 +216,8 @@ jobs:
         run: |
           rustup target add x86_64-unknown-linux-musl
           cargo xtask rust-build
+      - name: Verify three-language graphical development and compiler-load interaction
+        run: cargo xtask desktop-workflow-test
       - name: Assess independent LLVM, rustc and Cargo source-build prerequisites
         run: cargo xtask bootstrap-rust-test
       - name: Verify fresh ext4 kernel build capacity and exhaustion recovery
@@ -262,6 +267,7 @@ jobs:
             build/terminal/
             build/desktop-pty-test/
             build/desktop-build-test/
+            build/desktop-workflow-test/
             build/compat-terminal/busybox.config
             build/images/busybox-terminal-1.36.1-source.tar.gz
             build/foundation/

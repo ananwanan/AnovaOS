@@ -348,7 +348,7 @@ fn complete_record<'a>(text: &'a str, from: usize, marker: &str) -> Option<&'a s
         .find(|line| line.ends_with('\n') && line.contains(marker))
 }
 
-fn wait_line(d: &mut Driver, from: usize, marker: &str) -> Result<String> {
+pub(super) fn wait_line(d: &mut Driver, from: usize, marker: &str) -> Result<String> {
     let began = Instant::now();
     loop {
         d.poll()?;
