@@ -266,8 +266,6 @@ fn test_recipe(
     }
     let mut records = vec![first, failed, repaired, cancelled];
     if p.recipe == Recipe::C {
-        d.click(35, 60)?;
-        d.key("esc")?;
         d.click(470, 90)?;
         type_command(&mut d, "/linux/pty-fixture pressure")?;
         pty_terminal_test::screenshot(
@@ -303,6 +301,7 @@ fn test_recipe(
         evidence.push('\n');
     }
     verify_staging_is_empty(&mut d, p.recipe)?;
+    d.click(35, 60)?;
     d.key("esc")?;
     poweroff(&mut d)?;
     desktop_build_test::resources(&d.output.text(), evidence)?;
@@ -765,8 +764,9 @@ fn poweroff(d: &mut Driver) -> Result<()> {
     d.click(35, 60)?;
     d.key("m")?;
     d.key("3")?;
+    let from = d.output.position();
     d.power_key()?;
-    d.wait_poweroff()
+    d.wait_poweroff_since(from, INTERACTION)
 }
 
 fn verify_staging_is_empty(d: &mut Driver, recipe: Recipe) -> Result<()> {

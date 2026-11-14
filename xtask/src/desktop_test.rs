@@ -807,6 +807,14 @@ impl Driver {
     }
 
     pub(super) fn wait_poweroff(&mut self) -> Result<()> {
+        self.finish_poweroff(None)
+    }
+
+    pub(super) fn wait_poweroff_since(&mut self, from: usize, budget: Duration) -> Result<()> {
+        self.finish_poweroff(Some((from, Instant::now() + budget)))
+    }
+
+    fn finish_poweroff(&mut self, requested: Option<(usize, Instant)>) -> Result<()> {
         loop {
             self.output.poll()?;
             check_guest(
@@ -814,13 +822,21 @@ impl Driver {
                 self.start.elapsed() >= self.deadline,
                 &self.faults,
             )?;
+            if requested.is_some_and(|(_, deadline)| Instant::now() > deadline) {
+                return Err(
+                    "Graphical shutdown did not complete within its interaction budget".into(),
+                );
+            }
             if let Some(status) = self.guest.0.try_wait()? {
                 self.output.finish()?;
                 if !status.success()
-                    || !self
+                    || self
                         .output
-                        .text()
-                        .contains("[POWER:OFF] synced=true clean=true dma_reset=true")
+                        .find_from(
+                            requested.map_or(0, |(from, _)| from),
+                            "[POWER:OFF] synced=true clean=true dma_reset=true",
+                        )
+                        .is_none()
                 {
                     return Err("Desktop did not shut down cleanly".into());
                 }
