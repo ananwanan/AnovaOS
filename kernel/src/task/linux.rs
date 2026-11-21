@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Implement the bounded Linux AMD64 personality on the BSP scheduler boundary.
 //! Translate wire formats and backend-specific file bounds; native ABI and scheduling stay independent.
+//! Linux stream pipe admission supplies the buffer expected by musl's shell heredocs.
+//! Linux exec reads persistent images with bounded buffers before committing the new process image.
 mod io;
 mod memory;
 mod select;
@@ -17,6 +19,17 @@ use anova_abi::linux::{
     ENOSYS, errno, open_flags,
     strings::{self, StringVector},
 };
+use anova_vfs::ExecutableSource;
+
+fn load_errno(error: loader::LoadError) -> i64 {
+    match error {
+        loader::LoadError::Memory(_) => -12,
+        loader::LoadError::Elf(anova_elf::Error::Arguments) => -7,
+        loader::LoadError::Interpreter(error) => error,
+        loader::LoadError::Read(error) => errno(error),
+        _ => -8,
+    }
+}
 
 pub fn random(bytes: &mut [u8]) -> Result<(), i64> {
     // SAFETY: CPUID is present in long mode; RDRAND is executed only after feature detection.
@@ -130,19 +143,9 @@ impl Kernel {
     }
 
     pub(super) fn executable_linux(&mut self, i: usize, name: &str) -> Result<bool, i64> {
-        if name.contains('/') {
-            return self.fs.linux_executable(self.process(i).cwd, name);
-        }
         let mut bytes = [0; anova_vfs::PATH_BYTES];
-        if name.len() + 5 > bytes.len() {
-            return Err(TOO_LONG);
-        }
-        bytes[..5].copy_from_slice(b"/bin/");
-        bytes[5..5 + name.len()].copy_from_slice(name.as_bytes());
-        self.fs.linux_executable(
-            ROOT,
-            core::str::from_utf8(&bytes[..5 + name.len()]).unwrap(),
-        )
+        let (cwd, path) = self.executable_path(i, name, &mut bytes)?;
+        self.fs.linux_executable(cwd, path)
     }
     pub(super) fn linux_syscall(&mut self, i: usize) {
         let f = self.process(i).context.frame;
@@ -351,7 +354,13 @@ impl Kernel {
             self.queue_signal(i, 13);
         }
         if result == ENOSYS {
-            serial::write(format_args!("[LINUX:ENOSYS] nr={}\n", f.rax));
+            #[cfg(feature = "bootstrap-metrics")]
+            let emit = f.rax != 28 || self.resources.record_madvise_enosys();
+            #[cfg(not(feature = "bootstrap-metrics"))]
+            let emit = true;
+            if emit {
+                serial::write(format_args!("[LINUX:ENOSYS] nr={}\n", f.rax));
+            }
         }
         if result == WOULD_BLOCK
             && self
@@ -394,22 +403,10 @@ impl Kernel {
         if !self.executable_linux(i, name).map_err(errno)? {
             return Err(-8);
         }
-        let bytes = self.executable(i, name).map_err(errno)?;
         let args = arguments.strings();
         let env = environment.strings();
-        let mut image = self
-            .load_image(
-                &bytes,
-                anova_abi::linux::PERSONALITY,
-                &args[..arguments.len()],
-                &env[..environment.len()],
-            )
-            .map_err(|e| match e {
-                loader::LoadError::Memory(_) => -12i64,
-                loader::LoadError::Elf(anova_elf::Error::Arguments) => -7i64,
-                loader::LoadError::Interpreter(error) => error,
-                _ => -8i64,
-            })?;
+        let mut image =
+            self.load_linux_exec(i, name, &args[..arguments.len()], &env[..environment.len()])?;
         let newfiles = self
             .fs
             .inherit(&self.processes[i].as_ref().unwrap().files)
@@ -471,6 +468,54 @@ impl Kernel {
         self.metrics.execs += 1;
         Ok(())
     }
+    fn load_linux_exec(
+        &mut self,
+        i: usize,
+        name: &str,
+        args: &[&str],
+        env: &[&str],
+    ) -> Result<loader::Loaded, i64> {
+        let mut name_buffer = [0; 128];
+        let (cwd, path) = self
+            .executable_path(i, name, &mut name_buffer)
+            .map_err(errno)?;
+        let mut interpreter = [0; anova_elf::INTERPRETER_BYTES];
+        let (image, interpreter_path) = match self.fs.executable_source(cwd, path).map_err(errno)? {
+            ExecutableSource::Borrowed(bytes) => {
+                return self
+                    .load_image(bytes, anova_abi::linux::PERSONALITY, args, env)
+                    .map_err(load_errno);
+            }
+            ExecutableSource::Persistent(mut file) => {
+                let (image, interpreter_path) = anova_elf::read_linux(
+                    file.size(),
+                    |offset, output| file.read_exact_at(offset, output),
+                    &mut interpreter,
+                )
+                .map_err(|error| match error {
+                    anova_elf::ReadError::Elf(error) => load_errno(error.into()),
+                    anova_elf::ReadError::Read(error) => errno(error),
+                })?;
+                let Some(interpreter_path) = interpreter_path else {
+                    return loader::load_persistent_linux(&mut file, image, args, env, None)
+                        .map_err(load_errno);
+                };
+                (image, interpreter_path)
+            }
+        };
+        // Reborrow the backend after looking up the interpreter. This non-preemptible
+        // scheduler turn has no namespace or file mutations between the two resolutions.
+        let interpreter = self
+            .load_linux_interpreter(interpreter_path)
+            .map_err(load_errno)?;
+        let ExecutableSource::Persistent(mut file) =
+            self.fs.executable_source(cwd, path).map_err(errno)?
+        else {
+            return Err(-8);
+        };
+        loader::load_persistent_linux(&mut file, image, args, env, Some(&interpreter))
+            .map_err(load_errno)
+    }
     fn linux_call(&mut self, i: usize, f: &TrapFrame) -> i64 {
         if f.rax == 218 {
             let pid = self.policy.entry(i).pid;
@@ -529,18 +574,31 @@ impl Kernel {
                 };
                 if let Some(number) = translated {
                     native.rax = number;
-                    if matches!(f.rax, 0 | 1) {
+                    let long_regular_read = f.rax == 0
+                        && f.rdx > MAX_WRITE as u64
+                        && self
+                            .fs
+                            .descriptor_metadata(&p.files, f.rdi)
+                            .is_ok_and(|(_, kind, _, _)| kind == 1);
+                    if !long_regular_read && matches!(f.rax, 0 | 1) {
                         native.rdx = native.rdx.min(MAX_WRITE as u64);
                     }
-                    let result = fs::syscall(
-                        &native,
-                        space,
-                        &mut p.files,
-                        &mut p.cwd,
-                        &mut self.fs,
-                        &mut self.terminal,
-                    )
-                    .unwrap();
+                    let mut transfer = |frame: &TrapFrame| {
+                        fs::syscall(
+                            frame,
+                            space,
+                            &mut p.files,
+                            &mut p.cwd,
+                            &mut self.fs,
+                            &mut self.terminal,
+                        )
+                        .unwrap()
+                    };
+                    let result = if long_regular_read {
+                        io::read_regular(native, transfer)
+                    } else {
+                        transfer(&native)
+                    };
                     return Ok(if result == WOULD_BLOCK && matches!(f.rax, 0 | 1) {
                         if self.fs.nonblocking(&p.files, f.rdi).map_err(errno)? {
                             -11
@@ -844,7 +902,7 @@ impl Kernel {
                         if !space.accessible(UserAddr(f.rdi), 8, true, false) {
                             return Err(-14);
                         }
-                        let pair = self.fs.pipe(&mut p.files).map_err(errno)?;
+                        let pair = self.fs.linux_pipe(&mut p.files).map_err(errno)?;
                         if f.rax == 293 {
                             for fd in pair {
                                 p.files
@@ -1005,7 +1063,16 @@ impl Kernel {
                                 if f.rsi & !0o022 != 0o755 {
                                     return Err(-95);
                                 }
-                                self.fs.mkdir(p.cwd, path).map_err(errno)?;
+                                let name = path.trim_end_matches('/');
+                                if !path.is_empty()
+                                    && matches!(name.rsplit('/').next(), Some("" | "." | ".."))
+                                {
+                                    // These terminal components name existing directories, but
+                                    // their prefixes must still pass the usual path walk.
+                                    self.fs.chdir(p.cwd, path).map_err(errno)?;
+                                    return Err(errno(ALREADY_EXISTS));
+                                }
+                                self.fs.mkdir(p.cwd, name).map_err(errno)?;
                             }
                             _ => self.fs.unlink(p.cwd, path).map_err(errno)?,
                         }

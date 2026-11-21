@@ -6,9 +6,10 @@
 M15.6 covers repeated guest reconstruction with host-assisted packaging. M16
 adds the backend/cache boundary, controlled ext4 access, JBD2 recovery and
 opt-in migration and build profiles. M17 locally verifies the supervised GUI,
-PTY, Files, scoped monitor and fixed compiler workflows. Full compiler
-reconstruction, guest-only image generation, SMP and physical hardware have
-independent scope. See [STATUS](guides/STATUS.md).
+PTY, Files, scoped monitor and fixed compiler workflows. M18 locally accepts bounded
+guest UEFI optical generation with inherited boot inputs and the retained guest-built
+base kernel. Full compiler reconstruction, SMP and physical hardware have independent
+scope. See [STATUS](guides/STATUS.md).
 
 ## 1. Overall structure
 
@@ -653,6 +654,10 @@ See [M16 evidence](validation/M16.md).
   mapped files and the marker are pinned. Reserving a node slot precedes ext2 mutation.
   The 16 MiB heap, 32 task/fd and existing mapping quotas are retained. This is bounded
   metadata reclamation, not unconstrained directories, memory growth or nonblocking I/O.
+- Ext4 name lookup reads each directory block once per scan and validates all live
+  records, including records after a match. Duplicate matches return a filesystem error.
+- Writable ext4 rebuilds reuse the audited extent tree blocks still needed by the
+  file. This prevents repeated tree allocation from splitting adjacent data runs.
 - `crates/storage/src/ext4.rs` reads the strict non-journal, 4 KiB/256-byte-inode
   extent profile. It checks multiple local groups, metadata reservations/allocation,
   extent depth/visited blocks/order/overlap and bounded file sizes. Unknown features,
@@ -770,3 +775,32 @@ task control uses exact owner and PID identity and leaves the scheduler's wait
 result available. Fixed build recipe v1 reuses PTY-family lifecycle and stages
 publication through bounded copies to a checked persistent rename. See the
 [desktop contract](milestones/M17_WORKFLOW.md).
+
+## M18 reconstruction boundary
+
+The boot and filesystem contracts remain shared. The opt-in GCC profile places the pinned
+Linux-musl BusyBox applets and arithmetic development inputs outside inherited `/tc` and uses
+a fresh explicitly selected ext4 work disk. The original M15 probe image retains its limited
+tool set. The source audit is independent of the running guest and does not replace upstream
+configuration, make or a new compiler's application tests. The guest image-construction route
+consumes an authenticated guest-built ELF and boot inputs, and keeps COM1 recovery and exact
+host inspection independent. See the [M18 contract](milestones/M18_BOOTSTRAP.md).
+
+The Linux `pipe`/`pipe2` adapter reserves a 4 KiB stream buffer after the shared
+descriptor and pipe-slot quota checks and before publishing either endpoint.
+The buffer is released with the final pipe references. Readiness, scheduler wakeup
+and wrap use that buffer's capacity. Native streams and packet pairs retain their
+inline 1 KiB storage. Capacity for a full write to an empty Linux pipe keeps the
+bounded short-write behavior for partially full pipes.
+
+The Linux exec decoder and startup stack encoder share a 12,287-byte per-string
+limit. Page-bounded copies validate C strings before using them. A 16 KiB data
+quota and 512 entries bound each vector independently of the 32 KiB startup
+block. The native encoder uses its independent 1,023-byte per-string and
+64-argument limits.
+
+Linux `execve` validates a persistent main executable through bounded positional
+reads and copies checked segments into private user pages. It commits the new
+image after segment, interpreter and startup checks succeed. The backend remains
+borrowed during each read in the non-preemptible load. Native image admission,
+initramfs slice parsing and interpreter materialization use their existing paths.

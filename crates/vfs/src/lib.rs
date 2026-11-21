@@ -3,7 +3,9 @@
 //! Bounded mounts with immutable ABI policy, shared files/maps, packet pairs, pipes and PTYs.
 //! Cached timestamps retain the backing filesystem's supported precision.
 //! Persistent directories stream from a backend; inactive file nodes are reclaimable under pressure.
+//! Linux exec may read an admitted persistent executable without an image-sized heap buffer.
 //! Directory/cwd identities, open files, mappings and the ABI policy are pinned within fixed quotas.
+//! Linux stream pipes buffer one 4 KiB write, while native streams and packets retain smaller queues.
 //! One non-preemptible owner serializes all mutations; no hardware, locks or user pointers.
 //! Optional backend allocation accounting is exposed without I/O for diagnostic sampling.
 extern crate alloc;
@@ -30,6 +32,7 @@ pub const OPEN_LIMIT: usize = 128;
 pub const PIPE_LIMIT: usize = 16;
 pub const PIPE_BYTES: usize = 1024;
 pub const PACKET_BYTES: usize = PIPE_BYTES - 2;
+const LINUX_PIPE_BYTES: usize = 4096;
 // Internal/Linux bounds; native path and directory-record adapters retain their v1 capacities.
 pub const PATH_BYTES: usize = 512;
 pub const NAME_BYTES: usize = 255;
@@ -89,6 +92,35 @@ pub struct DirectoryEntry {
     pub name: [u8; NAME_BYTES + 1],
     pub next_offset: usize,
 }
+
+pub enum ExecutableSource<'archive, 'disk> {
+    Borrowed(&'archive [u8]),
+    Persistent(PersistentExecutable<'disk>),
+}
+
+/// The exclusive backend borrow pins the resolved file during positional executable reads.
+pub struct PersistentExecutable<'disk> {
+    disk: &'disk mut (dyn Filesystem + 'static),
+    inode: u32,
+    size: usize,
+}
+
+impl PersistentExecutable<'_> {
+    pub fn size(&self) -> usize {
+        self.size
+    }
+
+    pub fn read_exact_at(&mut self, offset: usize, output: &mut [u8]) -> Result<(), i64> {
+        if offset
+            .checked_add(output.len())
+            .is_none_or(|end| end > self.size)
+            || self.disk.read(self.inode, offset, output)? != output.len()
+        {
+            return Err(IO_ERROR);
+        }
+        Ok(())
+    }
+}
 #[derive(Clone, Copy)]
 enum Target {
     Node(usize),
@@ -107,10 +139,27 @@ struct Open {
 }
 struct Pipe {
     bytes: [u8; PIPE_BYTES],
+    linux_stream: Option<Vec<u8>>,
     head: usize,
     len: usize,
     readers: usize,
     writers: usize,
+}
+impl Pipe {
+    fn new(linux_stream: Option<Vec<u8>>) -> Self {
+        Self {
+            bytes: [0; PIPE_BYTES],
+            linux_stream,
+            head: 0,
+            len: 0,
+            readers: 1,
+            writers: 1,
+        }
+    }
+
+    fn stream_capacity(&self) -> usize {
+        self.linux_stream.as_ref().map_or(PIPE_BYTES, Vec::len)
+    }
 }
 pub struct Vfs<'a> {
     nodes: Vec<Node<'a>>,
@@ -530,28 +579,36 @@ impl<'a> Vfs<'a> {
         };
         self.chmod_node(n, permissions)
     }
-    pub fn load_executable(&mut self, cwd: usize, path: &str) -> Result<Cow<'a, [u8]>, i64> {
+    pub fn executable_source(
+        &mut self,
+        cwd: usize,
+        path: &str,
+    ) -> Result<ExecutableSource<'a, '_>, i64> {
         let node = self.resolve(cwd, path)?;
         match self.nodes[node].data {
-            Data::Borrowed(bytes, true) => Ok(Cow::Borrowed(bytes)),
+            Data::Borrowed(bytes, true) => Ok(ExecutableSource::Borrowed(bytes)),
             Data::Persistent {
                 size,
                 executable: true,
-            } => {
+            } => Ok(ExecutableSource::Persistent(PersistentExecutable {
+                disk: self.disk.as_deref_mut().ok_or(IO_ERROR)?,
+                inode: self.nodes[node].inode.ok_or(IO_ERROR)?,
+                size,
+            })),
+            _ => Err(PERMISSION_DENIED),
+        }
+    }
+    pub fn load_executable(&mut self, cwd: usize, path: &str) -> Result<Cow<'a, [u8]>, i64> {
+        match self.executable_source(cwd, path)? {
+            ExecutableSource::Borrowed(bytes) => Ok(Cow::Borrowed(bytes)),
+            ExecutableSource::Persistent(mut source) => {
+                let size = source.size();
                 let mut bytes = Vec::new();
                 bytes.try_reserve_exact(size).map_err(|_| NO_MEMORY)?;
                 bytes.resize(size, 0);
-                let n = self.disk.as_mut().ok_or(IO_ERROR)?.read(
-                    self.nodes[node].inode.unwrap(),
-                    0,
-                    &mut bytes,
-                )?;
-                if n != size {
-                    return Err(IO_ERROR);
-                }
+                source.read_exact_at(0, &mut bytes)?;
                 Ok(Cow::Owned(bytes))
             }
-            _ => Err(PERMISSION_DENIED),
         }
     }
     fn mount(&mut self, path: &str, mount: Mount) -> Result<(), i64> {
@@ -1463,13 +1520,7 @@ impl<'a> Vfs<'a> {
         let b = free.next().ok_or(FILE_LIMIT)?;
         // All capacity checks precede publication; the BSP cannot interleave another allocator.
         for p in [a, b] {
-            self.pipes[p] = Some(Pipe {
-                bytes: [0; PIPE_BYTES],
-                head: 0,
-                len: 0,
-                readers: 1,
-                writers: 1,
-            });
+            self.pipes[p] = Some(Pipe::new(None));
         }
         for (fd, input, output) in [(descriptors[0], a, b), (descriptors[1], b, a)] {
             let id = self.allocate(Open {
@@ -1500,7 +1551,7 @@ impl<'a> Vfs<'a> {
             }
             Target::WritePipe(p) => {
                 let p = self.pipes[p].as_ref().unwrap();
-                (false, p.len < PIPE_BYTES, false, p.readers == 0)
+                (false, p.len < p.stream_capacity(), false, p.readers == 0)
             }
             Target::Packet { input, output } => {
                 let a = self.pipes[input].as_ref().unwrap();
@@ -1779,9 +1830,16 @@ impl<'a> Vfs<'a> {
         Ok(target)
     }
     pub fn pipe(&mut self, fds: &mut Descriptors) -> Result<[u64; 2], i64> {
+        self.stream_pipe(fds, false)
+    }
+    /// A Linux pipe can buffer a full musl `PIPE_BUF` write before a reader starts.
+    pub fn linux_pipe(&mut self, fds: &mut Descriptors) -> Result<[u64; 2], i64> {
+        self.stream_pipe(fds, true)
+    }
+    fn stream_pipe(&mut self, fds: &mut Descriptors, linux: bool) -> Result<[u64; 2], i64> {
         fds.ensure()?;
-        let slots = fds.slots();
-        let mut free = slots
+        let descriptor_slots = fds.slots();
+        let mut free = descriptor_slots
             .iter()
             .enumerate()
             .filter(|(_, s)| s.is_none())
@@ -1796,6 +1854,12 @@ impl<'a> Vfs<'a> {
             .iter()
             .position(Option::is_none)
             .ok_or(FILE_LIMIT)?;
+        // Allocate Linux's extra buffer before publishing any open description or pipe.
+        let linux_stream = if linux {
+            Some(slots(LINUX_PIPE_BYTES, || 0)?)
+        } else {
+            None
+        };
         let a = self.allocate(Open {
             target: Target::ReadPipe(p),
             offset: 0,
@@ -1810,13 +1874,7 @@ impl<'a> Vfs<'a> {
             refs: 1,
             lock: 0,
         })?;
-        self.pipes[p] = Some(Pipe {
-            bytes: [0; PIPE_BYTES],
-            head: 0,
-            len: 0,
-            readers: 1,
-            writers: 1,
-        });
+        self.pipes[p] = Some(Pipe::new(linux_stream));
         fds.table.as_ref().unwrap().borrow_mut().slots[r] = Some(a);
         fds.table.as_ref().unwrap().borrow_mut().slots[w] = Some(b);
         Ok([r as u64, w as u64])
@@ -1845,7 +1903,7 @@ impl<'a> Vfs<'a> {
             }
             Target::WritePipe(p) if writing => {
                 let p = self.pipes[p].as_ref().unwrap();
-                p.len < PIPE_BYTES || p.readers == 0
+                p.len < p.stream_capacity() || p.readers == 0
             }
             Target::Packet { input, output } => {
                 let p = self.pipes[if writing { output } else { input }]
@@ -1891,10 +1949,11 @@ impl<'a> Vfs<'a> {
                 if p.len == 0 && p.writers > 0 {
                     return Err(WOULD_BLOCK);
                 }
+                let bytes = p.linux_stream.as_deref().unwrap_or(&p.bytes);
                 let n = output.len().min(p.len);
                 for c in &mut output[..n] {
-                    *c = p.bytes[p.head];
-                    p.head = (p.head + 1) % PIPE_BYTES;
+                    *c = bytes[p.head];
+                    p.head = (p.head + 1) % bytes.len();
                     p.len -= 1;
                 }
                 n
@@ -1958,12 +2017,13 @@ impl<'a> Vfs<'a> {
                 if p.readers == 0 {
                     return Err(BROKEN_PIPE);
                 }
-                if p.len == PIPE_BYTES {
+                let bytes = p.linux_stream.as_deref_mut().unwrap_or(&mut p.bytes);
+                if p.len == bytes.len() {
                     return Err(WOULD_BLOCK);
                 }
-                let n = input.len().min(PIPE_BYTES - p.len);
+                let n = input.len().min(bytes.len() - p.len);
                 for c in &input[..n] {
-                    p.bytes[(p.head + p.len) % PIPE_BYTES] = *c;
+                    bytes[(p.head + p.len) % bytes.len()] = *c;
                     p.len += 1;
                 }
                 n

@@ -10,6 +10,55 @@ static long call(u64 n,u64 a,u64 b,u64 c,u64 d,u64 e,u64 f) {
 #define C(n,a,b,c) call(n,(u64)(a),(u64)(b),(u64)(c),0,0,0)
 #define CHECK(x) do { if (!(x)) { C(60,1,0,0); __builtin_unreachable(); } } while(0)
 static int equal(const char *a,const char *b) { while(*a && *a==*b) { ++a; ++b; } return *a==*b; }
+
+static unsigned char read_pattern(unsigned offset)
+{
+    return (unsigned char)(offset * 31 + (offset >> 8));
+}
+
+static void check_scalar_read(void)
+{
+    enum { PAGE = 4096, REQUEST = 9115, LIMIT = 16384, TAIL = 311, START = 13 };
+    const long writable_prefix = 2 * PAGE - START;
+    long mapping = call(9, 0, 5 * PAGE, 3, 0x22, (u64)-1, 0);
+    CHECK(mapping > 0);
+    unsigned char *buffer = (void *)mapping;
+    long fd = C(2, "/tmp/scalar-read", 0x242, 0644);
+    CHECK(fd >= 0);
+    for (unsigned i = 0; i < LIMIT + TAIL; ++i)
+        buffer[i] = read_pattern(i);
+    for (unsigned offset = 0; offset < LIMIT; offset += PAGE)
+        CHECK(C(1, fd, buffer + offset, PAGE) == PAGE);
+    CHECK(C(1, fd, buffer + LIMIT, TAIL) == TAIL);
+
+    CHECK(C(8, fd, 0, 0) == 0);
+    CHECK(C(0, fd, buffer + START, REQUEST) == REQUEST);
+    for (unsigned i = 0; i < REQUEST; ++i)
+        CHECK(buffer[START + i] == read_pattern(i));
+    CHECK(C(8, fd, 0, 1) == REQUEST);
+
+    CHECK(C(8, fd, 0, 0) == 0);
+    CHECK(C(0, fd, buffer, LIMIT + TAIL) == LIMIT);
+    CHECK(C(0, fd, buffer, REQUEST) == TAIL);
+    for (unsigned i = 0; i < TAIL; ++i)
+        CHECK(buffer[i] == read_pattern(LIMIT + i));
+    CHECK(C(0, fd, buffer, REQUEST) == 0);
+
+    CHECK(C(8, fd, 0, 0) == 0);
+    CHECK(C(10, buffer + 2 * PAGE, PAGE, 0) == 0);
+    CHECK(C(0, fd, buffer + 2 * PAGE, REQUEST) == -14);
+    CHECK(C(8, fd, 0, 1) == 0);
+    CHECK(C(0, fd, buffer + START, REQUEST) == writable_prefix);
+    for (unsigned i = 0; i < (unsigned)writable_prefix; ++i)
+        CHECK(buffer[START + i] == read_pattern(i));
+    CHECK(C(8, fd, 0, 1) == writable_prefix);
+    CHECK(C(0, fd, buffer, 1) == 1 && buffer[0] == read_pattern((unsigned)writable_prefix));
+    CHECK(C(3, fd, 0, 0) == 0 && C(87, "/tmp/scalar-read", 0, 0) == 0);
+    CHECK(C(11, mapping, 5 * PAGE, 0) == 0);
+    static const char marker[] = "[LINUX:READ] regular=9115 cap=16384 eof=true partial=8179 offset=true\n";
+    CHECK(C(1, 1, marker, sizeof(marker) - 1) == sizeof(marker) - 1);
+}
+
 void probe_main(u64 *stack) {
     u64 argc=*stack;
     char **argv=(void*)(stack+1), **env=argv+argc+1;
@@ -36,6 +85,7 @@ void probe_main(u64 *stack) {
     CHECK(C(0,31,0,0)==-9);
     CHECK(C(1,1,1,1)==-14);
     CHECK(C(2,"/missing",0,0)==-2);
+    check_scalar_read();
     long p=call(9,0,8192,3,0x22,(u64)-1,0);
     CHECK(p>0);
     volatile char *mem=(void*)p;
@@ -54,6 +104,14 @@ void probe_main(u64 *stack) {
     CHECK(C(11,p,8192,0)==0);
     long fd=C(2,"/tmp/probe",0x242,0644);
     CHECK(fd==3 && C(1,fd,"Z",1)==1 && C(8,fd,0,0)==0);
+    CHECK(C(83,"./",0777,0)==-17 && C(83,".",0755,0)==-17);
+    CHECK(C(83,"../",0755,0)==-17 && C(83,"//",0755,0)==-17);
+    CHECK(C(83,"/tmp/mkdir-probe/",0755,0)==0);
+    CHECK(C(83,"/tmp/mkdir-probe/",0755,0)==-17);
+    CHECK(C(83,"/tmp/mkdir-probe/./",0755,0)==-17);
+    CHECK(C(83,"/tmp/missing-probe/..",0755,0)==-2);
+    CHECK(C(83,"/tmp/probe/..",0755,0)==-20);
+    CHECK(C(84,"/tmp/mkdir-probe",0,0)==0);
     long q=call(9,0,4096,3,0x22,(u64)-1,0);
     CHECK(q>0);
     char *path=(void*)(q+4096-11);
@@ -62,10 +120,14 @@ void probe_main(u64 *stack) {
     long guard=C(2,path,0x242,0644);
     CHECK(guard>=0 && C(3,guard,0,0)==0 && C(87,path,0,0)==0);
     CHECK(C(59,"/bin/linux-probe",q+4096,0)==-14);
-    const char *excess[258];
-    for(unsigned i=0;i<257;++i) excess[i]="x";
-    excess[257]=0;
-    CHECK(C(59,"/bin/linux-probe",excess,0)==-7);
+    enum { EXEC_VECTOR_LIMIT = 512 };
+    const char *arguments[EXEC_VECTOR_LIMIT+2];
+    for(unsigned i=0;i<EXEC_VECTOR_LIMIT;++i) arguments[i]="x";
+    arguments[EXEC_VECTOR_LIMIT]=0;
+    CHECK(C(59,"/missing",arguments,0)==-2);
+    arguments[EXEC_VECTOR_LIMIT]="x";
+    arguments[EXEC_VECTOR_LIMIT+1]=0;
+    CHECK(C(59,"/bin/linux-probe",arguments,0)==-7);
     char *payload=(void*)q;
     payload[0]='V'; payload[1]='W';
     u64 *iov=(void*)(q+4096-16);

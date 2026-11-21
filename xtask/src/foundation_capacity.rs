@@ -59,6 +59,28 @@ pub(super) fn session(
             return Err(format!("Capacity budget exceeded: {metric}").into());
         }
     }
+    let storage = storage_summary(path, &serial)?;
+    foundation_journal::check(path)?;
+    let evidence = json!({"host_wall_ms_including_boot_and_shutdown":start.elapsed().as_millis(),
+        "resources":resources,"storage":storage["metrics"],"stopped_disk":storage["stopped_disk"]});
+    fs::write(
+        work.join(format!("{name}.json")),
+        serde_json::to_vec_pretty(&evidence)?,
+    )?;
+    Ok(evidence)
+}
+
+/// Cross-check guest successful-mutation peaks against the stopped ext4 superblock.
+pub(super) fn storage_summary(path: &Path, serial: &str) -> Result<Value> {
+    storage_summary_with_geometry(path, serial, 16384, 4096)
+}
+
+pub(super) fn storage_summary_with_geometry(
+    path: &Path,
+    serial: &str,
+    block_budget: u64,
+    inode_budget: u64,
+) -> Result<Value> {
     let lines: Vec<_> = serial
         .lines()
         .filter_map(|l| l.strip_prefix("[M16:STORAGE] "))
@@ -87,21 +109,16 @@ pub(super) fn session(
     stopped["writable_file_limit_bytes"] = json!(anova_storage::ext4::MAX_FILE);
     let blocks = number("allocated_blocks")?;
     let inodes = number("allocated_inodes")?;
-    if stopped["allocated_blocks"] != blocks
+    if stopped["blocks"] != block_budget
+        || stopped["inodes"] != inode_budget
+        || stopped["allocated_blocks"] != blocks
         || stopped["allocated_inodes"] != inodes
         || number("peak_blocks")? < blocks
-        || number("peak_blocks")? > 16384
+        || number("peak_blocks")? > block_budget
         || number("peak_inodes")? < inodes
-        || number("peak_inodes")? > 4096
+        || number("peak_inodes")? > inode_budget
     {
         return Err("Ext4 usage differs from stopped superblock or exceeds budget".into());
     }
-    foundation_journal::check(path)?;
-    let evidence = json!({"host_wall_ms_including_boot_and_shutdown":start.elapsed().as_millis(),
-        "resources":resources,"storage":storage,"stopped_disk":stopped});
-    fs::write(
-        work.join(format!("{name}.json")),
-        serde_json::to_vec_pretty(&evidence)?,
-    )?;
-    Ok(evidence)
+    Ok(json!({"metrics": storage, "stopped_disk": stopped}))
 }

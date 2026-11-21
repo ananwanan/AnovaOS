@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Compare real e2fsprogs extent images and sparse bytes; inject malformed metadata and device errors.
 //! Readonly devices count attempted writes, so rejection and successful reads must be non-mutating.
+//! A multiblock directory fixture checks sector reads, duplicate names and malformed records.
 use anova_abi::*;
 use anova_storage::{
     BlockDevice, SECTOR, check_range,
@@ -11,7 +12,7 @@ use std::{
     cell::Cell,
     fs::{self, File, OpenOptions},
     io::{Read, Seek, SeekFrom, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::Command,
     rc::Rc,
     sync::atomic::{AtomicUsize, Ordering},
@@ -20,6 +21,7 @@ use std::{
 struct Disk {
     file: File,
     sectors: u64,
+    reads: Rc<Cell<usize>>,
     writes: Rc<Cell<usize>>,
     fail: Rc<Cell<bool>>,
 }
@@ -29,6 +31,7 @@ impl BlockDevice for Disk {
     }
     fn read_sector(&mut self, n: u64, output: &mut [u8; SECTOR]) -> Result<(), i64> {
         check_range(self.sectors, n, SECTOR)?;
+        self.reads.set(self.reads.get() + 1);
         if self.fail.get() {
             return Err(IO_ERROR);
         }
@@ -49,12 +52,17 @@ impl BlockDevice for Disk {
 struct Fixture {
     work: PathBuf,
     image: PathBuf,
+    reads: Rc<Cell<usize>>,
     writes: Rc<Cell<usize>>,
     fail: Rc<Cell<bool>>,
 }
 static NEXT: AtomicUsize = AtomicUsize::new(0);
 impl Fixture {
     fn new(large: bool) -> Self {
+        Self::with_source(large, |_| {})
+    }
+
+    fn with_source(large: bool, seed: impl FnOnce(&Path)) -> Self {
         let work = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../../build/ext4-host")
             .join(format!(
@@ -68,6 +76,7 @@ impl Fixture {
         fs::write(source.join("sample"), b"ext4 exact sample\n").unwrap();
         fs::create_dir(source.join("nested")).unwrap();
         fs::write(source.join("nested/child"), b"child bytes").unwrap();
+        seed(&source);
         if large {
             let mut file = File::create(source.join("large")).unwrap();
             for n in 0..5120 {
@@ -120,6 +129,7 @@ impl Fixture {
         Self {
             work,
             image,
+            reads: Rc::new(Cell::new(0)),
             writes: Rc::new(Cell::new(0)),
             fail: Rc::new(Cell::new(false)),
         }
@@ -130,6 +140,7 @@ impl Fixture {
         Box::new(Disk {
             file,
             sectors,
+            reads: self.reads.clone(),
             writes: self.writes.clone(),
             fail: self.fail.clone(),
         })
@@ -271,6 +282,74 @@ fn readonly_semantics_directory_cursors_and_io_errors_do_not_mutate() {
     disk.sync().unwrap();
     drop(disk);
     assert_eq!(fs::read(&f.image).unwrap(), before);
+    f.clean();
+}
+
+#[test]
+fn lookup_reads_each_directory_block_once_and_validates_later_records() {
+    let f = Fixture::with_source(false, |source| {
+        for n in 0..400 {
+            File::create(source.join(format!("lookup-{n:03}"))).unwrap();
+        }
+    });
+    let mut disk = f.mount();
+    let blocks = disk.inode(2).unwrap().size / BLOCK;
+    assert!(blocks > 1);
+    let mut cursor = 0;
+    let mut names = Vec::new();
+    while let Some((entry, next)) = disk.next_entry(2, cursor).unwrap() {
+        cursor = next;
+        let name = std::str::from_utf8(&entry.name[..entry.length]).unwrap();
+        if name.starts_with("lookup-") {
+            names.push((name.to_owned(), (next - 1) / BLOCK as u64));
+        }
+    }
+    let (first, first_block) = names.first().unwrap();
+    let (last, last_block) = names.last().unwrap();
+    assert!(last_block > first_block);
+
+    for (name, present) in [
+        (first.as_str(), true),
+        ("missing", false),
+        (".", false),
+        ("..", false),
+    ] {
+        f.reads.set(0);
+        assert_eq!(disk.lookup(2, name).unwrap().is_some(), present);
+        assert_eq!(f.reads.get(), blocks * (BLOCK / SECTOR));
+    }
+    drop(disk);
+
+    let result = Command::new("debugfs")
+        .args(["-R", &format!("bmap <2> {last_block}")])
+        .arg(&f.image)
+        .output()
+        .unwrap();
+    assert!(result.status.success());
+    let block: u64 = std::str::from_utf8(&result.stdout)
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap();
+    let mut data = [0; BLOCK];
+    let mut image = File::open(&f.image).unwrap();
+    image.seek(SeekFrom::Start(block * BLOCK as u64)).unwrap();
+    image.read_exact(&mut data).unwrap();
+    let position = data
+        .windows(last.len())
+        .position(|bytes| bytes == last.as_bytes())
+        .unwrap();
+    let offset = block * BLOCK as u64 + position as u64;
+
+    for (offset, bytes) in [
+        (offset, first.as_bytes()),
+        (offset, &[0xff]),
+        (offset - 1, &[3]),
+    ] {
+        let old = f.patch(offset, bytes);
+        assert_eq!(f.mount().lookup(2, first).err(), Some(INVALID_FILESYSTEM));
+        f.patch(offset, &old);
+    }
     f.clean();
 }
 

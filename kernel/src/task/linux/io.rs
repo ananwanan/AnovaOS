@@ -1,19 +1,22 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Adapt blocked Linux I/O frames and preserve completed readv/writev bytes across later faults.
 //! User copies run only with the caller's address space pinned by the BSP scheduler.
+//! Long scalar regular-file reads return completed pages without changing stream behavior.
 use crate::{
     arch::x86_64::traps::TrapFrame,
     fs::{self, Terminal},
     mm::{uaccess, user::UserSpace},
 };
 use anova_abi::{
-    MAX_WRITE, SYS_READ, SYS_WRITE, USER_LIMIT, UserAddr, WOULD_BLOCK,
+    BAD_ADDRESS, MAX_WRITE, SYS_READ, SYS_WRITE, USER_LIMIT, UserAddr, WOULD_BLOCK,
     linux::{EFAULT, EINVAL, errno},
 };
+use anova_memory::PAGE_SIZE;
 use anova_vfs::{Descriptors, Vfs};
 
 const IOV_LIMIT: usize = 16;
 const IOV_BYTES: usize = 16;
+const REGULAR_READ_BYTES: u64 = 16 * 1024;
 
 pub fn io_frame(mut frame: TrapFrame, linux: bool) -> TrapFrame {
     if linux {
@@ -24,6 +27,34 @@ pub fn io_frame(mut frame: TrapFrame, linux: bool) -> TrapFrame {
         };
     }
     frame
+}
+
+pub(super) fn read_regular(
+    mut frame: TrapFrame,
+    mut read_chunk: impl FnMut(&TrapFrame) -> i64,
+) -> i64 {
+    let start = frame.rsi;
+    let limit = frame.rdx.min(REGULAR_READ_BYTES);
+    let mut done = 0;
+    while done < limit {
+        let Some(address) = start.checked_add(done) else {
+            return if done == 0 { BAD_ADDRESS } else { done as i64 };
+        };
+        frame.rsi = address;
+        // A later inaccessible page must not consume file bytes or discard a completed prefix.
+        frame.rdx = (limit - done)
+            .min(MAX_WRITE as u64)
+            .min(PAGE_SIZE - address % PAGE_SIZE);
+        let count = read_chunk(&frame);
+        if count < 0 {
+            return if done == 0 { count } else { done as i64 };
+        }
+        done += count as u64;
+        if (count as u64) < frame.rdx {
+            break;
+        }
+    }
+    done as i64
 }
 
 fn vector_io(

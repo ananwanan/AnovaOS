@@ -63,3 +63,17 @@ ELF 打包，宿主不重编内核；比较提取 ISO 字节，再验证真实�
 本地 ext4 容量运行已在 `e2db30f` 通过压力恢复、干净内核构建、精确保留 ELF 打包、
 真实语法拒绝及两次新内核启动。64 MiB 工作盘存放产物；只读源码与继承编译器仍位于
 独立 initramfs 中。这不代表编译器重建或 guest 独立镜像自举。
+
+## M18 GCC 第一阶段
+
+`m18_gcc_source.py` 校验 GCC 归档锁，为全新工作盘准备精确的入口子集，或选定的第一阶段
+C/C++ 源码及生成器输入。
+`m18_arithmetic.py` 在宿主构建并清点锁定的 GMP/MPFR/MPC Linux-musl 开发文件。
+`cargo xtask m18-gcc-test` 将这些输入、单独的宿主构建 BusyBox 引导配置及受检 M11 工具
+结合。`--entry` 单独执行构建入口诊断。参阅 [M18](../../docs/zh-CN/milestones/M18_BOOTSTRAP.md)。
+本地验收的检查点接续 guest 构建、应用检查及重启保留见 [M18.1 证据](../../docs/zh-CN/validation/M18.1.md)。
+
+`image-build.c` 是在 guest 内运行的受检流式构建器。`m18-image-test REPORT GUEST_ELF`
+门禁校验保留内核的来源，随后导出、提取和启动两份匹配的 guest UEFI/Limine 镜像。
+独立压力及重启会话保留用户数据与旧 ISO。已验收输入及宿主继续承担的准备和检查见
+[M18.3](../../docs/zh-CN/validation/M18.3.md)。

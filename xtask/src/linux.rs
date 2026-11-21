@@ -1,40 +1,86 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Build pinned BusyBox/musl/socket fixtures, verify real shared libc linkage and trace host behavior.
+//! Build pinned BusyBox profiles and musl/socket fixtures, and verify shared libc linkage.
 //! Keep source/license/config evidence beside generated binaries; never import BusyBox into the kernel.
 use super::*;
 use sha2::{Digest, Sha256};
 use std::io::Write;
 const COMMIT: &str = "1a64f6a20aaf6ea4dbba68bbfa8cc1ab7e5c57c4";
+const BOOTSTRAP_CONFIG: &str = "user/linux/busybox-bootstrap.config";
+const BOOTSTRAP_APPLETS: &[&str] = &[
+    "awk", "basename", "cat", "chmod", "cmp", "cp", "cut", "diff", "dirname", "echo", "egrep",
+    "env", "expr", "false", "find", "grep", "head", "install", "kill", "ln", "ls", "mkdir",
+    "mktemp", "mv", "printf", "pwd", "rm", "rmdir", "sed", "sh", "sleep", "sort", "tail", "test",
+    "touch", "tr", "true", "uname", "uniq", "wc",
+];
+
+#[derive(Clone, Copy)]
+enum BusyBoxProfile {
+    Compatibility,
+    Terminal,
+    Bootstrap,
+}
+
 pub fn build(root: &Path, apps: &Path) -> Result<()> {
-    build_busybox(root, apps, false)
+    build_busybox(root, apps, BusyBoxProfile::Compatibility)
 }
 
 /// Build a separate pinned ash with foreground job control; keep the M8/M9 seed unchanged.
 pub fn build_terminal(root: &Path, apps: &Path) -> Result<()> {
-    build_busybox(root, apps, true)
+    build_busybox(root, apps, BusyBoxProfile::Terminal)
 }
 
-fn build_busybox(root: &Path, apps: &Path, terminal: bool) -> Result<()> {
-    let work = directory(
-        root,
-        if terminal {
-            "compat-terminal"
-        } else {
-            "compat"
-        },
-    )?;
+/// Admit the separate M18 applet set without changing the original M15 image or its PATH.
+pub(super) fn append_bootstrap(root: &Path, archive: &mut Vec<u8>) -> Result<serde_json::Value> {
+    let work = directory(root, "compat-bootstrap")?;
+    let manifest = work.join("manifest.toml");
+    output_path(&manifest)?;
+    fs::write(&manifest, "# Generated M18 BusyBox build identity.\n")?;
+    build_busybox(root, &work, BusyBoxProfile::Bootstrap)?;
+    let bytes = fs::read(work.join("busybox.elf"))?;
+    toolchain::append(archive, 2, "/bootstrap", &[]);
+    toolchain::append(archive, 5, "/bootstrap/busybox", &bytes);
+    for name in BOOTSTRAP_APPLETS {
+        toolchain::append(archive, 3, &format!("/bootstrap/{name}"), b"busybox");
+    }
+    toolchain::append(
+        archive,
+        1,
+        "/bootstrap/LICENSE",
+        &fs::read(work.join("busybox.LICENSE"))?,
+    );
+    let corresponding_source = root.join("build/images/busybox-bootstrap-1.36.1-source.tar.gz");
+    Ok(serde_json::json!({
+        "version": "1.36.1",
+        "source_commit": COMMIT,
+        "built_on": "host, static musl Linux ELF",
+        "applets": BOOTSTRAP_APPLETS,
+        "elf_sha256": format!("{:x}", Sha256::digest(&bytes)),
+        "resolved_config_sha256": format!("{:x}", Sha256::digest(fs::read(work.join("busybox.config"))?)),
+        "corresponding_source_sha256": format!("{:x}", Sha256::digest(fs::read(&corresponding_source)?)),
+        "corresponding_source": corresponding_source,
+    }))
+}
+
+fn build_busybox(root: &Path, apps: &Path, profile: BusyBoxProfile) -> Result<()> {
+    let (work_name, source_name) = match profile {
+        BusyBoxProfile::Compatibility => ("compat", "busybox-1.36.1-source.tar.gz"),
+        BusyBoxProfile::Terminal => ("compat-terminal", "busybox-terminal-1.36.1-source.tar.gz"),
+        BusyBoxProfile::Bootstrap => ("compat-bootstrap", "busybox-bootstrap-1.36.1-source.tar.gz"),
+    };
+    let work = directory(root, work_name)?;
     let source = work.join("busybox");
     if !source.exists() {
+        // M18 has already prepared the same pinned source for the baseline initramfs.
+        // Clone separately so per-profile Kconfig and objects never overwrite older evidence.
+        let upstream = if matches!(profile, BusyBoxProfile::Bootstrap) {
+            root.join("build/compat/busybox")
+        } else {
+            PathBuf::from("https://github.com/mirror/busybox.git")
+        };
         command(
             Command::new("git")
-                .args([
-                    "clone",
-                    "--depth",
-                    "1",
-                    "--branch",
-                    "1_36_1",
-                    "https://github.com/mirror/busybox.git",
-                ])
+                .args(["clone", "--no-local", "--depth", "1", "--branch", "1_36_1"])
+                .arg(upstream)
                 .arg(&source),
         )?;
     }
@@ -67,14 +113,26 @@ fn build_busybox(root: &Path, apps: &Path, terminal: bool) -> Result<()> {
     let config_path = source.join(".config");
     let mut config = fs::read_to_string(&config_path)?;
     let mut selected = fs::read_to_string(root.join("user/linux/busybox.config"))?;
-    if terminal {
-        selected.push_str("\nCONFIG_ASH_JOB_CONTROL=y\n");
+    match profile {
+        BusyBoxProfile::Compatibility => {}
+        BusyBoxProfile::Terminal => selected.push_str("\nCONFIG_ASH_JOB_CONTROL=y\n"),
+        BusyBoxProfile::Bootstrap => {
+            selected.push('\n');
+            selected.push_str(&fs::read_to_string(root.join(BOOTSTRAP_CONFIG))?);
+        }
     }
     for line in selected.lines().filter(|l| l.starts_with("CONFIG_")) {
         let key = line.split_once('=').ok_or("Invalid BusyBox profile")?.0;
         let disabled = format!("# {key} is not set");
-        if config.contains(&disabled) {
-            config = config.replace(&disabled, line);
+        let previous =
+            if matches!(profile, BusyBoxProfile::Bootstrap) && key == "CONFIG_BUSYBOX_EXEC_PATH" {
+                // The pinned ash retries scripts through this path after ENOEXEC.
+                "CONFIG_BUSYBOX_EXEC_PATH=\"/proc/self/exe\""
+            } else {
+                &disabled
+            };
+        if config.lines().any(|setting| setting == previous) {
+            config = config.replacen(previous, line, 1);
         } else if !config.lines().any(|l| l == line) {
             return Err(format!("Unrecognized BusyBox profile setting: {line}").into());
         }
@@ -99,6 +157,13 @@ fn build_busybox(root: &Path, apps: &Path, terminal: bool) -> Result<()> {
     )?;
     // Kconfig embeds the host date in comments; preserve all resolved settings without that date.
     let resolved = fs::read_to_string(&config_path)?;
+    if matches!(profile, BusyBoxProfile::Bootstrap) {
+        for setting in selected.lines().filter(|l| l.starts_with("CONFIG_")) {
+            if !resolved.lines().any(|line| line == setting) {
+                return Err(format!("BusyBox bootstrap setting was disabled: {setting}").into());
+            }
+        }
+    }
     let canonical = resolved
         .lines()
         .filter(|line| line.starts_with("CONFIG_") || line.starts_with("# CONFIG_"))
@@ -134,10 +199,15 @@ fn build_busybox(root: &Path, apps: &Path, terminal: bool) -> Result<()> {
             .arg(&archive)
             .arg(COMMIT),
     )?;
-    fs::write(
-        work.join("ANOVA_BUILD.txt"),
+    let mut recipe = String::from(
         "BusyBox 1.36.1, unmodified source, GPL-2.0-only.\nPinned commit: 1a64f6a20aaf6ea4dbba68bbfa8cc1ab7e5c57c4\nGenerated .config is included in this archive.\nBuild with musl 1.2.4, GCC 13, GNU make:\nmake oldconfig\nmake -j2 CC=musl-gcc EXTRA_CFLAGS=-fcf-protection=none\nAnovaOS integration recipe: xtask/src/linux.rs, user/linux/busybox.config\n",
-    )?;
+    );
+    if matches!(profile, BusyBoxProfile::Bootstrap) {
+        recipe.push_str(&format!(
+            "Additional bootstrap profile: {BOOTSTRAP_CONFIG}\n"
+        ));
+    }
+    fs::write(work.join("ANOVA_BUILD.txt"), recipe)?;
     command(
         Command::new("tar")
             .arg("--append")
@@ -161,11 +231,7 @@ fn build_busybox(root: &Path, apps: &Path, terminal: bool) -> Result<()> {
         Command::new("gzip")
             .args(["-n", "-c"])
             .arg(archive)
-            .stdout(File::create(images.join(if terminal {
-                "busybox-terminal-1.36.1-source.tar.gz"
-            } else {
-                "busybox-1.36.1-source.tar.gz"
-            }))?),
+            .stdout(File::create(images.join(source_name))?),
     )?;
     Ok(())
 }

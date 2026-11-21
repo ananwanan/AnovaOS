@@ -74,8 +74,10 @@ unnecessary. See [third-party/m12](../third-party/m12.md) for upstream notices.
 
 ## Kernel and ownership changes
 
-- Linux startup accepts 256 argv and 256 env entries, bounded by 8 KiB payload
-  per vector, 1,023 bytes per string and a checked 32 KiB startup block. Native
+- The M12 acceptance profile used 256 argv and 256 env entries, 8 KiB payload
+  per vector, 1,023 bytes per string and a checked 32 KiB startup block. The later
+  [M18 Linux exec limit](../COMPATIBILITY.md#m181-gcc-build-utilities-profile)
+  raises the per-string capacity to 12,287 bytes and each vector to 512 entries and 16 KiB. Native
   startup keeps its 64-entry limit. Linux/VFS paths accept 512 bytes and
   components 255 bytes, covering hashed Cargo objects. Native v1 path buffers
   stay 128 bytes; native 80-byte directory records remain unchanged and return

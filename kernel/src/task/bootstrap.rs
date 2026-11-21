@@ -4,6 +4,7 @@
 //! These observations omit temporary allocations within syscalls and do not establish peak RSS.
 //! Elapsed time uses the coarse IRQ-derived clock, which does not charge all kernel execution.
 //! Ext4 allocation peaks are counted at successful mutations, including short-lived disk files.
+//! Count unsupported Linux madvise calls exactly while sampling their UART notices.
 use super::{CAPACITY, Kernel, State, apic, mm, serial};
 
 pub(super) struct Samples {
@@ -16,6 +17,7 @@ pub(super) struct Samples {
     fd_per_process_peak: usize,
     vfs_node_slots_peak: usize,
     count: u64,
+    linux_madvise_enosys: u64,
     storage: Option<anova_storage::filesystem::Usage>,
 }
 
@@ -32,13 +34,19 @@ impl Samples {
             fd_per_process_peak: 0,
             vfs_node_slots_peak: 0,
             count: 0,
+            linux_madvise_enosys: 0,
             storage: None,
         }
     }
 
+    pub(super) fn record_madvise_enosys(&mut self) -> bool {
+        self.linux_madvise_enosys = self.linux_madvise_enosys.saturating_add(1);
+        self.linux_madvise_enosys.is_power_of_two()
+    }
+
     pub(super) fn report(&self) {
         serial::write(format_args!(
-            "[M15:RESOURCES] scope=scheduler-instance sampling=boundaries clock=irq-monotonic samples={} baseline_free_frames={} min_free_frames={} peak_frame_delta={} heap_peak_bytes={} live_tasks_peak={} occupied_slots_peak={} fd_per_process_peak={} vfs_node_slots_peak={} elapsed_ns={}\n",
+            "[M15:RESOURCES] scope=scheduler-instance sampling=boundaries clock=irq-monotonic samples={} baseline_free_frames={} min_free_frames={} peak_frame_delta={} heap_peak_bytes={} live_tasks_peak={} occupied_slots_peak={} fd_per_process_peak={} vfs_node_slots_peak={} elapsed_ns={} linux_madvise_enosys={}\n",
             self.count,
             self.baseline_free_frames,
             self.min_free_frames,
@@ -50,6 +58,7 @@ impl Samples {
             self.fd_per_process_peak,
             self.vfs_node_slots_peak,
             apic::monotonic_ns().saturating_sub(self.started_ns),
+            self.linux_madvise_enosys,
         ));
         if let Some(usage) = self.storage {
             serial::write(format_args!(

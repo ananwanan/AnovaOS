@@ -18,7 +18,10 @@
 
 ## 启动、ELF 与映射容量
 
-Linux argv/env 各最多 256 条，每向量载荷 8 KiB，每串 1023 字节，启动区域 32 KiB。原生仍最多 64 参数。VFS/Linux 路径 512 字节、分量 255 字节；原生路径 128 字节，80 字节目录记录不改，名称超过 63 字节返回 TOO_LONG 且不推进游标，Linux getdents 使用独立记录。
+M12 验收的 Linux argv/env 各最多 256 条，每向量载荷 8 KiB，每串 1,023 字节，启动区域
+32 KiB。后续 [M18 Linux exec 限制](../COMPATIBILITY.md#m181-gcc-构建工具配置)将单串容量扩为
+12,287 字节，每向量扩为 512 项和 16 KiB 载荷。原生仍最多 64 参数。VFS/Linux 路径 512 字节、分量 255 字节；原生路径 128 字节，
+80 字节目录记录不改，名称超过 63 字节返回 TOO_LONG 且不推进游标，Linux getdents 使用独立记录。
 
 Linux ELF 文件和装载总量最多 256 MiB，initramfs 条目 256 MiB、模块 1 GiB，全部必须在受检保留启动 RAM 内。Linux mmap 窗口为 `[0x50000000, 0xc0000000)`，每次 256 MiB；brk、原生 ELF、16 MiB 内核堆和保护栈独立。每根页表保存查找提示，尾部无空洞则环绕全窗口；占用或 PROT_NONE 页不复用，成功后才提交提示，OOM 回滚。
 

@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Decode bounded Linux C strings and pointer vectors through a checked copy callback.
 //! Copies stop at page boundaries so a terminator before an unmapped page remains valid.
+//! Exec vectors enforce independent data and entry quotas. The string bound is shared
+//! with the kernel's Linux ELF startup stack encoder.
 use super::{E2BIG, EFAULT, EINVAL, ENAMETOOLONG};
 
 pub const STRING_BYTES: usize = 129;
-pub const VECTOR_LIMIT: usize = 256;
+pub const VECTOR_LIMIT: usize = 512;
+pub const EXEC_STRING_BYTES: usize = 12 * 1024 - 1;
+pub const EXEC_VECTOR_BYTES: usize = 16 * 1024;
 const PAGE_BYTES: u64 = 4096;
 
 /// The caller pins the address space and recovers access faults inside `copy`.
@@ -31,7 +35,7 @@ pub fn read_c_string<const N: usize>(
 
 /// Own validated argv/envp bytes while the original user mappings are inactive or replaced.
 pub struct StringVector {
-    bytes: [u8; 8192],
+    bytes: [u8; EXEC_VECTOR_BYTES],
     offsets: [usize; VECTOR_LIMIT],
     lengths: [usize; VECTOR_LIMIT],
     count: usize,
@@ -39,7 +43,7 @@ pub struct StringVector {
 impl StringVector {
     pub fn empty() -> Self {
         Self {
-            bytes: [0; 8192],
+            bytes: [0; EXEC_VECTOR_BYTES],
             offsets: [0; VECTOR_LIMIT],
             lengths: [0; VECTOR_LIMIT],
             count: 0,
@@ -53,7 +57,7 @@ impl StringVector {
         self.count = 0;
         self.lengths.fill(0);
         let mut used = 0_usize;
-        let mut string = [0; 1024];
+        let mut string = [0; EXEC_STRING_BYTES + 1];
         for index in 0..=VECTOR_LIMIT {
             let at = address.checked_add(index as u64 * 8).ok_or(EFAULT)?;
             let mut word = [0; 8];
@@ -189,37 +193,77 @@ mod tests {
 
     #[test]
     fn vectors_accept_the_full_capacity_and_reject_bad_pointers_or_excess_arguments() {
-        let mut memory = vec![0; 8192];
+        const DATA: usize = 8192;
+        const FIRST: u64 = 0x10000 + DATA as u64;
+        let mut memory = vec![0; DATA + 4096];
         for index in 0..VECTOR_LIMIT {
-            memory[index * 8..index * 8 + 8].copy_from_slice(&0x11000_u64.to_le_bytes());
+            memory[index * 8..index * 8 + 8].copy_from_slice(&FIRST.to_le_bytes());
         }
-        memory[4096..4102].copy_from_slice(b"value\0");
-        let mut copy = |address: u64, bytes: &mut [u8]| {
-            let offset = address.checked_sub(0x10000).ok_or(EFAULT)? as usize;
-            let input = memory.get(offset..offset + bytes.len()).ok_or(EFAULT)?;
-            bytes.copy_from_slice(input);
-            Ok(())
+        memory[DATA..DATA + 6].copy_from_slice(b"value\0");
+        let read = |vector: &mut StringVector, address, memory: &[u8]| {
+            vector.read(address, &mut |address, bytes| {
+                let offset = address.checked_sub(0x10000).ok_or(EFAULT)? as usize;
+                let input = memory.get(offset..offset + bytes.len()).ok_or(EFAULT)?;
+                bytes.copy_from_slice(input);
+                Ok(())
+            })
         };
         let mut vector = StringVector::empty();
-        vector.read(0x10000, &mut copy).unwrap();
+        read(&mut vector, 0x10000, &memory).unwrap();
         assert_eq!(vector.len(), VECTOR_LIMIT);
         assert!(!vector.is_empty());
         assert_eq!(vector.strings(), ["value"; VECTOR_LIMIT]);
-        assert!(vector.read(1, &mut copy).is_err());
-        memory[VECTOR_LIMIT * 8..VECTOR_LIMIT * 8 + 8].copy_from_slice(&0x11000_u64.to_le_bytes());
-        let result = vector.read(0x10000, &mut |address, bytes| {
-            let offset = (address - 0x10000) as usize;
-            bytes.copy_from_slice(&memory[offset..offset + bytes.len()]);
-            Ok(())
-        });
-        assert!(matches!(result, Err(E2BIG)));
-        memory[VECTOR_LIMIT * 8..VECTOR_LIMIT * 8 + 8].fill(0);
-        memory[4096..5120].fill(b'x');
-        let result = vector.read(0x10000, &mut |address, bytes| {
-            let offset = (address - 0x10000) as usize;
-            bytes.copy_from_slice(&memory[offset..offset + bytes.len()]);
-            Ok(())
-        });
-        assert!(matches!(result, Err(E2BIG)));
+        assert_eq!(read(&mut vector, 1, &memory), Err(EFAULT));
+        memory[VECTOR_LIMIT * 8..VECTOR_LIMIT * 8 + 8].copy_from_slice(&FIRST.to_le_bytes());
+        assert_eq!(read(&mut vector, 0x10000, &memory), Err(E2BIG));
+
+        const PART: usize = 1024;
+        const COUNT: usize = EXEC_VECTOR_BYTES / PART;
+        memory[COUNT * 8..=VECTOR_LIMIT * 8 + 7].fill(0);
+        memory[DATA..DATA + PART].fill(b'x');
+        read(&mut vector, 0x10000, &memory).unwrap();
+        assert_eq!(vector.len(), COUNT);
+        assert_eq!(
+            vector.strings()[..COUNT]
+                .iter()
+                .map(|s| s.len())
+                .sum::<usize>(),
+            EXEC_VECTOR_BYTES
+        );
+
+        const SECOND_OFFSET: usize = 0x500;
+        let second = FIRST + SECOND_OFFSET as u64;
+        memory[COUNT * 8..COUNT * 8 + 8].copy_from_slice(&second.to_le_bytes());
+        memory[DATA + SECOND_OFFSET] = b'y';
+        assert_eq!(read(&mut vector, 0x10000, &memory), Err(E2BIG));
+        assert_eq!(vector.len(), COUNT);
+    }
+
+    #[test]
+    fn exec_vector_accepts_a_page_crossing_string_at_the_exact_limit() {
+        const BASE: u64 = 0x10000;
+        const START: usize = PAGE_BYTES as usize + 3;
+        let mut memory = vec![0; START + EXEC_STRING_BYTES + 1];
+        memory[..8].copy_from_slice(&(BASE + START as u64).to_le_bytes());
+        memory[START..START + EXEC_STRING_BYTES].fill(b'x');
+        let read = |vector: &mut StringVector, memory: &[u8]| {
+            vector.read(BASE, &mut |address, bytes| {
+                assert_eq!(
+                    address / PAGE_BYTES,
+                    (address + bytes.len() as u64 - 1) / PAGE_BYTES
+                );
+                let offset = (address - BASE) as usize;
+                bytes.copy_from_slice(&memory[offset..offset + bytes.len()]);
+                Ok(())
+            })
+        };
+        let mut vector = StringVector::empty();
+        read(&mut vector, &memory).unwrap();
+        assert_eq!(vector.len(), 1);
+        assert_eq!(vector.strings()[0].as_bytes(), &[b'x'; EXEC_STRING_BYTES]);
+
+        memory[START + EXEC_STRING_BYTES] = b'x';
+        assert_eq!(read(&mut vector, &memory), Err(E2BIG));
+        assert!(vector.is_empty());
     }
 }

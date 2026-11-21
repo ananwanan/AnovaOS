@@ -78,3 +78,19 @@ Added 2026-10-26 by project-owner request. This records planned work, not implem
 ## DEV-004 scheduling update (2026-10-27)
 
 The owner explicitly defers M16 remote CI closeout and authorizes starting M17. Retain M16 pending status and main-push-only Actions. M17 may proceed on the locally accepted foundation; every M17 acceptance requirement remains applicable.
+
+## DEV-005: independent M18 reconstruction evidence
+
+Added 2026-11-21. Work from `dev` on `feat/m18-bootstrap`, keep pull requests targeted at
+`dev` and retain M16 pending remote closeout and main-push-only Actions.
+
+- Record inherited tool execution, application compilation, guest compiler reconstruction and
+  multistage bootstrap separately. Scope LLVM, rustc and Cargo individually with the source's
+  prescribed stage0. Preserve the independent M15 probes.
+- Declare real workload budgets and exact inputs before each build. Use fresh opt-in work disks
+  under `build/`, retain ext2 and COM1 recovery, and preserve native/GUI ABI and explicit personality.
+- Use guest tools for final image construction. Retain host-prepared inputs, exact extracted
+  kernel bytes and an actual boot with identity. Keep GUI-enabled construction independent.
+- Repeat viable components on clean disks, retaining hashes, logs, failure recovery and
+  differences. Accept a substage only after its actual positive, negative and recovery checks.
+  Read the [M18 contract](../milestones/M18_BOOTSTRAP.md).

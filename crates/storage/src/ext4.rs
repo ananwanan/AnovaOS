@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Read checked ext4 extents and stage bounded mutations with optional synchronous JBD2 recovery.
 //! Default mounts remain readonly; writable admission additionally audits allocation and namespace ownership.
+//! Name lookup validates every directory record while reading each block once per scan.
 mod audit;
 mod directory;
 mod journal;
@@ -67,6 +68,24 @@ struct Group {
     table: u32,
     table_end: u32,
 }
+
+struct DirectoryName<'a> {
+    inode: u32,
+    name: &'a [u8],
+}
+
+impl From<DirectoryName<'_>> for Entry {
+    fn from(record: DirectoryName<'_>) -> Self {
+        let mut name = [0; 256];
+        name[..record.name.len()].copy_from_slice(record.name);
+        Self {
+            inode: record.inode,
+            name,
+            length: record.name.len(),
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 struct Extent {
     logical: u32,
@@ -535,6 +554,28 @@ impl Ext4 {
         }
         Ok((u32_at(bytes, at), length, n))
     }
+    fn read_directory_record<'b>(
+        &self,
+        bytes: &'b [u8; BLOCK],
+        at: usize,
+    ) -> Result<(usize, Option<DirectoryName<'b>>), i64> {
+        let (inode, length, count) = Self::record(bytes, at)?;
+        if inode == 0 {
+            return Ok((length, None));
+        }
+        let name = &bytes[at + 8..at + 8 + count];
+        if inode > self.inodes
+            || name.is_empty()
+            || name.contains(&0)
+            || name.contains(&b'/')
+            || core::str::from_utf8(name).is_err()
+            || !(1..=2).contains(&bytes[at + 7])
+        {
+            return Err(INVALID_FILESYSTEM);
+        }
+        let entry = (!matches!(name, b"." | b"..")).then_some(DirectoryName { inode, name });
+        Ok((length, entry))
+    }
 }
 impl Filesystem for Ext4 {
     fn usage(&self) -> Option<Usage> {
@@ -616,39 +657,41 @@ impl Filesystem for Ext4 {
                 return Err(INVALID_ARGUMENT);
             }
             while at < BLOCK {
-                let (inode, length, n) = Self::record(&bytes, at)?;
-                let name = &bytes[at + 8..at + 8 + n];
-                let kind = bytes[at + 7];
+                let (length, entry) = self.read_directory_record(&bytes, at)?;
                 at += length;
                 position += length;
-                if inode == 0 {
-                    continue;
+                if let Some(entry) = entry {
+                    return Ok(Some((entry.into(), position as u64)));
                 }
-                if inode > self.inodes
-                    || name.is_empty()
-                    || name.contains(&0)
-                    || name.contains(&b'/')
-                    || core::str::from_utf8(name).is_err()
-                    || !(1..=2).contains(&kind)
-                {
-                    return Err(INVALID_FILESYSTEM);
-                }
-                if name == b"." || name == b".." {
-                    continue;
-                }
-                let mut label = [0; 256];
-                label[..n].copy_from_slice(name);
-                return Ok(Some((
-                    Entry {
-                        inode,
-                        name: label,
-                        length: n,
-                    },
-                    position as u64,
-                )));
             }
         }
         Ok(None)
+    }
+    fn lookup(&mut self, parent: u32, name: &str) -> Result<Option<Entry>, i64> {
+        let info = self.load(parent)?;
+        if !info.directory {
+            return Err(NOT_DIRECTORY);
+        }
+        let mut bytes = buffer()?;
+        let mut found = None;
+        for logical in 0..info.size / BLOCK {
+            let block = self.data_block(logical).ok_or(INVALID_FILESYSTEM)?;
+            self.read_block(block, &mut bytes)?;
+            let mut at = 0;
+            while at < BLOCK {
+                let (length, entry) = self.read_directory_record(&bytes, at)?;
+                at += length;
+                if let Some(entry) = entry
+                    && entry.name == name.as_bytes()
+                {
+                    if found.is_some() {
+                        return Err(INVALID_FILESYSTEM);
+                    }
+                    found = Some(entry.into());
+                }
+            }
+        }
+        Ok(found)
     }
     fn sync(&mut self) -> Result<(), i64> {
         self.flush_writable()

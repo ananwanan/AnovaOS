@@ -213,3 +213,27 @@ Linux 包、glibc、依赖求解、签名认证或进程沙箱。见 [M13](miles
 ## M17.2 图形 PTY 配置
 
 单独配置的 BusyBox 1.36.1/musl 1.2.4 交互式 ash 已本地验证真实 PTY 输入、前台 Ctrl+C、WUNTRACED 子进程停止状态、合流 stdout/stderr、缩放/SIGWINCH 和显式 shell 重启。已有源码构建的 GCC 11.2.0 经图形输入编译指定 C 应用，精确程序在重启后再次运行。不替换原 M9 BusyBox 种子，不代表任意 shell 作业、WCONTINUED、进程组等待、后台 TTIN/TTOU 强制、全屏终端编辑器、Unicode 或编译器自举。准确范围见 [M17.2](validation/M17.2.md)。
+
+## M18.1 GCC 构建工具配置
+
+单独的静态 BusyBox 1.36.1 配置准入 `/bootstrap/sh` 和选定的外部工具。夹具检查转换输出、
+错误退出、普通文件替换重命名后已打开的描述符保留。只读镜像内的别名使用既有 VFS 链接解析。
+运行时创建硬链接及符号链接返回 `ENOSYS`。应用测试使用宿主构建的 GMP、MPFR 和 MPC 开发
+归档及显式 Linux-musl personality。参阅 [M18 契约](milestones/M18_BOOTSTRAP.md)。
+
+Linux `pipe` 和 `pipe2` 使用 4 KiB 字节流缓冲。ash 可在读者启动前，向空管道写入符合
+musl `PIPE_BUF` 的 heredoc；部分已占用的字节流仍允许短写。共享管道槽仍为 16 个，原生
+字节流缓冲仍为 1 KiB，packet 有效载荷仍为 1,022 字节。
+
+Linux `execve` 每个参数或环境字符串接受最多 12,287 数据字节。每个向量受 512 项及
+16 KiB 字符串数据限制，使用受检 32 KiB 启动块。超限返回 `E2BIG`。原生 v1 保留
+每串 1,023 字节和最多 64 个参数的限制。
+
+Linux `mkdir` 接受末尾斜线，解析到已有的 `.`、`..` 或根目录时返回 `EEXIST`。前缀缺失或
+不是目录时，仍分别返回 `ENOENT` 和 `ENOTDIR`。
+
+Linux 普通文件的标量 `read` 通过逐页受检复制，每次可读取最多 16 KiB。到达 EOF 时返回可读前缀。
+后续页面无效时返回已完成的字节数，并按该字节数推进共享偏移。
+
+只含 `.tbss` 的 Linux ELF TLS 模板仍受文件和已映射内存范围检查。模板含已初始化的文件字节时，
+其 TLS 文件偏移须与虚拟地址对应。[ELF gABI TLS](https://gabi.xinuos.com/elf/07-pheader.html#thread-local-storage)

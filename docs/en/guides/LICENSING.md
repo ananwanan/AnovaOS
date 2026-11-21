@@ -106,3 +106,12 @@ original notices, source/seed inventories and recipes. Guest-built bzip2 is not
 relicensed as project code. Compiler audits do not reconstruct compilers; the
 M15.5/M15.6 kernel uses inherited tools/libraries and host packaging. First-party
 orchestration and diagnostics remain Apache-2.0.
+
+## M18 build tools and arithmetic development inputs
+
+The separate M18 BusyBox applet binary retains `/bootstrap/LICENSE` and its own
+corresponding-source archive `build/images/busybox-bootstrap-1.36.1-source.tar.gz`.
+Keep that archive with redistributed images using this profile. GMP, MPFR and MPC
+keep their original notices under `/m18-arithmetic/licenses` and the source locks
+documented for the [M11 inputs](../third-party/m11.md). The M18 source and build
+manifests identify the archives and generated development files used in the guest.

@@ -29,10 +29,10 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `crates/abi/Cargo.toml` | Defines the allocation-free native ABI shared by the kernel and application SDK. |
 | `crates/abi/src/lib.rs` | Native v1 constants, checked user addresses and padding-free process/query layouts. These are AnovaOS interfaces; they do not implement the Linux syscall ABI. |
 | `crates/abi/src/linux.rs` | Translate native errors and supported Linux open flags without contaminating generic subsystems. |
-| `crates/abi/src/linux/strings.rs` | Decode page-bounded C strings and pointer vectors through a checked copy callback without allocation. |
+| `crates/abi/src/linux/strings.rs` | Decode page-bounded C strings and checked vectors, and define the Linux exec per-string limit. |
 | `crates/elf/Cargo.toml` | Hosts bounded ELF validation and native startup-stack construction without hardware. |
 | `crates/elf/src/lib.rs` | Validate bounded native ET_EXEC and Linux ET_EXEC/ET_DYN segments, interpreter paths and TLS before mapping. |
-| `crates/elf/src/stack.rs` | Encode bounded native/Linux arguments, environment and executable/interpreter auxv in checked startup storage. |
+| `crates/elf/src/stack.rs` | Encode native/Linux arguments with separate string bounds, environment and auxv within a checked startup block. |
 | `crates/graphics/Cargo.toml` | Build the dependency-free no_std layout and software drawing library for kernel and host checks. |
 | `crates/graphics/src/lib.rs` | Validate bounded RGB modes, provide a fixed cursor raster and render clipped pixels, rectangles and blits into caller-owned buffers. |
 | `crates/graphics/src/tests.rs` | Check RGB packing, bounds, canaries, overflow, clipping, literal cursor shape and deterministic pattern independently of hardware. |
@@ -66,18 +66,18 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `crates/sched/src/lib.rs` | Bounded BSP scheduling policy and parent/child lifecycle without hardware or allocation. The kernel owns contexts/resources; this policy never switches stacks or takes locks. |
 | `crates/storage/Cargo.toml` | Declare the no_std checked sector/ext2 crate and its native error dependency. |
 | `crates/storage/src/ext2.rs` | Implement the declared ext2 profile, checked allocation, retained modes/timestamps, ordered writes and clean shutdown. |
-| `crates/storage/src/ext4.rs` | Read controlled ext4 extents and dispatch explicit audited non-journal/JBD2 writes with bounded allocation ownership. |
+| `crates/storage/src/ext4.rs` | Read checked ext4 extents and directory records, scan each directory block once for lookup and dispatch audited non-journal/JBD2 writes. |
 | `crates/storage/src/filesystem.rs` | Define persistent backend capabilities, stable metadata and bounded directory cursor operations. |
 | `crates/storage/src/lib.rs` | Define owned synchronous sector devices, read-only/flush/stop contracts and checked ranges. |
 | `crates/storage/tests/ext2.rs` | Verify on-disk ext2 bytes, indirection, sparse data, exhaustion, reboot and injected I/O failures. |
-| `crates/storage/tests/ext4.rs` | Compare e2fsprogs images and inject extent, geometry, allocation and readonly device failures. |
+| `crates/storage/tests/ext4.rs` | Compare e2fsprogs images, count directory lookup reads and verify malformed data and device failures. |
 | `crates/vfs/Cargo.toml` | Share bounded in-memory VFS, archive, open-file and pipe semantics with host tests. |
 | `crates/vfs/src/archive.rs` | Decode the project-owned ANOVAFS1 archive using checked byte ranges, never casts. Entries are parent-first absolute UTF-8 paths; payloads remain borrowed from boot RAM. |
 | `crates/vfs/src/fd.rs` | Own fallible shared descriptor tables, close-on-exec state and allocation-free empty placeholders. |
 | `crates/vfs/src/file_mapping.rs` | Retain bounded shared-file bytes and version successful writes independently of descriptor lifetime. |
 | `crates/vfs/src/foundation_tests.rs` | Stress on-demand lookup and 10,001-entry traversal, cache eviction, identities, shared offsets and maps. |
-| `crates/vfs/src/lib.rs` | Own bounded memory/ext2 namespaces, explicit ABI inheritance, coherent backing-store timestamp precision, private mapping snapshots, shared opens, pipes and PTYs. |
-| `crates/vfs/src/tests.rs` | Test VFS path/mount boundaries, descriptor ownership, private snapshots, persistent timestamp coherence, pipe shutdown and capacity rollback. |
+| `crates/vfs/src/lib.rs` | Own bounded namespaces, ABI inheritance, timestamps, mapping snapshots, shared opens, separate Linux/native stream capacities, packets and PTYs. |
+| `crates/vfs/src/tests.rs` | Test path/mount boundaries, descriptors, private snapshots, timestamps, pipe capacities and slot recovery. |
 | `docs/en/ARCHITECTURE.md` | Describe implemented subsystem boundaries and the planned operating-system architecture. |
 | `docs/en/COMPATIBILITY.md` | Separate verified native support from planned existing-software ABI compatibility. |
 | `docs/en/PROJECT_OUTLINE.md` | Original project goals, delivery levels, scope, work packages and risks. |
@@ -254,8 +254,8 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `kernel/src/serial.rs` | Single-BSP COM1 output and nonblocking byte input; no heap, locks or firmware. |
 | `kernel/src/task/bootstrap.rs` | Sample scheduler-instance frame, heap, task, descriptor and namespace use without allocation or a public ABI. |
 | `kernel/src/task/diagnostics.rs` | Copy bounded user frame-pointer chains safely and report captured fault registers and resources. |
-| `kernel/src/task/linux.rs` | Dispatch bounded Linux calls including vfork, modes/umask and resource queries; delegate memory, thread, signal and terminal layouts. |
-| `kernel/src/task/linux/io.rs` | Import Linux writev descriptors before I/O and preserve completed bytes across later buffer faults. |
+| `kernel/src/task/linux.rs` | Dispatch bounded Linux calls, select Linux stream capacity and delegate memory, thread, signal and terminal layouts. |
+| `kernel/src/task/linux/io.rs` | Perform bounded regular-file reads and vectored I/O while preserving completed bytes across later buffer faults. |
 | `kernel/src/task/linux/memory.rs` | Translate bounded mmap/brk/munmap/mprotect, real PROT_NONE/W^X, private file backing and shared anonymous pages. |
 | `kernel/src/task/linux/select.rs` | Implement checked select descriptor sets, true readiness, finite waits, remaining time and interruptible blocking. |
 | `kernel/src/task/linux/signals.rs` | Translate signal actions/masks and addressing, build AMD64 user frames and import checked signal-return state. |
@@ -436,7 +436,7 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `xtask/src/gui_sdk.rs` | Verify guest edits/builds, physical GUI input, literal scanout, faults and retained reboot hashes. |
 | `xtask/src/gui_sdk_build.rs` | Export a checksummed GUI source SDK with both language guides and package its guest compiler/display image. |
 | `xtask/src/input.rs` | Inject QMP keyboard/mouse sequences, compare all cursor/background pixels and require missing-device serial recovery and clean shutdown. |
-| `xtask/src/linux.rs` | Build and hash pinned static/dynamic musl/BusyBox fixtures, package upstream sources and record bounded Linux-host traces. |
+| `xtask/src/linux.rs` | Build and hash pinned musl/BusyBox fixtures and optional applet profiles, package upstream sources and retain Linux-host traces. |
 | `xtask/src/main.rs` | Host CLI for reproducible kernel/app builds, ISO assembly and QEMU validation, including the parsed-MADT I/O APIC ID mismatch boot case. |
 | `xtask/src/network.rs` | Run controlled loopback peers and watchdog-driven real QEMU network acceptance. |
 | `xtask/src/packages.rs` | Pin/build user TLS clients, construct locked packages and verify install/reboot/HTTPS behavior. |
@@ -452,8 +452,8 @@ New shared assets are listed here when actual images/diagrams are introduced.
 
 | `crates/storage/src/ext4/audit.rs` | Audit writable bitmap/counter, global block ownership and rooted directory/link invariants. |
 | `crates/storage/src/ext4/directory.rs` | Stage ext4 directory growth, rename replacement/moves, parent links and orphan namespace changes. |
-| `crates/storage/src/ext4/write.rs` | Stage bounded ext4 allocation/data/extent mutations, fail closed on publication errors and flush clean shutdown. |
-| `crates/storage/tests/ext4_write.rs` | Verify real writable ext4 images, exhaustive preflight allocation failures, ENOSPC, metadata and I/O boundaries. |
+| `crates/storage/src/ext4/write.rs` | Stage bounded ext4 mutations, reuse owned extent tree blocks and fail closed on publication errors. |
+| `crates/storage/tests/ext4_write.rs` | Verify real writable ext4, sparse output growth, allocation failures, ENOSPC, metadata and I/O boundaries. |
 | `user/linux/ext4_write.c` | Exercise actual musl ext4 writes, directory/cwd moves, orphan/mapping/fork lifetimes, metadata and disk-full reuse. |
 | `xtask/src/foundation_write.rs` | Create opt-in ext4 work images and retain six QEMU write/build/reboot/virtio-failure sessions and host checks. |
 | `docs/en/validation/M16.4.md` | Specify the controlled ext4 write-v1 contract, failures and independently checked local evidence. |
@@ -558,3 +558,38 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `docs/zh-CN/validation/M17.5.md` | Translate the executed graphical build, concurrency and recovery acceptance. |
 | `docs/assets/validation/M17_MONITOR_LOCAL.json` | Retain exact resource and recovery logs with decoded hashes and scanout fingerprints. |
 | `docs/assets/validation/M17_WORKFLOW_LOCAL.json` | Retain compiler workflow measurements, input identities and relevant raw transcripts. |
+
+## M18 compiler and boot-image reconstruction
+
+| File | Purpose |
+| --- | --- |
+| `docs/en/milestones/M18_BOOTSTRAP.md` | Define the independent compiler, guest image construction and repeat/recovery gates. |
+| `docs/zh-CN/milestones/M18_BOOTSTRAP.md` | Translate reconstruction inputs, budgets, evidence boundaries and exits. |
+| `docs/en/validation/M18.1.md` | Record the guest GCC first stage, actual C/C++ and reboot results, and retained failures. |
+| `docs/zh-CN/validation/M18.1.md` | Translate the guest GCC first-stage, application and reboot evidence. |
+| `docs/en/validation/M18.2.md` | Record LLVM/Rust/Cargo component execution and distinguish host, seed and guest evidence. |
+| `docs/zh-CN/validation/M18.2.md` | Translate LLVM/Rust/Cargo component results, source inputs and independent prerequisites. |
+| `docs/en/validation/M18.3.md` | Record host writer checks and separate guest image construction, extraction, boot and recovery evidence. |
+| `docs/zh-CN/validation/M18.3.md` | Translate independent host and guest image results and their acceptance boundaries. |
+| `docs/en/validation/M18.4.md` | Track exact M18 artifact comparison and repeat/recovery scope per component. |
+| `docs/zh-CN/validation/M18.4.md` | Translate repeat/recovery evidence and component-specific limits. |
+| `docs/assets/validation/M18_IMAGE_LOCAL.json` | Preserve verified image, extraction and six-boot recovery records with artifact identities and raw logs. |
+| `docs/assets/validation/M18_LLVM_LOCAL.json` | Preserve the verified LLVM source closure, exact outputs and four-boot build/failure/recovery logs. |
+| `user/linux/busybox-bootstrap.config` | Select the static BusyBox applets specific to the M18 GCC configure profile. |
+| `ports/bootstrap/m18_gcc_source.py` | Verify the source archive and stage only the declared unmodified GCC build-entry files. |
+| `ports/bootstrap/m18_arithmetic.py` | Build and authenticate the locked Linux-musl arithmetic headers, static archives and notices on the host. |
+| `tests/guest/m18/posix.sh` | Exercise actual applet output, errors, rename replacement and current link-creation boundaries. |
+| `tests/guest/m18/arithmetic.c` | Link and exercise actual GMP, MPFR and MPC operations through inherited guest GCC. |
+| `tests/guest/m18/exec_bounds.c` | Exercise Linux exec byte and entry limits, initial stack layout and the measured shell operand size. |
+| `tests/guest/m18/gcc_configure.sh` | Keep negative dependency logs and run the unmodified GCC configure and single-job make entry. |
+| `tests/guest/m18/gcc_stage1.sh` | Verify the built GCC and G++ drivers, frontends, C/C++ execution, rejection and fresh-boot recovery. |
+| `tests/guest/m18/stage1.c` | Exercise static musl linking and check exact C output and exit status. |
+| `tests/guest/m18/stage1.cpp` | Exercise static libstdc++ linking and check exact C++ output and exit status. |
+| `xtask/src/m18_gcc.rs` | Set budgets, drive guest build and fresh reboot, and retain diagnostics and selected GCC artifact identities. |
+| `ports/bootstrap/image-build.c` | Stream the bounded guest-built UEFI/Limine ISO from explicitly supplied inputs and control publication. |
+| `ports/bootstrap/test_image_build.py` | Check image writer bytes, independent ISO extraction and negative host fixtures. |
+| `xtask/src/m18_image.rs` | Verify retained guest-kernel evidence, drive separate image construction and boot checks, and retain proofs. |
+| `ports/bootstrap/m18_llvm.py` | Authenticate the release archive and select the audited standalone demangle sources. |
+| `tests/guest/m18/llvm_demangle.cpp` | Exercise the guest-built demangle archive across the selected supported symbol families and an invalid name. |
+| `tests/guest/m18/llvm_demangle.sh` | Compile the upstream demangle sources, link and run the fixture, and retain original failures. |
+| `xtask/src/m18_llvm.rs` | Run the bounded guest LLVM component build, compare clean rounds and retain recovery evidence. |

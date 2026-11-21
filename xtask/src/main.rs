@@ -31,6 +31,9 @@ mod gui_sdk;
 mod gui_sdk_build;
 mod input;
 mod linux;
+mod m18_gcc;
+mod m18_image;
+mod m18_llvm;
 mod network;
 mod packages;
 mod pty_terminal;
@@ -230,6 +233,8 @@ fn execute() -> Result<()> {
             | "ext4-journal-image"
             | "ext4-image"
             | "ext4-migrate"
+            | "m18-gcc-test"
+            | "m18-image-test"
     ) && args.len() > 1
     {
         return Err("Unexpected arguments; run cargo xtask help".into());
@@ -405,6 +410,9 @@ fn execute() -> Result<()> {
         "bootstrap-prepare" => bootstrap::prepare(&root).map(|_| ()),
         "bootstrap-test" => bootstrap::verify(&root),
         "bootstrap-gcc-test" => bootstrap_gcc::verify(&root),
+        "m18-gcc-test" => m18_gcc::verify(&root, &args[1..]),
+        "m18-image-test" => m18_image::verify(&root, &args[1..]),
+        "m18-llvm-test" => m18_llvm::verify(&root),
         "bootstrap-rust-test" => bootstrap_rust::verify(&root),
         "bootstrap-kernel-test" => bootstrap_kernel::verify(&root),
         "bootstrap-repeat-test" => bootstrap_repeat::verify(&root),
@@ -551,7 +559,7 @@ fn execute() -> Result<()> {
         }
         "help" | "--help" | "-h" => {
             println!(
-                "AnovaOS host tools\n\n  cargo xtask doctor\n  cargo xtask fetch\n  cargo xtask build\n  cargo xtask image\n  cargo xtask run [--graphics | --gui | --gui-sdk | --desktop] [--network] [--toolchain | --rust] [--disk build/disks/NAME.ext2]\n  cargo xtask smoke [--case CASE] [--timeout-secs 1..300]\n  cargo xtask verify\n  cargo xtask test-host\n  cargo xtask test-compat\n  cargo xtask trace-compat\n  cargo xtask apps\n  cargo xtask check-apps\n  cargo xtask check-files\n  cargo xtask network-test\n  cargo xtask package-test\n  cargo xtask sdk\n  cargo xtask app-new <c|cpp|rust> PROJECT\n  cargo xtask app-build PROJECT\n  cargo xtask app-pack MANIFEST OUTPUT\n  cargo xtask app-image PACKAGE SHA256\n  cargo xtask app-run PACKAGE SHA256 [--disk build/disks/NAME.ext2]\n  cargo xtask app-test\n  cargo xtask sdk-test\n  cargo xtask package-v2-test\n  cargo xtask diagnostics-test\n  cargo xtask symbolize ELF [--base 0xBIAS] ADDRESS... | --log LOG [--pid PID]\n  cargo xtask toolchain-build\n  cargo xtask toolchain-image\n  cargo xtask toolchain-test\n  cargo xtask bootstrap-prepare\n  cargo xtask bootstrap-test\n  cargo xtask bootstrap-gcc-test\n  cargo xtask bootstrap-rust-test\n  cargo xtask bootstrap-kernel-test\n  cargo xtask bootstrap-repeat-test\n  cargo xtask rust-build\n  cargo xtask rust-image\n  cargo xtask rust-cross-test\n  cargo xtask rust-runtime-test\n  cargo xtask rust-test\n  cargo xtask rust-online-test\n  cargo xtask rust-public-test\n  cargo xtask terminal-test\n  cargo xtask root-image [--linux] build/disks/NAME.ext2\n  cargo xtask persistence-test\n  cargo xtask foundation-test\n  cargo xtask foundation-write-test\n  cargo xtask foundation-journal-test\n  cargo xtask foundation-migrate-test\n  cargo xtask foundation-capacity-test\n  cargo xtask ext4-journal-image [--linux] build/disks/NAME.ext4\n  cargo xtask ext4-migrate build/disks/SOURCE.ext2 build/disks/NEW.ext4\n  cargo xtask ext4-image [--linux] build/disks/NAME.ext4\n  cargo xtask run --ext4-write [--toolchain] --disk build/disks/NAME.ext4\n  cargo xtask graphics-image\n  cargo xtask graphics-test\n  cargo xtask gpu-test\n  cargo xtask gpu-fallback-test\n  cargo xtask input-test\n  cargo xtask desktop-build\n  cargo xtask desktop-image\n  cargo xtask desktop-development-image\n  cargo xtask desktop-test\n  cargo xtask desktop-monitor-test\n  cargo xtask desktop-workflow-test [--case c|cpp|rust]\n  cargo xtask desktop-build-test\n  cargo xtask desktop-files-test\n  cargo xtask desktop-files-fault-test [--case NAME]\n  cargo xtask desktop-pty-test [--without-toolchain]\n  cargo xtask terminal-image [--toolchain]\n  cargo xtask run --desktop [--toolchain | --rust] [--disk build/disks/work.ext4]\n  cargo xtask gui-image\n  cargo xtask gui-test\n  cargo xtask gui-sdk\n  cargo xtask gui-sdk-image\n  cargo xtask gui-sdk-test\n  cargo xtask gui-sdk-replay\n\nCASE: boot, ioapic-id-mismatch, panic, timeout, invalid-opcode, general-protection, page-fault, double-fault, stack-guard, read-only, no-execute, direct-no-execute, unmapped, oom.\nOutputs stay in build/; run uses disposable OVMF variables and a temporary data disk unless --disk is explicit. Use guest shutdown for persistent images. TCG is mandatory."
+                "AnovaOS host tools\n\n  cargo xtask doctor\n  cargo xtask fetch\n  cargo xtask build\n  cargo xtask image\n  cargo xtask run [--graphics | --gui | --gui-sdk | --desktop] [--network] [--toolchain | --rust] [--disk build/disks/NAME.ext2]\n  cargo xtask smoke [--case CASE] [--timeout-secs 1..300]\n  cargo xtask verify\n  cargo xtask test-host\n  cargo xtask test-compat\n  cargo xtask trace-compat\n  cargo xtask apps\n  cargo xtask check-apps\n  cargo xtask check-files\n  cargo xtask network-test\n  cargo xtask package-test\n  cargo xtask sdk\n  cargo xtask app-new <c|cpp|rust> PROJECT\n  cargo xtask app-build PROJECT\n  cargo xtask app-pack MANIFEST OUTPUT\n  cargo xtask app-image PACKAGE SHA256\n  cargo xtask app-run PACKAGE SHA256 [--disk build/disks/NAME.ext2]\n  cargo xtask app-test\n  cargo xtask sdk-test\n  cargo xtask package-v2-test\n  cargo xtask diagnostics-test\n  cargo xtask symbolize ELF [--base 0xBIAS] ADDRESS... | --log LOG [--pid PID]\n  cargo xtask toolchain-build\n  cargo xtask toolchain-image\n  cargo xtask toolchain-test\n  cargo xtask bootstrap-prepare\n  cargo xtask bootstrap-test\n  cargo xtask bootstrap-gcc-test\n  cargo xtask bootstrap-rust-test\n  cargo xtask bootstrap-kernel-test\n  cargo xtask bootstrap-repeat-test\n  cargo xtask m18-gcc-test [--entry]\n  cargo xtask m18-llvm-test\n  cargo xtask m18-image-test REPORT GUEST_ELF\n  cargo xtask rust-build\n  cargo xtask rust-image\n  cargo xtask rust-cross-test\n  cargo xtask rust-runtime-test\n  cargo xtask rust-test\n  cargo xtask rust-online-test\n  cargo xtask rust-public-test\n  cargo xtask terminal-test\n  cargo xtask root-image [--linux] build/disks/NAME.ext2\n  cargo xtask persistence-test\n  cargo xtask foundation-test\n  cargo xtask foundation-write-test\n  cargo xtask foundation-journal-test\n  cargo xtask foundation-migrate-test\n  cargo xtask foundation-capacity-test\n  cargo xtask ext4-journal-image [--linux] build/disks/NAME.ext4\n  cargo xtask ext4-migrate build/disks/SOURCE.ext2 build/disks/NEW.ext4\n  cargo xtask ext4-image [--linux] build/disks/NAME.ext4\n  cargo xtask run --ext4-write [--toolchain] --disk build/disks/NAME.ext4\n  cargo xtask graphics-image\n  cargo xtask graphics-test\n  cargo xtask gpu-test\n  cargo xtask gpu-fallback-test\n  cargo xtask input-test\n  cargo xtask desktop-build\n  cargo xtask desktop-image\n  cargo xtask desktop-development-image\n  cargo xtask desktop-test\n  cargo xtask desktop-monitor-test\n  cargo xtask desktop-workflow-test [--case c|cpp|rust]\n  cargo xtask desktop-build-test\n  cargo xtask desktop-files-test\n  cargo xtask desktop-files-fault-test [--case NAME]\n  cargo xtask desktop-pty-test [--without-toolchain]\n  cargo xtask terminal-image [--toolchain]\n  cargo xtask run --desktop [--toolchain | --rust] [--disk build/disks/work.ext4]\n  cargo xtask gui-image\n  cargo xtask gui-test\n  cargo xtask gui-sdk\n  cargo xtask gui-sdk-image\n  cargo xtask gui-sdk-test\n  cargo xtask gui-sdk-replay\n\nCASE: boot, ioapic-id-mismatch, panic, timeout, invalid-opcode, general-protection, page-fault, double-fault, stack-guard, read-only, no-execute, direct-no-execute, unmapped, oom.\nOutputs stay in build/; run uses disposable OVMF variables and a temporary data disk unless --disk is explicit. Use guest shutdown for persistent images. TCG is mandatory."
             );
             Ok(())
         }
@@ -841,6 +849,20 @@ fn image_preserved(root: &Path, kernel: &Path, archive: &Path, name: &str) -> Re
     image_contents(root, kernel, Some(archive), name)
 }
 
+fn limine_boot_config(root: &Path) -> Result<String> {
+    let mut config = fs::read_to_string(root.join("boot/limine.conf"))?;
+    for name in apps::NAMES {
+        config.push_str(&format!(
+            "    module_path: boot():/boot/apps/{name}.elf\n    module_string: {}:{name}\n",
+            anova_abi::PERSONALITY
+        ));
+    }
+    config.push_str(
+        "    module_path: boot():/boot/initramfs.anovafs\n    module_string: anova.initramfs.v1\n",
+    );
+    Ok(config)
+}
+
 fn image_contents(
     root: &Path,
     kernel: &Path,
@@ -859,16 +881,11 @@ fn image_contents(
     fs::create_dir_all(stage.0.join("EFI/BOOT"))?;
     fs::copy(kernel, stage.0.join("boot/kernel.elf"))?;
     fs::create_dir_all(stage.0.join("boot/apps"))?;
-    let mut config = fs::read_to_string(root.join("boot/limine.conf"))?;
     for name in apps::NAMES {
         fs::copy(
             root.join("build/apps").join(format!("{name}.elf")),
             stage.0.join(format!("boot/apps/{name}.elf")),
         )?;
-        config.push_str(&format!(
-            "    module_path: boot():/boot/apps/{name}.elf\n    module_string: {}:{name}\n",
-            anova_abi::PERSONALITY
-        ));
     }
     fs::copy(
         root.join("build/apps/manifest.toml"),
@@ -881,10 +898,10 @@ fn image_contents(
         ),
         stage.0.join("boot/initramfs.anovafs"),
     )?;
-    config.push_str(
-        "    module_path: boot():/boot/initramfs.anovafs\n    module_string: anova.initramfs.v1\n",
-    );
-    fs::write(stage.0.join("boot/limine/limine.conf"), config)?;
+    fs::write(
+        stage.0.join("boot/limine/limine.conf"),
+        limine_boot_config(root)?,
+    )?;
     for (input, output) in [
         ("BOOTX64.EFI", "EFI/BOOT/BOOTX64.EFI"),
         ("limine-uefi-cd.bin", "boot/limine/limine-uefi-cd.bin"),
@@ -950,6 +967,7 @@ fn qemu_disk(
                 || name == "anova-bootstrap-rust.iso"
                 || name == "anova-bootstrap-kernel-seed.iso"
                 || name == "anova-bootstrap-kernel-guest.iso"
+                || name == "anova-m18-llvm.iso"
         }) {
             "3G"
         } else if iso.file_name().is_some_and(|name| {

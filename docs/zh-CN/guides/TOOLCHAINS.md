@@ -141,8 +141,9 @@ Rust/LLVM/Cargo、内核启动与重复比较/恢复。[M15.1/M15.2](../mileston
 [M15.4 Rust](../milestones/M15_RUST.md) 独立审计发行源码/LLVM/Cargo/vendor、发行要求的 stage0
 和依赖。Rust std/C++17 种子、工具 exec 失败和隔离离线 Cargo 依赖拒绝有
 [本地证据](../validation/M15.4.md)。没有重建 LLVM/rustc/Cargo；继承 Rust 1.90.0 不等于
-规定的 1.89.0 stage0。GCC 与 Rust/LLVM 重建仍受工具/依赖/容量阻塞；完整归档不是最小源码
-闭包，裁剪路线需重新评估。
+规定的 1.89.0 stage0。M15 探测记录了当时的工具、依赖和容量限制。
+[M18.1 证据](../validation/M18.1.md) 覆盖实测的 GCC/G++ 首阶段。其他编译器重建路线需要各自的
+实测源码闭包。
 
 [M15.5 内核](../milestones/M15_KERNEL.md) 使用继承裸机库、确切离线源码及实际 guest Cargo/
 rustc/rust-lld，宿主原样打包保留 ELF，不重建，比较 ISO 提取字节并验证启动/恢复。
@@ -164,14 +165,20 @@ rustc/rust-lld，宿主原样打包保留 ELF，不重建，比较 ISO 提取字
 [GUI SDK](../../../sdk/gui/README.zh-CN.md) 已本地验收，通过独立 `anova.gui.v1` 库 ABI
 使用相同 native 应用 personality。
 
-## 9. 计划中的资源、桌面与自举顺序
+## 9. 资源、桌面与自举顺序
 
 [路线图](../ROADMAP.md) 将 [M16 资源/VFS/ext4](../milestones/M16_FOUNDATION.md) 安排在
-[M17 开发桌面](../milestones/M17_DESKTOP.md) 之前，随后有条件推进 M18 编译器/镜像工作。
-这些阶段均未实现。先恢复经校验的 CI 输入获取和后续工具链执行，再在扩容工作空间上
-验证选定 POSIX 工具和真实构建负载，保留现有编译器种子和门禁。
+[M17 开发桌面](../milestones/M17_DESKTOP.md) 之前，随后有条件推进
+[M18 编译器/镜像工作](../milestones/M18_BOOTSTRAP.md)。声明的 M16 本地和 M17 桌面配置证据
+见 [STATUS](STATUS.md)，M16 远端收尾仍暂缓。
 
 M17 使用已验收的 GCC/G++ 与 Rust/Cargo，不要求先重建它们。原生 GUI 与 Linux-musl
 编译器/shell 进程仍需显式准入和已测试的 PTY 桥接。原生 std、重建编译器和 guest 独立
-启动镜像各自独立。M18 必须重新评估每个源码闭包、数学库依赖、构建工具、发行要求的
-stage0 和离线 vendor 条件；旧 M15 评估不是新的构建证据。
+启动镜像各自独立。M18.1 门禁使用现有 GCC/G++、binutils 和 GNU make，沿原始 GCC configure
+和 `all-gcc` 构建锁定的 C/C++ 源码与生成器。验收要求重建的驱动和前端通过继承的 `/tc` sysroot
+编译、链接并运行两种语言。锁文件和审计区分源码输入、宿主构建的算术库和继承工具。
+Rust 指定 stage0 和 LLVM/rustc/Cargo 离线闭包分别验收。
+
+`m18-llvm-test` 已对锁定 LLVM fork 的 `LLVMDemangle` 保留单独本地验收。
+Guest G++ 11.2.0 和 binutils 编译并归档指定的六个 C++17 单元，链接独立静态夹具。
+独立产物和重启证据仅覆盖该库。见 [M18.2](../validation/M18.2.md)。
