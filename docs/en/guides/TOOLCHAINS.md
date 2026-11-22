@@ -159,8 +159,9 @@ and utilities, tests inherited C++11, missing headers/tools, configure startup a
 release-specific stage0 and dependencies. Actual Rust std/C++17 seeds, tool exec failures and an
 isolated offline Cargo dependency rejection have [local evidence](../validation/M15.4.md).
 No LLVM/rustc/Cargo component is rebuilt; inherited Rust 1.90.0 is separate from prescribed 1.89.0 stage0.
-GCC and Rust/LLVM compiler reconstruction remain blocked on measured tools/dependencies/capacity.
-Full archives are not minimum source closures; any pruned build route needs a new assessment.
+The M15 probes recorded tool, dependency and capacity limits at that milestone. The
+[M18.1 evidence](../validation/M18.1.md) covers the measured GCC/G++ first stage.
+Any additional compiler build route needs its own measured source closure.
 
 [M15.5 kernel](../milestones/M15_KERNEL.md) uses inherited bare-metal libraries, exact offline
 sources and actual guest Cargo/rustc/rust-lld. The host packages the retained ELF without rebuilding,
@@ -188,16 +189,24 @@ Native SDK export is not a native libc/std port or compiler-bootstrap proof. M14
 versioned [GUI SDK](../../../sdk/gui/README.md) is locally accepted and uses the same native
 application personality through the independent `anova.gui.v1` library ABI.
 
-## 9. Planned resource, desktop and self-hosting order
+## 9. Resource, desktop and self-hosting order
 
 The [roadmap](../ROADMAP.md) now schedules [M16 resources/VFS/ext4](../milestones/M16_FOUNDATION.md)
-before [M17 development desktop](../milestones/M17_DESKTOP.md), followed by conditional M18
-compiler/image work. These stages are unimplemented. First recover checksum-verified CI input
-acquisition and downstream toolchain execution. Then validate selected POSIX utilities and
-real build workloads on the expanded workspace, preserving existing compiler seeds and gates.
+before [M17 development desktop](../milestones/M17_DESKTOP.md), followed by conditional
+[M18 compiler/image work](../milestones/M18_BOOTSTRAP.md). The declared M16 local and M17
+desktop profiles have evidence in [STATUS](STATUS.md). M16 remote closeout remains deferred.
 
 M17 uses already accepted GCC/G++ and Rust/Cargo; it does not require rebuilding them.
 Native GUI and Linux-musl compiler/shell processes still need explicit admission and a tested
 PTY bridge. Native std, reconstructed compilers and guest-only boot images remain separate.
-M18 must reassess each source closure, arithmetic dependencies, build tools, prescribed stage0
-and offline vendor requirements; old M15 assessments are not new construction evidence.
+The M18.1 gate uses existing GCC/G++, binutils and GNU make to build locked C/C++
+sources and generators through the original GCC configure and `all-gcc`. Acceptance
+requires the rebuilt drivers and frontends to compile, link and run both languages
+with the inherited `/tc` sysroot. The lock and audit distinguish source inputs,
+host-built arithmetic libraries and the inherited tools. Rust stage0 and the
+LLVM/rustc/Cargo offline closures have independent exits.
+
+`m18-llvm-test` provides separate local acceptance for `LLVMDemangle` from the
+locked LLVM fork. Guest G++ 11.2.0 and binutils compile and archive the six selected
+C++17 units and link a standalone static fixture. The independent output and reboot
+evidence is scoped to that library. See [M18.2](../validation/M18.2.md).

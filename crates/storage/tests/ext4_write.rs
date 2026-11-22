@@ -526,6 +526,53 @@ fn fragmented_external_extents_unwritten_conversion_and_tree_reuse_pass_fsck() {
 }
 
 #[test]
+fn sparse_output_keeps_extent_leaves_in_place_during_sequential_writes() {
+    let f = Fixture::new();
+    let mut fs = f.mount();
+    let n = fs.create(2, "link-output", false).unwrap();
+    let sparse_start = 24 * 1024 * 1024;
+    for i in 0..5 {
+        fs.write(n, sparse_start + 2 * i * BLOCK, &[i as u8 + 1])
+            .unwrap();
+    }
+    // Five disjoint mappings already require an external leaf. Each separate write starts
+    // a new allocation transaction, as it does for a linker writing through the guest VFS.
+    const STREAM_BLOCKS: usize = 1040;
+    let payload = [0xa5; BLOCK];
+    for logical in 0..STREAM_BLOCKS {
+        assert_eq!(
+            fs.write(n, logical * BLOCK, &payload),
+            Ok(BLOCK),
+            "Sequential linker output failed at block {logical}"
+        );
+    }
+    fs.shutdown().unwrap();
+    drop(fs);
+    f.clean();
+
+    let mut fs = f.mount();
+    assert_eq!(fs.inode(n).unwrap().size, sparse_start + 8 * BLOCK + 1);
+    let mut actual = [0; BLOCK];
+    for offset in [0, (STREAM_BLOCKS - 1) * BLOCK] {
+        assert_eq!(fs.read(n, offset, &mut actual), Ok(BLOCK));
+        assert_eq!(actual, payload);
+    }
+    assert_eq!(fs.read(n, STREAM_BLOCKS * BLOCK, &mut actual), Ok(BLOCK));
+    assert_eq!(actual, [0; BLOCK]);
+    for i in 0..5 {
+        assert_eq!(
+            fs.read(n, sparse_start + 2 * i * BLOCK, &mut actual[..1]),
+            Ok(1)
+        );
+        assert_eq!(actual[0], i as u8 + 1);
+    }
+    fs.resize(n, STREAM_BLOCKS * BLOCK).unwrap();
+    fs.shutdown().unwrap();
+    drop(fs);
+    f.clean();
+}
+
+#[test]
 fn stage_limit_and_shutdown_clean_marker_flush_failure_are_reported() {
     let f = Fixture::new();
     let mut fs = f.mount();

@@ -38,7 +38,7 @@ still requires corresponding drivers. See [STATUS](guides/STATUS.md),
 | M15 | Optional source/kernel bootstrap | M11–M13 and measured resources | bzip2/kernel/repeats accepted; compiler assessment complete, reconstruction blocked |
 | M16 | Resources, backend-independent VFS and controlled ext4 | Existing storage/runtime; restored CI and measured budgets | Partial: backend/cache and controlled ext4 readonly verified locally; opt-in writes, JBD2 and migration/build/UART gates accepted locally; ext4 kernel capacity/recovery accepted locally; complete remote CI pending |
 | M17 | Usable development desktop and GUI-only app workflow | M16 accepted workspace/resources; M9/M14 and inherited tools | M17.1–M17.3 locally accepted within declared profiles, including real GUI storage faults; M17.4 monitor and M17.5 ten-boot developer profiles locally accepted. M18 compiler reconstruction is separate |
-| M18 | Conditional compiler reconstruction and guest-only images | Measured component prerequisites after M16/M17 | Planned; each component accepted independently |
+| M18 | Conditional compiler reconstruction and guest-only images | Measured component prerequisites after M16/M17 | Standalone `LLVMDemangle` and bounded guest UEFI optical generation locally accepted. Full compiler and repeat profiles remain open. |
 
 Independent work may proceed in parallel, without skipping actual prerequisites.
 Networking, desktop graphics and complete bootstrap do not block first offline app development.
@@ -476,17 +476,23 @@ COM1/QEMU/host recovery. Screenshots alone do not establish the workflow.
 
 ## M18: conditional self-hosting
 
-This is a **planned follow-up**, not a claim that M15's blocked compiler goals are complete.
-Continue the original evidence contracts after M16/M17, independently for each route:
+Development has started on `feat/m18-bootstrap` from `dev`. Continue the original evidence
+contracts after M16/M17, independently for each [M18 route](milestones/M18_BOOTSTRAP.md).
 
-- [ ] M18.1: reassess a declared GCC source closure, POSIX tools and GMP/MPFR/MPC inputs;
-  construct one viable stage, test actual applications, then decide whether stage2/stage3 is justified.
+- [x] M18.1 first-stage profile: original GCC configure and `all-gcc` completed in AnovaOS.
+  The guest-built GCC/G++ 11.2.0 compiled, linked and ran C and C++ on the checkpointed
+  KVM path. Reboot retention passed. The independent clean TCG run reached its build
+  watchdog. Stage2/stage3 have separate acceptance. [Evidence](validation/M18.1.md)
 - [ ] M18.2: independently scope LLVM, rustc and Cargo, including working build utilities,
-  selected prescribed stage0 and offline dependency closure; identify every inherited component.
-- [ ] M18.3: generate a bootable image inside AnovaOS from the retained guest-built kernel;
-  compare packaged bytes and boot identity, documenting any remaining host participation.
+  prescribed stage0, offline dependency closure and inherited components. The standalone
+  `LLVMDemangle` library passed its four-boot guest profile. [Evidence](validation/M18.2.md)
+- [x] M18.3 base profile: generate a UEFI optical image inside AnovaOS from the retained
+  guest-built non-GUI kernel. Both local builds, extracted bytes, actual boot identity,
+  cancellation, publication failure and storage recovery passed. [Evidence](validation/M18.3.md)
 - [ ] M18.4: repeat accepted component builds from clean workspaces and test failure/reboot
   recovery, preserving previous tools and kernels and all observed artifact differences.
+  The base image and `LLVMDemangle` repeat/recovery profiles each passed within their declared
+  scenarios. [Evidence](validation/M18.4.md)
 
 M18.3 may use existing guest compilers without waiting for M18.1/M18.2. If a compiler route is
 still infeasible, retain the assessment and blocker; do not mark construction accepted.

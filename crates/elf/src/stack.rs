@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Encode native/Linux startup blocks once, with checked downward string and word placement.
+//! Match the Linux exec decoder's string and entry bounds while retaining native ABI limits.
 use crate::Error;
-use anova_abi::UserAddr;
+use anova_abi::{
+    UserAddr,
+    linux::strings::{EXEC_STRING_BYTES, VECTOR_LIMIT},
+};
 
 const PAGE_BYTES: usize = 4096;
-const STRING_LIMIT: usize = 256;
-const STRING_BYTES: usize = 1023;
+const NATIVE_ARG_LIMIT: usize = 64;
+const NATIVE_STRING_BYTES: usize = 1023;
 
 struct StackPage<'a> {
     page: &'a mut [u8],
@@ -36,13 +40,17 @@ impl<'a> StackPage<'a> {
         self.cursor = start;
         Ok(self.base + start as u64)
     }
-    fn strings(&mut self, strings: &[&str]) -> Result<[u64; STRING_LIMIT], Error> {
-        if strings.len() > STRING_LIMIT {
+    fn strings<const LIMIT: usize>(
+        &mut self,
+        strings: &[&str],
+        max_string_bytes: usize,
+    ) -> Result<[u64; LIMIT], Error> {
+        if strings.len() > LIMIT {
             return Err(Error::Arguments);
         }
-        let mut pointers = [0; STRING_LIMIT];
+        let mut pointers = [0; LIMIT];
         for (index, string) in strings.iter().enumerate().rev() {
-            if string.len() > STRING_BYTES || string.as_bytes().contains(&0) {
+            if string.len() > max_string_bytes || string.as_bytes().contains(&0) {
                 return Err(Error::Arguments);
             }
             self.bytes(&[0])?;
@@ -70,11 +78,11 @@ impl<'a> StackPage<'a> {
 }
 
 pub fn build(args: &[&str], page: &mut [u8], top: u64) -> Result<u64, Error> {
-    if args.is_empty() || args.len() > 64 {
+    if args.is_empty() || args.len() > NATIVE_ARG_LIMIT {
         return Err(Error::Arguments);
     }
     let mut stack = StackPage::new(page, top)?;
-    let argv = stack.strings(args)?;
+    let argv = stack.strings::<NATIVE_ARG_LIMIT>(args, NATIVE_STRING_BYTES)?;
     stack.finish(&argv[..args.len()], &[], &[])
 }
 
@@ -114,8 +122,8 @@ pub fn build_linux_interpreter(
         return Err(Error::Arguments);
     }
     let mut stack = StackPage::new(page, top)?;
-    let argv = stack.strings(args)?;
-    let envp = stack.strings(env)?;
+    let argv = stack.strings::<VECTOR_LIMIT>(args, EXEC_STRING_BYTES)?;
+    let envp = stack.strings::<VECTOR_LIMIT>(env, EXEC_STRING_BYTES)?;
     let random = stack.bytes(&random)?;
     let auxv = [
         (3, image.phdr),
@@ -162,6 +170,81 @@ mod tests {
         assert!(build(&["bad\0arg"], &mut bytes, top).is_err());
         assert!(build(&["hello"], &mut bytes, 0).is_err());
     }
+
+    #[test]
+    fn linux_exec_string_limit_is_separate_from_native_and_total_stack_bounds() {
+        let image = crate::Image {
+            entry: 0x401000,
+            phdr: 0x400040,
+            phnum: 7,
+            segments: [crate::Segment::default(); crate::MAX_SEGMENTS],
+            count: 0,
+        };
+        let top = anova_abi::STACK_TOP;
+        let mut page = [0; 32768];
+        let exact = "x".repeat(EXEC_STRING_BYTES);
+        let too_long = "x".repeat(EXEC_STRING_BYTES + 1);
+        let rsp = build_linux_env(&[&exact], &[&exact], &mut page, top, &image, [0; 16]).unwrap();
+        let base = top - page.len() as u64;
+        let offset = (rsp - base) as usize;
+        for index in [1, 3] {
+            let start = offset + index * 8;
+            let address = u64::from_le_bytes(page[start..start + 8].try_into().unwrap());
+            let start = (address - base) as usize;
+            assert_eq!(&page[start..start + EXEC_STRING_BYTES], exact.as_bytes());
+            assert_eq!(page[start + EXEC_STRING_BYTES], 0);
+        }
+        assert_eq!(
+            build_linux_env(&[&too_long], &[], &mut page, top, &image, [0; 16]),
+            Err(Error::Arguments)
+        );
+        assert_eq!(
+            build_linux_env(&["app"], &[&too_long], &mut page, top, &image, [0; 16]),
+            Err(Error::Arguments)
+        );
+        // Four strings, 16 random bytes, and 35 words including the 14 auxv pairs.
+        let tail_bytes = (page.len() - 4 - 16 - 35 * 8) / 2 - exact.len();
+        let tail = "y".repeat(tail_bytes);
+        let longer_tail = "y".repeat(tail_bytes + 1);
+        let args = [exact.as_str(), tail.as_str()];
+        assert_eq!(
+            build_linux_env(&args, &args, &mut page, top, &image, [0; 16]),
+            Ok(base)
+        );
+        assert_eq!(
+            build_linux_env(
+                &args,
+                &[&exact, &longer_tail],
+                &mut page,
+                top,
+                &image,
+                [0; 16]
+            ),
+            Err(Error::Arguments)
+        );
+
+        let native = "x".repeat(NATIVE_STRING_BYTES + 1);
+        assert!(build(&[&native[..NATIVE_STRING_BYTES]], &mut page, top).is_ok());
+        assert_eq!(build(&[&native], &mut page, top), Err(Error::Arguments));
+
+        let entries = [""; VECTOR_LIMIT];
+        let overflow = [""; VECTOR_LIMIT + 1];
+        assert!(build_linux_env(&entries, &entries, &mut page, top, &image, [0; 16]).is_ok());
+        assert_eq!(
+            build_linux_env(&overflow, &[], &mut page, top, &image, [0; 16]),
+            Err(Error::Arguments)
+        );
+        assert_eq!(
+            build_linux_env(&["app"], &overflow, &mut page, top, &image, [0; 16]),
+            Err(Error::Arguments)
+        );
+        assert!(build(&entries[..NATIVE_ARG_LIMIT], &mut page, top).is_ok());
+        assert_eq!(
+            build(&entries[..NATIVE_ARG_LIMIT + 1], &mut page, top),
+            Err(Error::Arguments)
+        );
+    }
+
     #[test]
     fn linux_stack_encodes_environment_auxv_random_and_bounded_overflow() {
         let image = crate::Image {

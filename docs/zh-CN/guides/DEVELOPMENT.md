@@ -519,3 +519,25 @@ PTY/任务/FD 耗尽、用户复制保留、进程族清理和旧身份拒绝。
 执行 `cargo xtask rust-build` 后，`cargo xtask run --desktop --rust --disk build/disks/development.ext4`
 加入 GCC 和 Rust 工具。桌面流程门禁保存每轮 UART、TCP-QMP、精确产物和实际画面。
 详见[工作流程](../milestones/M17_WORKFLOW.md)与[验收](../validation/M17.5.md)。
+
+## M18 GCC 第一阶段检查
+
+使用 `cargo xtask toolchain-build` 准备受检 M11 工具，再从仓库根目录运行
+`cargo xtask m18-gcc-test`。镜像/工作盘门禁共享构建输出，应顺序执行。门禁准备 BusyBox 和
+锁定的算术开发输入，在新建 ext4 盘上放入选定的 C/C++ 发行源码，运行原始上游 configure 和
+`all-gcc`。`--entry` 单独执行缺源和递归入口诊断。每轮的源码清单、日志和工作盘保留在
+`build/m18-gcc-*`。预算和解释见 [M18](../milestones/M18_BOOTSTRAP.md)。
+M15 的 `bootstrap-gcc-test`、`bootstrap-rust-test`、`bootstrap-kernel-test`
+及 `bootstrap-repeat-test` 继续遵守原契约。
+
+## M18 独立 LLVM 库和 guest 光盘镜像
+
+`cargo xtask m18-llvm-test` 使用 M11 工具及校验锁定的 Rust 发行源码，准备独立
+`LLVMDemangle` 源码并检查 guest 构建的归档及链接后可执行文件。精确依赖与产物范围见
+[M18.2](../validation/M18.2.md)。
+
+`cargo xtask m18-image-test REPORT GUEST_ELF` 使用保留的 M16 容量报告和对应受检 guest
+内核。新的本地容量运行写出 `build/logs/foundation-capacity.result.json` 和对应的
+`build/foundation/capacity-*/guest-kernel.elf`，应保留相互匹配的报告及 ELF。
+镜像门禁导出 guest 生成的 ISO，并验证提取字节、真实启动和恢复，最终打包在 guest 中完成。
+已验收的源码/种子身份及保留路径见 [M18.3](../validation/M18.3.md)。

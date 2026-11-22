@@ -7,7 +7,7 @@ This index covers matching English and Simplified Chinese designs, development g
 
 Planned follow-ups are M16 resources/VFS/ext4, M17 development desktop and conditional M18
 self-hosting. M16 now has a locally verified backend/cache and controlled ext4 readonly slice.
-Controlled writes, JBD2 recovery, migration and the declared kernel capacity have local evidence; remote CI is pending. M17.1 has bounded local five-boot QEMU acceptance for physical input, fault/restart lifecycle, resource reuse and retained work. M17.2 now has real PTY/GCC/reboot acceptance; M17.3 now has local file/editor and real GUI storage-fault acceptance; M17.4 batch one is locally accepted; M17.4 resources, task controls and service recovery passed a dedicated local QEMU profile. M17.5 passed its ten-boot graphical C/C++/Rust build, concurrency and recovery gate. M18 remains conditional.
+Controlled writes, JBD2 recovery, migration and the declared kernel capacity have local evidence. Remote CI remains pending. M17 has local acceptance for the declared desktop profiles, including the ten-boot graphical C/C++/Rust build, concurrency and recovery gate. [M18](milestones/M18_BOOTSTRAP.md) starts with a separate GCC build-entry profile and independent compiler/image exits.
 
 [Project README](../../README.md) · [Development rules](../../AGENTS.md) · [Current status](guides/STATUS.md) · [Roadmap](ROADMAP.md)
 
@@ -53,6 +53,7 @@ Controlled writes, JBD2 recovery, migration and the declared kernel capacity hav
 - [M17_FILES.md](milestones/M17_FILES.md)
 - [M17_BUILD.md](milestones/M17_BUILD.md)
 - [M17_WORKFLOW.md](milestones/M17_WORKFLOW.md)
+- [M18_BOOTSTRAP.md](milestones/M18_BOOTSTRAP.md)
 - [M2_CPU.md](milestones/M2_CPU.md)
 - [M3_MEMORY.md](milestones/M3_MEMORY.md)
 - [M4_USERSPACE.md](milestones/M4_USERSPACE.md)
@@ -91,6 +92,10 @@ These records retain their original dates, hashes and historical bounds. Documen
 - [M17.3.md](validation/M17.3.md)
 - [M17.4.md](validation/M17.4.md)
 - [M17.5.md](validation/M17.5.md)
+- [M18.1.md](validation/M18.1.md)
+- [M18.2.md](validation/M18.2.md)
+- [M18.3.md](validation/M18.3.md)
+- [M18.4.md](validation/M18.4.md)
 - [M2.md](validation/M2.md)
 - [M3.md](validation/M3.md)
 - [M4.md](validation/M4.md)

@@ -167,19 +167,25 @@ impl Kernel {
     ) -> Result<loader::Loaded, loader::LoadError> {
         let data = if personality == anova_abi::linux::PERSONALITY {
             match anova_elf::interpreter(bytes)? {
-                Some(path) => Some(self.fs.load_executable(ROOT, path).map_err(|error| {
-                    serial::write(format_args!(
-                        "[LINUX:INTERPRETER] path={path} errno={}\n",
-                        anova_abi::linux::errno(error)
-                    ));
-                    loader::LoadError::Interpreter(anova_abi::linux::errno(error))
-                })?),
+                Some(path) => Some(self.load_linux_interpreter(path)?),
                 None => None,
             }
         } else {
             None
         };
         loader::load_interpreter(bytes, personality, args, env, data.as_deref())
+    }
+    fn load_linux_interpreter(
+        &mut self,
+        path: &str,
+    ) -> Result<Cow<'static, [u8]>, loader::LoadError> {
+        self.fs.load_executable(ROOT, path).map_err(|error| {
+            let errno = anova_abi::linux::errno(error);
+            serial::write(format_args!(
+                "[LINUX:INTERPRETER] path={path} errno={errno}\n"
+            ));
+            loader::LoadError::Interpreter(errno)
+        })
     }
     fn process(&self, i: usize) -> &Process {
         self.processes[i].as_ref().expect("Missing process")
@@ -262,17 +268,25 @@ impl Kernel {
         }
     }
     fn executable(&mut self, i: usize, name: &str) -> Result<Cow<'static, [u8]>, i64> {
-        if name.contains('/') {
-            return self.fs.load_executable(self.process(i).cwd, name);
-        }
         let mut path = [0; 128];
+        let (cwd, path) = self.executable_path(i, name, &mut path)?;
+        self.fs.load_executable(cwd, path)
+    }
+    fn executable_path<'p>(
+        &self,
+        i: usize,
+        name: &'p str,
+        path: &'p mut [u8],
+    ) -> Result<(usize, &'p str), i64> {
+        if name.contains('/') {
+            return Ok((self.process(i).cwd, name));
+        }
         if name.len() + 5 > path.len() {
             return Err(TOO_LONG);
         }
         path[..5].copy_from_slice(b"/bin/");
         path[5..5 + name.len()].copy_from_slice(name.as_bytes());
-        self.fs
-            .load_executable(ROOT, core::str::from_utf8(&path[..5 + name.len()]).unwrap())
+        Ok((ROOT, core::str::from_utf8(&path[..5 + name.len()]).unwrap()))
     }
     fn fork(&mut self, parent: usize) -> Result<u64, i64> {
         self.fork_space(parent, false)

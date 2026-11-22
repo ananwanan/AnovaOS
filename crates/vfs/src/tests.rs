@@ -1053,6 +1053,62 @@ fn pipes_block_wrap_drain_eof_and_report_broken_reader_after_final_reference() {
     assert_eq!(fs.write(&p, w, b""), Ok(0));
     fs.clear(&mut p);
 }
+
+#[test]
+fn linux_pipes_buffer_a_full_heredoc_and_reuse_the_stream_slot() {
+    const CONSUMED: usize = 3073;
+    let image = image();
+    let mut fs = Vfs::new(&image).unwrap();
+    let mut parent = Descriptors::default();
+    let [reader, writer] = fs.linux_pipe(&mut parent).unwrap();
+    let mut child = fs.inherit(&parent).unwrap();
+    fs.close(&mut child, writer).unwrap();
+    let mut output = [0; LINUX_PIPE_BYTES];
+    assert_eq!(fs.read(&child, reader, &mut output), Err(WOULD_BLOCK));
+
+    let original = [7; LINUX_PIPE_BYTES];
+    assert_eq!(fs.write(&parent, writer, &original), Ok(LINUX_PIPE_BYTES));
+    assert_eq!(
+        fs.readiness(&parent, writer),
+        Ok((false, false, false, false))
+    );
+    assert!(!fs.ready(&parent, writer, true));
+    assert_eq!(fs.write(&parent, writer, b"full"), Err(WOULD_BLOCK));
+
+    assert_eq!(
+        fs.read(&child, reader, &mut output[..CONSUMED]),
+        Ok(CONSUMED)
+    );
+    assert_eq!(
+        fs.readiness(&parent, writer),
+        Ok((false, true, false, false))
+    );
+    assert!(fs.ready(&parent, writer, true));
+    assert_eq!(
+        fs.write(&parent, writer, &[8; LINUX_PIPE_BYTES]),
+        Ok(CONSUMED)
+    );
+    fs.close(&mut parent, writer).unwrap();
+    assert_eq!(fs.readiness(&child, reader), Ok((true, false, true, false)));
+    assert_eq!(fs.read(&child, reader, &mut output), Ok(LINUX_PIPE_BYTES));
+    assert_eq!(
+        &output[..LINUX_PIPE_BYTES - CONSUMED],
+        &[7; LINUX_PIPE_BYTES - CONSUMED]
+    );
+    assert_eq!(&output[LINUX_PIPE_BYTES - CONSUMED..], &[8; CONSUMED]);
+    assert_eq!(fs.read(&child, reader, &mut output), Ok(0));
+    fs.clear(&mut child);
+    fs.clear(&mut parent);
+    assert_eq!(fs.live_objects(), (0, 0));
+
+    let [reader, writer] = fs.linux_pipe(&mut parent).unwrap();
+    fs.close(&mut parent, reader).unwrap();
+    assert!(fs.ready(&parent, writer, true));
+    assert_eq!(fs.write(&parent, writer, b"broken"), Err(BROKEN_PIPE));
+    fs.clear(&mut parent);
+    assert_eq!(fs.live_objects(), (0, 0));
+}
+
 #[test]
 fn descriptor_and_inode_exhaustion_roll_back_and_reuse_without_leaks() {
     let image = image();
@@ -1066,6 +1122,7 @@ fn descriptor_and_inode_exhaustion_roll_back_and_reuse_without_leaks() {
     }
     let before = fs.live_objects();
     assert_eq!(fs.pipe(&mut p), Err(FILE_LIMIT));
+    assert_eq!(fs.linux_pipe(&mut p), Err(FILE_LIMIT));
     assert_eq!(
         fs.open(
             &mut p,
@@ -1132,6 +1189,7 @@ fn global_open_and_pipe_limits_reject_new_objects_and_recover_after_close() {
     }
     assert_eq!(fs.live_objects(), (PIPE_LIMIT * 2, PIPE_LIMIT));
     assert_eq!(fs.pipe(&mut extra), Err(FILE_LIMIT));
+    assert_eq!(fs.linux_pipe(&mut extra), Err(FILE_LIMIT));
     fs.clear(&mut tables[0]);
     assert_eq!(fs.live_objects(), (0, 0));
     fs.pipe(&mut extra).unwrap();

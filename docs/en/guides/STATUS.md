@@ -3,6 +3,49 @@
 
 **English** | [简体中文](../../zh-CN/guides/STATUS.md)
 
+## M18.1 GCC first stage locally accepted (2026-11-22)
+
+The separate M18.1 profile admits a new BusyBox applet set and host-built GMP/MPFR/MPC
+development inputs. In QEMU the original GCC top-level configure passed its arithmetic
+probes and generated a Makefile. A clean rerun reached `configure-gcc`, with the entry subset
+stopping at absent `tree.c`. The separately invoked recursive make recipe reproduced Linux
+`E2BIG`. The expanded Linux limits passed 13 guest boundary cases. The stage1 gate seeds the
+locked C/C++ source selection on a fresh 512 MiB ext4 disk and retains make and reboot evidence.
+Guest replays completed the GCC subconfigure and built `libiberty`, `fixincludes`, zlib,
+libbacktrace and libcpp. The Linux `mkdir -p ./` correction passed the original libcody
+`buffer.o` rule. Original make then ran guest-built GCC generators and produced initial C
+frontend objects. The checkpoint replays exercised the original 466-operand archive
+command and completed the original `all-gcc` with exit 0 in KVM. Both guest-built
+GCC/G++ 11.2.0 backends and drivers compiled, linked and ran the C and C++ fixtures
+with exits 17 and 23. Syntax and unresolved-link failures exited 1. A separate reboot
+verified the same compiler, fixture and seed bytes. The independent clean TCG gate
+reached the 14,400-second watchdog while compiling `gimplify-me.o`. Stage2/stage3,
+prescribed Rust stage0 and GUI image construction remain separate.
+See [M18.1](../validation/M18.1.md).
+M16 remote closeout remains deferred
+under main-push-only Actions.
+
+## M18.2 standalone LLVM library locally accepted (2026-11-21)
+
+`m18-llvm-test` built `LLVMDemangle` from six unmodified translation units of the locked
+Rust LLVM fork on two fresh work disks. The inherited guest G++ and binutils compiled and
+archived the sources, then built a static test program that exercised four symbol families.
+Exact archive and fixture bytes matched across the two rounds. Both reboots preserved
+prior bytes through real syntax/link errors and linked an identical new executable from
+the retained archive. Full LLVM, rustc, Cargo and prescribed stage0 execution remain separate.
+See [M18.2](../validation/M18.2.md) and the repeat record in [M18.4](../validation/M18.4.md).
+
+## M18.3 bounded optical image locally accepted (2026-11-21)
+
+`m18-image-test` passed six QEMU sessions. AnovaOS constructed byte-identical UEFI/Limine
+ISOs on independent JBD2 ext4 work disks using the same retained guest-built kernel.
+Independent extraction matched all 19 regular files. The final ISOs booted with the
+expected identity. Construction and recovery sessions exercised missing input, publication
+denial, cancellation and real disk exhaustion with exact prior artifact/user data and reboot recovery. See
+[M18.3](../validation/M18.3.md) and the image-route portion of [M18.4](../validation/M18.4.md).
+The host prepares the checked inputs and runner image, exports and inspects the final ISOs,
+and drives QEMU. GUI-enabled kernel construction has separate scope.
+
 ## Firmware I/O APIC ID boot fix (2026-11-14)
 
 The reported early panic compared I/O APIC register ID 0 with MADT ID 128.
@@ -116,7 +159,7 @@ runtime/QEMU gates or establish remote CI acceptance.
 Historical M15 development branch: `feat/m15-bootstrap`. M15.1/M15.2 are locally accepted for the
 bounded bzip2 reconstruction profile; see [M15 bootstrap](../milestones/M15_BOOTSTRAP.md) and
 [validation/M15.1-M15.2](../validation/M15.1-M15.2.md). M15.3 feasibility is locally assessed;
-GCC reconstruction is blocked by current dependencies/capacity. See
+the original GCC probe recorded its prerequisite and capacity limits. See
 [M15 GCC](../milestones/M15_GCC.md) and [validation/M15.3](../validation/M15.3.md). M15.4 has
 independent locally verified Rust/LLVM/Cargo source audits and guest prerequisite
 probes; reconstruction remains blocked. See [M15 Rust](../milestones/M15_RUST.md) and
@@ -133,13 +176,14 @@ Remote CI and publication are separate from local acceptance.
 
 The owner selected **resources/VFS/ext4 → usable development desktop → conditional
 compiler/image self-hosting**. That planning-only change had no implementation; the M16 progress above supersedes
-its unimplemented status. M17.1 has since passed its bounded local acceptance as described above; M17.3 now has local bounded file/editor and real GUI storage-fault acceptance; M17.4 has separate local evidence for build diagnostics and monitor/recovery. M18 and M16 remote CI remain open.
+its unimplemented status. M17 now has the local evidence described above. Independent M18
+compiler and image work has started, and M16 remote CI remains deferred.
 
 | Plan | Scope | Next prerequisite |
 | --- | --- | --- |
 | [M16 foundation](../milestones/M16_FOUNDATION.md) | CI/budgets, backend isolation and resources, ext4 read-only, writes, JBD2 recovery and new-work-disk adoption | Finish remote CI; JBD2, migration, bzip2/UART and ext4 kernel capacity accepted locally |
 | [M17 desktop](../milestones/M17_DESKTOP.md) | Supervised session, PTY terminal, files/editor, diagnostics and all-GUI C/C++/Rust workflow | Accepted M16 workspace/resources; use inherited guest compilers |
-| [M18 self-hosting](../ROADMAP.md#m18-conditional-self-hosting) | Separate compiler component stages, guest-only image generation and repeated recovery | Per-component tools, source closure, stage0/dependencies and measured capacity after M16/M17 |
+| [M18 self-hosting](../milestones/M18_BOOTSTRAP.md) | Separate compiler component stages, guest-only image generation and repeated recovery | Per-component tools, source closure, stage0/dependencies and measured capacity after M16/M17 |
 
 Ext4 is the planned medium-term work-volume format; retain existing ext2 images
 and recovery gates. A new AnovaFS format is outside this critical path. VFS
@@ -391,12 +435,10 @@ bounds recorded here. Native limits remain separate.
 Continue with the independently scoped M18 prerequisites. M16 remote CI
 remains paused by owner request.
 
-The independently deferred compiler route starts with the measured POSIX build-utility,
-arithmetic dependency and storage/inode/VFS capacity blockers, followed by a
-scoped first compiler-source stage. Guest-only image generation, native libc/std,
-GUI-enabled kernel rebuilding and broader graphics/runtime/hardware support
-remain independent unverified follow-ups. M15.6 repeat builds are already
-locally accepted and are not the next unimplemented milestone.
+For GCC, extend the measured build-entry source closure and retain each observed shell,
+arithmetic dependency and storage/inode/VFS limit before attempting the first compiler
+stage. The supported M18.3 base optical image has local acceptance. Native libc/std,
+GUI-enabled kernel rebuilding and broader graphics/runtime/hardware support remain independent.
 
 The following paragraphs preserve the accepted stage details and explain the
 remaining boundaries.
@@ -450,10 +492,10 @@ matching declared inputs, byte-identical bzip2 outputs/final kernel ELFs and all
 inventory matches; ten kernel log/cache/generated/intermediate files differ,
 including reordered smoltcp configuration constants. Raw differences are retained;
 this accepts the declared final artifacts, not all kernel intermediate bytes.
-See [M15 repeat](../milestones/M15_REPEAT.md) and [validation/M15.6](../validation/M15.6.md). Compiler
-reconstruction, guest-only image generation and GUI-enabled kernel rebuilding
-remain unverified; the original M15.3/M15.4 audits retain their historical
-1 MiB capacity profile rather than claiming to reassess a pruned source route.
+See [M15 repeat](../milestones/M15_REPEAT.md) and [validation/M15.6](../validation/M15.6.md).
+This M15 route records host-assisted packing. The separate M18.3 bounded optical image
+route has its own acceptance above. Compiler reconstruction and GUI-enabled kernel rebuilding
+remain open. The M15.3/M15.4 audits retain their historical 1 MiB profile and source scope.
 Preserve `cargo xtask bootstrap-test`, `bootstrap-gcc-test`, `bootstrap-rust-test`,
 `bootstrap-kernel-test`, `bootstrap-repeat-test`, all four source rejection suites and the `bootstrap-metrics` kernel check,
 as well as every previous runtime/storage/network, C/C++/Rust/Cargo, native SDK
@@ -468,9 +510,9 @@ hardware and broad Linux GUI compatibility remain independently scoped.
 | --- | --- | --- |
 | M15.1 | Measured capacity, sufficient build environment and persistent work disk | Locally accepted for the original bzip2 1.0.8 capacity profile |
 | M15.2 | Controlled C/C++ tool built in guest and executed again after reboot | Locally accepted: guest-built bzip2, golden sample, reboot and failure recovery |
-| M15.3 | GCC feasibility evidence, then a compiler stage or multistage bootstrap if viable | Assessment locally verified; current profile blocked; no compiler stage rebuilt |
+| M15.3 | GCC feasibility evidence, then a compiler stage or multistage bootstrap if viable | Historical assessment locally verified its prerequisite blockers |
 | M15.4 | Separate LLVM/rustc/Cargo feasibility and source builds where viable | Assessment locally verified; current profile blocked; no component rebuilt |
-| M15.5 | Guest-built kernel actually booted; image-generation scope reported separately | Locally accepted: guest ELF, exact host-assisted packaging, boot identity and failure/recovery; guest-only image generation unverified |
+| M15.5 | Guest-built kernel actually booted; image-generation scope reported separately | Locally accepted: guest ELF, exact host-assisted packaging, boot identity and failure/recovery |
 | M15.6 | Repeated clean builds, artifact comparison and failure recovery | Locally accepted for two clean bzip2/kernel builds, exact declared artifacts and 12 boot/recovery sessions; kernel intermediate differences retained |
 
 Complete M15.1 before M15.2; then advance M15.3, M15.4 and M15.5 as their

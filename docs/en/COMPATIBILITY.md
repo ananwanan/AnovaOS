@@ -258,3 +258,35 @@ independent profiles; ext2 remains the default/recovery route.
 ## M17.2 graphical PTY profile
 
 The separately configured BusyBox 1.36.1/musl 1.2.4 interactive ash has local real-PTY input, foreground Ctrl+C, WUNTRACED child-stop reporting, merged stdout/stderr, resize/SIGWINCH and explicit shell restart acceptance. Existing source-built GCC 11.2.0 compiles the selected C application through graphical input and its exact executable runs again after reboot. This does not replace the original M9 BusyBox seed or establish arbitrary shell jobs, WCONTINUED, group wait, background TTIN/TTOU enforcement, full-screen terminal editors, Unicode or compiler reconstruction. See [M17.2](validation/M17.2.md) for the exact profile.
+
+## M18.1 GCC build utilities profile
+
+The separate static BusyBox 1.36.1 profile admits `/bootstrap/sh` and selected external
+utilities. Its fixture checks transformed output, error exits, and regular-file rename
+replacement with an already open descriptor. Read-only image aliases resolve via the
+existing VFS link path. Runtime hard-link and symbolic-link creation return `ENOSYS`.
+The application test uses host-built GMP, MPFR and MPC development archives under
+the explicit Linux-musl personality. See the [M18 contract](milestones/M18_BOOTSTRAP.md).
+
+Linux `pipe` and `pipe2` use a 4 KiB stream buffer. Ash can write a matching
+musl `PIPE_BUF` heredoc to an empty pipe before its reader starts. A partially
+full stream still permits short writes. The 16 shared pipe slots, native 1 KiB
+stream buffer and 1,022-byte packet payload remain at their previous limits.
+
+Linux `execve` accepts up to 12,287 data bytes per argument or environment string.
+It bounds each vector at 512 entries and 16 KiB of string data, with a checked
+32 KiB startup block. Exceeding one of these bounds returns `E2BIG`. Native v1 retains its
+1,023-byte string and 64-argument limits.
+
+Linux `mkdir` accepts trailing slashes and returns `EEXIST` after resolving an
+existing `.` or `..` directory or the root. Missing and non-directory prefixes
+retain `ENOENT` and `ENOTDIR`, respectively.
+
+Linux scalar `read` on regular files can deliver up to 16 KiB per call using
+page-bounded checked copies. EOF returns the available prefix. A later invalid
+page returns the completed bytes and advances the shared offset by that count.
+
+For a Linux ELF with a `.tbss`-only TLS template, the checked file and mapped
+memory bounds still apply. The TLS offset need only correspond to the virtual
+address when the template contains initialized file bytes.
+[ELF gABI TLS](https://gabi.xinuos.com/elf/07-pheader.html#thread-local-storage)

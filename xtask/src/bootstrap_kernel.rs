@@ -11,7 +11,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 type Files = BTreeMap<String, Vec<u8>>;
 
-fn collect(base: &Path, prefix: &str, files: &mut Files) -> Result<()> {
+pub(super) fn collect(base: &Path, prefix: &str, files: &mut Files) -> Result<()> {
     let mut entries = fs::read_dir(base)?.collect::<std::io::Result<Vec<_>>>()?;
     entries.sort_by_key(|entry| entry.file_name());
     for entry in entries {
@@ -35,7 +35,7 @@ fn collect(base: &Path, prefix: &str, files: &mut Files) -> Result<()> {
     Ok(())
 }
 
-fn append_inputs(archive: &mut Vec<u8>, files: &Files) -> Result<()> {
+pub(super) fn append_inputs(archive: &mut Vec<u8>, files: &Files) -> Result<()> {
     let mut names = BTreeSet::new();
     let mut parsed = anova_vfs::archive::Archive::new(archive)
         .map_err(|error| format!("Invalid seed archive: {error}"))?;
@@ -106,7 +106,7 @@ fn inspect(path: &Path, ext4: bool) -> Result<Files> {
     Ok(files)
 }
 
-fn read_files(
+pub(super) fn read_files(
     disk: &mut dyn anova_storage::filesystem::Filesystem,
     parent: u32,
     prefix: &str,
@@ -167,7 +167,7 @@ fn verify_packaged(root: &Path, iso: &Path, expected: &[u8]) -> Result<()> {
     temporary.cleanup()
 }
 
-fn boot_identity(root: &Path, name: &str, identity: &str) -> Result<()> {
+pub(super) fn boot_identity(root: &Path, name: &str, identity: &str) -> Result<()> {
     let serial = fs::read_to_string(root.join(format!("build/logs/{name}.serial.log")))?;
     let marker = format!("[BOOT:BUILD] id={identity}");
     let identities: Vec<_> = serial

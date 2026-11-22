@@ -6,7 +6,7 @@
 本索引覆盖两种语言的阶段设计、开发指南与历史验收证据。当前受测范围覆盖 M0–M13、M14.1–M14.5 与 M15.1–M15.6；M15.3/M15.4 是有阻塞结论的编译器可行性评估，M15.5/M15.6 的内核镜像仍由宿主辅助打包。
 
 后续计划为 M16 资源/VFS/ext4、M17 开发桌面、M18 有条件自举，M16 的后端/缓存和受控 ext4 只读部分已本地验证，
-受控写入、JBD2 恢复、迁移和声明的内核容量已有本地证据，远端 CI 待验。M17.1 的有界五启动配置已完成物理输入、故障重启、资源复用及文件保留本地验收；M17.2 的真实 PTY/GCC/重启已本地验收，M17.3 文件/编辑器及真实 GUI 存储故障已本地验收；M17.4 第一批已本地验收，M17.4 资源、任务控制及服务恢复通过本地 QEMU 专项。M17.5 通过十次启动的 C/C++/Rust 图形构建、并发响应与恢复门禁。M18 仍取决于独立前置条件。
+受控写入、JBD2 恢复、迁移和声明的内核容量已有本地证据，远端 CI 待验。M17 声明的桌面配置已本地验收，包含十次启动的 C/C++/Rust 图形构建、并发响应与恢复门禁。[M18](milestones/M18_BOOTSTRAP.md) 从独立 GCC 构建入口配置开始，各编译器和镜像路线分别验收。
 
 [项目 README](../../README.zh-CN.md) · [开发规范](../../AGENTS.md) · [当前状态](guides/STATUS.md) · [路线图](ROADMAP.md)
 
@@ -52,6 +52,7 @@
 - [M17_FILES.md](milestones/M17_FILES.md)
 - [M17_BUILD.md](milestones/M17_BUILD.md)
 - [M17_WORKFLOW.md](milestones/M17_WORKFLOW.md)
+- [M18_BOOTSTRAP.md](milestones/M18_BOOTSTRAP.md)
 - [M2_CPU.md](milestones/M2_CPU.md)
 - [M3_MEMORY.md](milestones/M3_MEMORY.md)
 - [M4_USERSPACE.md](milestones/M4_USERSPACE.md)
@@ -90,6 +91,10 @@
 - [M17.3.md](validation/M17.3.md)
 - [M17.4.md](validation/M17.4.md)
 - [M17.5.md](validation/M17.5.md)
+- [M18.1.md](validation/M18.1.md)
+- [M18.2.md](validation/M18.2.md)
+- [M18.3.md](validation/M18.3.md)
+- [M18.4.md](validation/M18.4.md)
 - [M2.md](validation/M2.md)
 - [M3.md](validation/M3.md)
 - [M4.md](validation/M4.md)

@@ -727,3 +727,30 @@ checks exact task identity, live counters and Files/PTY recovery on JBD2 and ext
 GCC and Rust tools after `cargo xtask rust-build`. The desktop workflow gate keeps
 per-run UART, TCP-QMP, exact artifact dumps and verified framebuffer samples.
 See the [workflow](../milestones/M17_WORKFLOW.md) and [acceptance](../validation/M17.5.md).
+
+## M18 GCC first-stage check
+
+Prepare the verified M11 tools with `cargo xtask toolchain-build`, then run
+`cargo xtask m18-gcc-test` from the repository root. Run the image/work-disk gates
+sequentially as they share build outputs. The gate prepares the BusyBox profile and
+locked arithmetic inputs, seeds the selected C/C++ release sources on fresh ext4,
+and runs the unmodified upstream configure and `all-gcc`. `--entry` runs the separate
+missing-source and recursive entry diagnostic. Each attempt retains its source
+inventory, logs and work disk under `build/m18-gcc-*`.
+See [M18](../milestones/M18_BOOTSTRAP.md) for budgets and interpretation. The M15
+`bootstrap-gcc-test`, `bootstrap-rust-test`, `bootstrap-kernel-test` and
+`bootstrap-repeat-test` commands retain their original contracts.
+
+## M18 standalone LLVM library and guest optical image
+
+`cargo xtask m18-llvm-test` uses the M11 tools and checksum-locked Rust release source.
+It stages the standalone `LLVMDemangle` sources and checks the guest-built archive and
+linked executable. The exact dependencies and artifact scope are in [M18.2](../validation/M18.2.md).
+
+Use a retained M16 capacity report and its verified guest-built kernel for
+`cargo xtask m18-image-test REPORT GUEST_ELF`. A new local capacity run writes
+`build/logs/foundation-capacity.result.json` and the corresponding
+`build/foundation/capacity-*/guest-kernel.elf`. Keep the matching report/ELF pair.
+The image gate exports the guest-produced ISO and verifies extracted bytes, actual boots
+and recovery without a host final-packaging step. Read [M18.3](../validation/M18.3.md)
+for the accepted source/seed identity and retained output locations.

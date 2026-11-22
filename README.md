@@ -30,13 +30,13 @@ claim of a complete desktop OS or complete self-hosting.
 | M0–M7 | UEFI/Limine boot, memory protection, Ring 3, preemptive user scheduling, native apps, VFS/pipes/init/shell, modern virtio-blk, checked ext2 `/persist`, source editor, sync/fsync and clean shutdown/reboot retention |
 | M8–M9 | Pinned BusyBox 1.36.1 CLI subset; musl 1.2.4 static, static PIE and dynamic ELF; pthread/TLS/futex, signal handlers and restart/interruption, poll/nonblocking I/O, four PTYs, startup shared libraries and dlopen/TLS |
 | M10 | Opt-in polled virtio-net IPv4 TCP/UDP, bounded DNS, strict user TLS and checksum-locked package install/upgrade/rollback/removal with user data retained |
-| M11 | Source-built guest GCC/G++ 11.2.0, binutils/make and matching musl/C++ sysroot; real guest edit/build/run, exceptions, threads and reboot retention |
+| M11 | Host-built GCC/G++ 11.2.0, binutils/make and matching musl/C++ sysroot for the guest; real guest edit/build/run, exceptions, threads and reboot retention |
 | M12 | Official Rust 1.90.0/std/Cargo binary tools running in the guest; offline vendor/build.rs/C FFI/procedural macros; strict online registry/Git and offline cache rebuilds; pinned public sources tested through a configured host proxy |
 | M13 | SDK 1.0.0, native C/C++/Rust templates, ANOVAPK2 ABI-bound packages, installation policy and source symbolization of actual user faults |
 | M14.1–M14.4 | Checked CPU framebuffer, polled PS/2 input/cursor, isolated Rust user compositor, versioned `anova.gui.v1` C/C++/Rust SDK, independently guest-built clients, note and bounded graphical terminal |
 | M14.5 | Hardware VirGL offscreen clear/readback, guarded pixel comparison, timeout/reset/reinitialization and CPU fallback; ordinary desktop composition remains software-rendered |
 | M15.1–M15.2 | Measured capacity, locked bzip2 source reconstruction inside the guest, exact fixture comparison and failure/reboot recovery |
-| M15.3–M15.4 | Independent GCC and Rust/LLVM/Cargo source audits and real guest prerequisite probes; compiler reconstruction remains blocked |
+| M15.3–M15.4 | Independent GCC and Rust/LLVM/Cargo source audits and real guest prerequisite probes recorded the blockers at that milestone |
 | M15.5 | Actual guest kernel compilation with inherited tools/target libraries, exact retained-ELF host-assisted packaging and verified boot identity/recovery |
 | M15.6 | Two independent clean builds each of bzip2 and kernel, identical final artifacts, archived evidence and all 12 boot/rejection/recovery sessions |
 | M16 (bounded local profile) | Verified inputs, backend/cache isolation, controlled ext4 readonly/writes and JBD2 recovery; fresh-disk bzip2/UART acceptance and actual kernel reconstruction after heap/VFS/fd/task/disk exhaustion; remote CI tracked separately |
@@ -45,6 +45,9 @@ claim of a complete desktop OS or complete self-hosting.
 | M17.3 | File browsing, bounded source editing and protected saves on the PTY work disk; real GUI size/inode/disk-full/write/flush failures, recovery copies, retry and clean reboot accepted locally |
 | M17.4 | Bounded build diagnostics, current resource and task monitoring, scoped stops and live compositor recovery |
 | M17.5 | Fixed graphical C, C++ and Rust workflows, concurrent interaction, cancellation, and publication/reboot recovery verified locally in QEMU |
+| M18.1 locally accepted | GCC/G++ 11.2.0 built from source in the guest compiled, linked and ran C and C++ programs. A separate reboot verified the compiler and seed bytes. [Build evidence](docs/en/validation/M18.1.md) |
+| M18.2 standalone LLVM component | Two guest builds of `LLVMDemangle` from the locked Rust LLVM fork produced exact library and linked fixture bytes. Compile/link failure and reboot recovery passed. |
+| M18.3 base optical image | AnovaOS generated two exact UEFI/Limine ISOs from a retained guest-built kernel. Independent extraction, actual boot, publication failure, cancellation and full-disk recovery passed locally. |
 
 Evidence is recorded per stage in the [validation index](docs/en/index.md#validation).
 Each record identifies its executed checks. Configured CI, actual remote CI execution
@@ -61,8 +64,9 @@ The current system uses one BSP, 32 process/thread slots, a non-preemptible
 kernel, a fixed 16 MiB heap and masked peripheral IRQs with polled device I/O.
 Writable ext2 files are bounded at 4 MiB; controlled ext4 files allow 256 MiB; tmpfs and readonly shared-file caches
 remain at 1 MiB. Ext2 has no journal or power-loss recovery. General Linux/glibc,
-SMP, USB/physical hardware support, native Rust `std`, reconstructed compilers
-and guest-only boot-image generation remain unverified. See
+SMP, USB/physical hardware support, native Rust `std` and reconstructed compilers
+remain unverified. The guest-generated UEFI optical image has bounded non-GUI
+acceptance. See [M18.3](docs/en/validation/M18.3.md),
 [status](docs/en/guides/STATUS.md) and [compatibility](docs/en/COMPATIBILITY.md).
 
 `foundation-capacity-test` passed locally on a fresh 64 MiB ext4 work disk after
@@ -77,7 +81,7 @@ M18 conditional compiler and image self-hosting**. M16 now has a locally verifie
 controlled ext4 readonly/writes, JBD2 recovery and opt-in migration/build acceptance.
 M17.1–M17.5 have local QEMU evidence for their declared desktop profiles,
 including live resource/task controls and the ten-boot compiler workflow.
-Remote CI, physical hardware and M18 are tracked independently.
+M18 has started on `feat/m18-bootstrap`. Remote CI and physical hardware remain independent.
 
 1. [M16 foundation](docs/en/milestones/M16_FOUNDATION.md): remote CI acceptance is paused by owner request; the declared kernel capacity profile passed locally.
    Broader workload sizing remains independent. JBD2 and fresh-image migration now have separate
@@ -85,9 +89,12 @@ Remote CI, physical hardware and M18 are tracked independently.
    isolation, on-demand directories, reclaimable file nodes and controlled ext4 readonly
    access are implemented; see [local evidence](docs/en/validation/M16.md) and [M16.4 writes](docs/en/validation/M16.4.md).
 2. [M17 desktop](docs/en/milestones/M17_DESKTOP.md): use the monitor and the fixed C/C++/Rust recipes, then verify concurrent interaction and fault recovery.
-3. [M18 follow-up](docs/en/ROADMAP.md#m18-conditional-self-hosting): independently
-   reassess GCC, LLVM/rustc/Cargo and guest-only image generation after their
-   measured prerequisites are met. Full compiler bootstrap does not gate M17.
+3. [M18 reconstruction](docs/en/milestones/M18_BOOTSTRAP.md) uses
+   `cargo xtask m18-gcc-test` for the bounded GCC build-entry profile. Continue with the
+   measured C/C++ source closure. `cargo xtask m18-llvm-test` verifies the standalone
+   LLVM demangler. Full LLVM, rustc and Cargo keep separate acceptance. The guest
+   boot-image gate `cargo xtask m18-image-test REPORT GUEST_ELF` accepts a verified retained
+   guest-built kernel and inherited tools. GUI-enabled construction remains separate.
 
 Preserve prior runtime, storage, GUI and M15 reconstruction gates. Native `std`,
 SMP, device IRQ/async I/O, physical hardware and a new filesystem format remain

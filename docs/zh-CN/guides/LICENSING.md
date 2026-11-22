@@ -83,3 +83,10 @@ Mozilla/curl 公共根证书库保留 MPL-2.0 和归属信息。详见 [M12 输�
 Rust 库。保留其原声明、源码/种子清单及配方；系统内重建的 bzip2 不能改用项目许可证。
 源码审计不等于重建编译器；M15.5/M15.6 内核仍依赖继承工具/库与宿主打包。
 自有编排和诊断代码继续采用 Apache-2.0。
+
+## M18 构建工具和算术开发输入
+
+独立 M18 BusyBox applet 二进制保留 `/bootstrap/LICENSE` 及单独的对应源码归档
+`build/images/busybox-bootstrap-1.36.1-source.tar.gz`，分发采用此配置的镜像时保留该归档。
+GMP、MPFR 和 MPC 的原始声明保留在 `/m18-arithmetic/licenses`，并使用 [M11 输入](../third-party/m11.md)
+记录的源码锁。M18 源码与构建清单记录 guest 使用的归档和生成的开发文件。

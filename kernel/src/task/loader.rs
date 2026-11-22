@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Load native or Linux executable/interpreter pairs, private pages and checked startup stacks.
 //! Permission decisions precede activation; physical aliases initialize RX data.
+//! Persistent Linux exec streams validated file ranges into the new image.
 use crate::mm::user::UserSpace;
 use anova_abi::{PERSONALITY, STACK_BYTES, STACK_TOP};
 use anova_memory::paging::Permissions;
@@ -12,6 +13,7 @@ pub enum LoadError {
     Personality,
     Entropy(i64),
     Interpreter(i64),
+    Read(i64),
 }
 impl From<anova_elf::Error> for LoadError {
     fn from(e: anova_elf::Error) -> Self {
@@ -31,6 +33,7 @@ impl core::fmt::Display for LoadError {
             Self::Personality => write!(f, "Unsupported ABI personality"),
             Self::Entropy(error) => write!(f, "Linux startup entropy unavailable: {error}"),
             Self::Interpreter(error) => write!(f, "Linux interpreter unavailable: errno={error}"),
+            Self::Read(error) => write!(f, "Persistent executable read failed: error={error}"),
         }
     }
 }
@@ -84,9 +87,49 @@ pub fn load_interpreter(
         None
     };
     let interpreter = match (dynamic, interpreter) {
-        (Some(_), Some(data)) => Some((data, anova_elf::parse_linux_at(data, 0x2000_0000)?)),
+        (Some(_), Some(data)) => Some(data),
         (Some(_), None) => return Err(LoadError::Personality),
         (None, _) => None,
+    };
+    load_image(image, linux, args, env, interpreter, |space, image| {
+        map_memory_image(space, image, bytes)
+    })
+}
+
+pub fn load_persistent_linux(
+    file: &mut anova_vfs::PersistentExecutable<'_>,
+    image: anova_elf::Image,
+    args: &[&str],
+    env: &[&str],
+    interpreter: Option<&[u8]>,
+) -> Result<Loaded, LoadError> {
+    load_image(image, true, args, env, interpreter, |space, image| {
+        let mut buffer = [0; 16 * 1024];
+        map_image(space, image, |space, segment| {
+            for offset in (0..segment.file_size).step_by(buffer.len()) {
+                let count = (segment.file_size - offset).min(buffer.len());
+                let chunk = &mut buffer[..count];
+                file.read_exact_at(segment.file_offset + offset, chunk)
+                    .map_err(LoadError::Read)?;
+                space.initialize(segment.address + offset as u64, chunk)?;
+            }
+            Ok(())
+        })
+    })
+}
+
+fn load_image(
+    image: anova_elf::Image,
+    linux: bool,
+    args: &[&str],
+    env: &[&str],
+    interpreter: Option<&[u8]>,
+    map_executable: impl FnOnce(&mut UserSpace, &anova_elf::Image) -> Result<(), LoadError>,
+) -> Result<Loaded, LoadError> {
+    let interpreter = if let Some(data) = interpreter {
+        Some((data, anova_elf::parse_linux_at(data, 0x2000_0000)?))
+    } else {
+        None
     };
     let entry = interpreter
         .as_ref()
@@ -112,9 +155,9 @@ pub fn load_interpreter(
         anova_elf::stack::build(args, &mut stack_page, STACK_TOP)?
     };
     let mut space = UserSpace::new()?;
-    map_image(&mut space, bytes, &image)?;
+    map_executable(&mut space, &image)?;
     if let Some((data, elf)) = interpreter {
-        map_image(&mut space, data, &elf)?;
+        map_memory_image(&mut space, &elf, data)?;
     }
     let stack_bytes = if linux { 1024 * 1024 } else { STACK_BYTES };
     for page in ((STACK_TOP - stack_bytes)..STACK_TOP).step_by(4096) {
@@ -137,10 +180,24 @@ pub fn load_interpreter(
     })
 }
 
+fn map_memory_image(
+    space: &mut UserSpace,
+    image: &anova_elf::Image,
+    bytes: &[u8],
+) -> Result<(), LoadError> {
+    map_image(space, image, |space, segment| {
+        space.initialize(
+            segment.address,
+            &bytes[segment.file_offset..segment.file_offset + segment.file_size],
+        )?;
+        Ok(())
+    })
+}
+
 fn map_image(
     space: &mut UserSpace,
-    bytes: &[u8],
     image: &anova_elf::Image,
+    mut initialize: impl FnMut(&mut UserSpace, &anova_elf::Segment) -> Result<(), LoadError>,
 ) -> Result<(), LoadError> {
     for segment in image.segments() {
         let permissions = Permissions {
@@ -151,10 +208,7 @@ fn map_image(
         for page in (segment.page_start()..segment.page_end()).step_by(4096) {
             space.map(page, permissions)?;
         }
-        space.initialize(
-            segment.address,
-            &bytes[segment.file_offset..segment.file_offset + segment.file_size],
-        )?;
+        initialize(space, segment)?;
     }
     Ok(())
 }

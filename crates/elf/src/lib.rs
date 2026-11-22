@@ -2,9 +2,11 @@
 #![no_std]
 //! Validate bounded native ET_EXEC and Linux ET_EXEC/ET_DYN images before allocation.
 //! Linux interpreters and TLS are checked here; user-space loaders perform dynamic relocations.
+//! Persistent Linux images use the same validation through bounded positional reads.
 
 pub mod stack;
 use anova_abi::USER_MIN;
+use core::ops::Range;
 
 pub const PAGE: u64 = 4096;
 pub const IMAGE_LIMIT: u64 = 0x4000_0000;
@@ -12,6 +14,11 @@ pub const MAX_SEGMENTS: usize = 16;
 pub const MAX_MEMORY: u64 = 4 * 1024 * 1024;
 pub const LINUX_MAX_MEMORY: u64 = 256 * 1024 * 1024;
 pub const LINUX_MAX_FILE: usize = 256 * 1024 * 1024;
+pub const INTERPRETER_BYTES: usize = 128;
+const HEADER_BYTES: usize = 64;
+const PROGRAM_HEADER_BYTES: usize = 56;
+const PROGRAM_HEADERS: usize = 32;
+const LINUX_BIAS: u64 = 0x1000_0000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Error {
@@ -72,15 +79,19 @@ fn integer(bytes: &[u8], offset: usize, length: usize) -> Result<u64, Error> {
 }
 
 pub fn parse(bytes: &[u8]) -> Result<Image, Error> {
-    parse_personality(bytes, false)
+    parse_personality(bytes, false).map(|(image, _)| image)
 }
 
 pub fn parse_linux(bytes: &[u8]) -> Result<Image, Error> {
-    parse_linux_at(bytes, 0x1000_0000)
+    parse_linux_at(bytes, LINUX_BIAS)
 }
 pub fn parse_linux_at(bytes: &[u8], bias: u64) -> Result<Image, Error> {
-    let mut image = parse_personality(bytes, true)?;
-    if integer(bytes, 16, 2)? == 3 {
+    let (image, dynamic) = parse_personality(bytes, true)?;
+    apply_bias(image, dynamic, bias)
+}
+
+fn apply_bias(mut image: Image, dynamic: bool, bias: u64) -> Result<Image, Error> {
+    if dynamic {
         if bias & 4095 != 0 || bias < USER_MIN {
             return Err(Error::Address);
         }
@@ -102,56 +113,100 @@ pub fn parse_linux_at(bytes: &[u8], bias: u64) -> Result<Image, Error> {
 
 /// Return only a bounded, absolute, NUL-terminated interpreter path from a validated ELF.
 pub fn interpreter(bytes: &[u8]) -> Result<Option<&str>, Error> {
-    if bytes.len() < 64
+    if bytes.len() < HEADER_BYTES
         || bytes[..7] != *b"\x7fELF\x02\x01\x01"
         || integer(bytes, 18, 2)? != 62
-        || integer(bytes, 54, 2)? != 56
+        || integer(bytes, 54, 2)? != PROGRAM_HEADER_BYTES as u64
     {
         return Err(Error::Header);
     }
-    let offset = usize::try_from(integer(bytes, 32, 8)?).map_err(|_| Error::Bounds)?;
-    let count = integer(bytes, 56, 2)? as usize;
-    if count == 0
-        || count > 32
-        || offset < 64
-        || offset
-            .checked_add(count * 56)
-            .is_none_or(|end| end > bytes.len())
-    {
-        return Err(Error::Bounds);
-    }
+    let table = program_header_range(bytes, bytes.len())?;
+    interpreter_range(&bytes[table], bytes.len())?
+        .map(|range| interpreter_path(&bytes[range]))
+        .transpose()
+}
+
+fn interpreter_range(table: &[u8], file_bytes: usize) -> Result<Option<Range<usize>>, Error> {
     let mut found = None;
-    for header in bytes[offset..offset + count * 56].chunks_exact(56) {
+    for header in table.chunks_exact(PROGRAM_HEADER_BYTES) {
         if integer(header, 0, 4)? != 3 {
             continue;
         }
         if found.is_some() {
             return Err(Error::Unsupported);
         }
-        let start = integer(header, 8, 8)? as usize;
-        let size = integer(header, 32, 8)? as usize;
-        let data = bytes
-            .get(start..start.checked_add(size).ok_or(Error::Bounds)?)
-            .ok_or(Error::Bounds)?;
-        if !(2..=128).contains(&size)
-            || data[0] != b'/'
-            || data[size - 1] != 0
-            || data[..size - 1].contains(&0)
-        {
+        let start = usize::try_from(integer(header, 8, 8)?).map_err(|_| Error::Bounds)?;
+        let size = usize::try_from(integer(header, 32, 8)?).map_err(|_| Error::Bounds)?;
+        let end = start.checked_add(size).ok_or(Error::Bounds)?;
+        if !(2..=INTERPRETER_BYTES).contains(&size) || end > file_bytes {
             return Err(Error::Bounds);
         }
-        found = Some(core::str::from_utf8(&data[..size - 1]).map_err(|_| Error::Header)?);
+        found = Some(start..end);
     }
     Ok(found)
 }
 
-fn parse_personality(bytes: &[u8], linux: bool) -> Result<Image, Error> {
+fn interpreter_path(data: &[u8]) -> Result<&str, Error> {
+    let (last, path) = data.split_last().ok_or(Error::Bounds)?;
+    if path.first() != Some(&b'/') || *last != 0 || path.contains(&0) {
+        return Err(Error::Bounds);
+    }
+    core::str::from_utf8(path).map_err(|_| Error::Header)
+}
+
+#[derive(Debug)]
+pub enum ReadError<E> {
+    Elf(Error),
+    Read(E),
+}
+
+impl<E> From<Error> for ReadError<E> {
+    fn from(error: Error) -> Self {
+        Self::Elf(error)
+    }
+}
+
+/// Validate Linux executable metadata through exact positional reads without loading segments.
+pub fn read_linux<E>(
+    file_bytes: usize,
+    mut read_exact: impl FnMut(usize, &mut [u8]) -> Result<(), E>,
+    interpreter: &mut [u8; INTERPRETER_BYTES],
+) -> Result<(Image, Option<&str>), ReadError<E>> {
+    if !(HEADER_BYTES..=LINUX_MAX_FILE).contains(&file_bytes) {
+        return Err(Error::Header.into());
+    }
+    let mut header = [0; HEADER_BYTES];
+    read_exact(0, &mut header).map_err(ReadError::Read)?;
+    let (dynamic, range) = validate_header(&header, file_bytes, true)?;
+    let mut table = [0; PROGRAM_HEADERS * PROGRAM_HEADER_BYTES];
+    let table = &mut table[..range.len()];
+    read_exact(range.start, table).map_err(ReadError::Read)?;
+    let image = parse_program_headers(&header, table, range.start, file_bytes, true, dynamic)?;
+    let image = apply_bias(image, dynamic, LINUX_BIAS)?;
+    let path = if let Some(range) = interpreter_range(table, file_bytes)? {
+        let data = &mut interpreter[..range.len()];
+        read_exact(range.start, data).map_err(ReadError::Read)?;
+        Some(interpreter_path(data)?)
+    } else {
+        None
+    };
+    Ok((image, path))
+}
+
+fn validate_header(
+    bytes: &[u8],
+    file_bytes: usize,
+    linux: bool,
+) -> Result<(bool, Range<usize>), Error> {
     let file_limit = if linux {
         LINUX_MAX_FILE
     } else {
         8 * 1024 * 1024
     };
-    if bytes.len() < 64 || bytes.len() > file_limit || bytes[..7] != *b"\x7fELF\x02\x01\x01" {
+    if bytes.len() < HEADER_BYTES
+        || !(HEADER_BYTES..=file_limit).contains(&file_bytes)
+        || bytes[..7] != *b"\x7fELF\x02\x01\x01"
+    {
         return Err(Error::Header);
     }
     let at = |offset, length| integer(bytes, offset, length);
@@ -160,39 +215,61 @@ fn parse_personality(bytes: &[u8], linux: bool) -> Result<Image, Error> {
         || at(18, 2)? != 62
         || at(20, 4)? != 1
         || at(48, 4)? != 0
-        || at(52, 2)? != 64
-        || at(54, 2)? != 56
+        || at(52, 2)? != HEADER_BYTES as u64
+        || at(54, 2)? != PROGRAM_HEADER_BYTES as u64
     {
         return Err(Error::Unsupported);
     }
-    let offset = usize::try_from(at(32, 8)?).map_err(|_| Error::Bounds)?;
-    let count = at(56, 2)? as usize;
-    if count == 0
-        || count > 32
-        || offset < 64
-        || offset
-            .checked_add(count * 56)
-            .is_none_or(|end| end > bytes.len())
-    {
+    Ok((dynamic, program_header_range(bytes, file_bytes)?))
+}
+
+fn program_header_range(header: &[u8], file_bytes: usize) -> Result<Range<usize>, Error> {
+    let offset = usize::try_from(integer(header, 32, 8)?).map_err(|_| Error::Bounds)?;
+    let count = integer(header, 56, 2)? as usize;
+    if count == 0 || count > PROGRAM_HEADERS || offset < HEADER_BYTES {
         return Err(Error::Bounds);
     }
+    let end = offset
+        .checked_add(count * PROGRAM_HEADER_BYTES)
+        .ok_or(Error::Bounds)?;
+    if end > file_bytes {
+        return Err(Error::Bounds);
+    }
+    Ok(offset..end)
+}
+
+fn parse_personality(bytes: &[u8], linux: bool) -> Result<(Image, bool), Error> {
+    let (dynamic, range) = validate_header(bytes, bytes.len(), linux)?;
+    let offset = range.start;
+    let image = parse_program_headers(bytes, &bytes[range], offset, bytes.len(), linux, dynamic)?;
+    Ok((image, dynamic))
+}
+
+fn parse_program_headers(
+    header: &[u8],
+    table: &[u8],
+    offset: usize,
+    file_bytes: usize,
+    linux: bool,
+    dynamic: bool,
+) -> Result<Image, Error> {
     let mut image = Image {
-        entry: at(24, 8)?,
+        entry: integer(header, 24, 8)?,
         phdr: 0,
-        phnum: count as u64,
+        phnum: (table.len() / PROGRAM_HEADER_BYTES) as u64,
         segments: [Segment::default(); MAX_SEGMENTS],
         count: 0,
     };
     let mut memory = 0_u64;
     let mut tls = None;
-    for header in bytes[offset..offset + count * 56].chunks_exact(56) {
+    for header in table.chunks_exact(PROGRAM_HEADER_BYTES) {
         let p = |offset, length| integer(header, offset, length);
         let (kind, flags) = (p(0, 4)?, p(4, 4)?);
         let (file, address, filesz, memsz, align) =
             (p(8, 8)?, p(16, 8)?, p(32, 8)?, p(40, 8)?, p(48, 8)?);
         if file
             .checked_add(filesz)
-            .is_none_or(|end| end > bytes.len() as u64)
+            .is_none_or(|end| end > file_bytes as u64)
         {
             return Err(Error::Bounds);
         }
@@ -229,7 +306,7 @@ fn parse_personality(bytes: &[u8], linux: bool) -> Result<Image, Error> {
         if (!dynamic && address < USER_MIN) || end > IMAGE_LIMIT {
             return Err(Error::Address);
         }
-        if file <= offset as u64 && file + filesz >= (offset + count * 56) as u64 {
+        if file <= offset as u64 && file + filesz >= (offset + table.len()) as u64 {
             image.phdr = address
                 .checked_add(offset as u64 - file)
                 .ok_or(Error::Address)?;
@@ -274,7 +351,8 @@ fn parse_personality(bytes: &[u8], linux: bool) -> Result<Image, Error> {
                 && end <= s.address + s.memory_size
                 && file >= s.file_offset as u64
                 && file + filesz <= (s.file_offset + s.file_size) as u64
-                && address - s.address == file - s.file_offset as u64
+                // A .tbss-only TLS template has no initialized bytes at the file offset.
+                && (filesz == 0 || address - s.address == file - s.file_offset as u64)
         }) {
             return Err(Error::Bounds);
         }
@@ -350,6 +428,57 @@ mod tests {
         assert_eq!(interpreter(&bytes), Err(Error::Bounds));
     }
     #[test]
+    fn positional_linux_parser_reads_only_headers_and_checked_interpreter() {
+        let mut bytes = valid();
+        put(&mut bytes, 16, 3, 2);
+        put(&mut bytes, 24, 0x1000, 8);
+        put(&mut bytes, 56, 2, 2);
+        put(&mut bytes, 72, 0, 8);
+        put(&mut bytes, 80, 0, 8);
+        put(&mut bytes, 96, 6000, 8);
+        put(&mut bytes, 104, 8192, 8);
+        put(&mut bytes, 120, 3, 4);
+        put(&mut bytes, 128, 7000, 8);
+        put(&mut bytes, 152, 11, 8);
+        bytes[7000..7011].copy_from_slice(b"/lib/ld.so\0");
+
+        let mut path = [0; INTERPRETER_BYTES];
+        let mut reads = Vec::new();
+        let mut read = |offset: usize, output: &mut [u8]| {
+            reads.push((offset, output.len()));
+            output.copy_from_slice(&bytes[offset..offset + output.len()]);
+            Ok::<_, ()>(())
+        };
+        let (stream, interpreter_path) =
+            read_linux(32 * 1024 * 1024, &mut read, &mut path).unwrap();
+        let slice = parse_linux(&bytes).unwrap();
+        assert_eq!(
+            (stream.entry, stream.phdr, stream.phnum),
+            (slice.entry, slice.phdr, slice.phnum)
+        );
+        assert_eq!(interpreter_path, interpreter(&bytes).unwrap());
+        assert!(matches!(
+            read_linux(LINUX_MAX_FILE + 1, &mut read, &mut path),
+            Err(ReadError::Elf(Error::Header))
+        ));
+        assert_eq!(reads, [(0, 64), (64, 112), (7000, 11)]);
+        assert!(matches!(
+            read_linux(bytes.len(), |_, _| Err(37), &mut path),
+            Err(ReadError::Read(37))
+        ));
+        assert!(matches!(
+            read_linux(
+                7010,
+                |offset, output| {
+                    output.copy_from_slice(&bytes[offset..offset + output.len()]);
+                    Ok::<_, ()>(())
+                },
+                &mut path
+            ),
+            Err(ReadError::Elf(Error::Bounds))
+        ));
+    }
+    #[test]
     fn accepts_file_backed_entry_and_zero_fill_extent() {
         let image = parse(&valid()).unwrap();
         assert_eq!(image.segments()[0].file_size, 16);
@@ -416,6 +545,51 @@ mod tests {
         put(&mut bytes, 160, 2, 8);
         assert_eq!(parse_linux(&bytes).unwrap_err(), Error::Bounds);
     }
+
+    #[test]
+    fn linux_accepts_tbss_only_tls_with_bounded_unmatched_file_offset() {
+        let mut bytes = valid();
+        bytes.resize(190408, 0);
+        put(&mut bytes, 56, 3, 2);
+        put(&mut bytes, 72, 0, 8);
+        put(&mut bytes, 96, PAGE, 8);
+        let load = HEADER_BYTES + PROGRAM_HEADER_BYTES;
+        let tls = load + PROGRAM_HEADER_BYTES;
+        for (header, descriptor) in [
+            (load, [1, 6, 0x0259e0, 0x4269e0, 0x8878, 0x95f0, PAGE]),
+            (tls, [7, 4, 0x02ccee, 0x42dcf0, 0, 0x10, 8]),
+        ] {
+            let [kind, flags, offset, address, filesz, memsz, align] = descriptor;
+            for (field, value, width) in [
+                (0, kind, 4),
+                (4, flags, 4),
+                (8, offset, 8),
+                (16, address, 8),
+                (32, filesz, 8),
+                (40, memsz, 8),
+                (48, align, 8),
+            ] {
+                put(&mut bytes, header + field, value, width);
+            }
+        }
+        assert!(parse_linux(&bytes).is_ok());
+        assert_eq!(parse(&bytes).unwrap_err(), Error::Unsupported);
+
+        put(&mut bytes, tls + 32, 2, 8);
+        assert_eq!(parse_linux(&bytes).unwrap_err(), Error::Bounds);
+        put(&mut bytes, tls + 8, 0x02ccf0, 8);
+        assert!(parse_linux(&bytes).is_ok());
+
+        put(&mut bytes, tls + 32, 0, 8);
+        put(&mut bytes, tls + 8, 0x0259de, 8);
+        assert_eq!(parse_linux(&bytes).unwrap_err(), Error::Bounds);
+        put(&mut bytes, tls + 8, 190409, 8);
+        assert_eq!(parse_linux(&bytes).unwrap_err(), Error::Bounds);
+        put(&mut bytes, tls + 8, 0x02ccee, 8);
+        put(&mut bytes, tls + 16, 0x42ffcf, 8);
+        assert_eq!(parse_linux(&bytes).unwrap_err(), Error::Bounds);
+    }
+
     #[test]
     fn rejects_page_overlap_before_mapping_or_allocation() {
         let mut bytes = valid();

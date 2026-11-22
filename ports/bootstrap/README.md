@@ -84,3 +84,22 @@ The local ext4 capacity run passed at `e2db30f`: pressure recovery, clean kernel
 construction, exact preserved-ELF packaging, real syntax rejection and two new-kernel
 boots. The 64 MiB work disk holds outputs; readonly sources and inherited compilers
 remain in the separate initramfs. This is not compiler or guest-only image bootstrap.
+
+## M18 GCC first stage
+
+`m18_gcc_source.py` verifies the GCC archive lock and publishes either the exact
+entry subset or the selected C/C++ stage1 sources and generators for a fresh
+work disk. `m18_arithmetic.py` builds and
+inventories the locked host-prepared GMP/MPFR/MPC Linux-musl development files.
+`cargo xtask m18-gcc-test` pairs those inputs with the separate host-built BusyBox
+bootstrap profile and the verified M11 toolchain. `--entry` selects the separate
+build-entry diagnostic. See [M18](../../docs/en/milestones/M18_BOOTSTRAP.md).
+The locally accepted checkpointed guest build, application checks and reboot
+retention are recorded in [M18.1 evidence](../../docs/en/validation/M18.1.md).
+
+`image-build.c` is the checked streaming packer run inside the guest. The
+`m18-image-test REPORT GUEST_ELF` gate verifies the retained kernel provenance,
+then exports, extracts and boots two matching guest-generated UEFI/Limine images.
+The separate pressure/reboot sessions retain user data and the prior ISO.
+See [M18.3](../../docs/en/validation/M18.3.md) for accepted inputs and the
+host's remaining preparation and inspection work.

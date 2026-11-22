@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Stage bounded ext4 changes, maintain allocation counters and publish through the selected durability profile.
 //! Allocation/read failures discard the overlay; device commit failures poison the mount and retain dirty state.
+//! Extent rebuilds reuse owned tree blocks so repeated data allocation preserves adjacent runs.
 use super::*;
 
 pub const MAX_TRANSACTION_BLOCKS: usize = 1024;
@@ -426,18 +427,23 @@ impl Ext4 {
     }
     pub(super) fn rebuild(&mut self, inode: &mut Cached) -> Result<(), i64> {
         Self::normalize(&mut inode.extents)?;
-        for n in inode.tree.drain(..) {
-            self.free_block(n)?;
-        }
         let leaves = if inode.extents.len() <= 4 {
             0
         } else {
             inode.extents.len().div_ceil((BLOCK - 12) / 12)
         };
+        // Replacing every leaf on each write interleaves tree blocks with adjacent file data.
+        // The loaded tree already validated ownership of these blocks and excluded data aliases.
+        for n in inode.tree.drain(leaves.min(inode.tree.len())..) {
+            self.free_block(n)?;
+        }
         inode
             .tree
-            .try_reserve_exact(leaves)
+            .try_reserve_exact(leaves - inode.tree.len())
             .map_err(|_| NO_MEMORY)?;
+        for _ in inode.tree.len()..leaves {
+            inode.tree.push(self.allocate_block()?);
+        }
         inode.raw[40..100].fill(0);
         put16(&mut inode.raw, 40, 0xf30a);
         put16(
@@ -465,8 +471,12 @@ impl Ext4 {
                 encode(&mut inode.raw, 52 + i * 12, e);
             }
         } else {
-            for (i, extents) in inode.extents.chunks((BLOCK - 12) / 12).enumerate() {
-                let n = self.allocate_block()?;
+            for (i, (extents, &n)) in inode
+                .extents
+                .chunks((BLOCK - 12) / 12)
+                .zip(&inode.tree)
+                .enumerate()
+            {
                 let mut bytes = buffer()?;
                 put16(&mut bytes[..], 0, 0xf30a);
                 put16(&mut bytes[..], 2, extents.len() as u16);
@@ -477,7 +487,6 @@ impl Ext4 {
                 self.stage(n, bytes, false)?;
                 put32(&mut inode.raw, 52 + i * 12, extents[0].logical);
                 put32(&mut inode.raw, 56 + i * 12, n);
-                inode.tree.push(n);
             }
         }
         let blocks: u32 =

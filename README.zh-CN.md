@@ -26,13 +26,13 @@ GitHub Actions 暂时**仅在推送 `main` 时运行**，关闭 PR、手动和�
 | M0–M7 | UEFI/Limine 启动、内存保护、Ring 3、用户态抢占调度、原生应用、VFS/管道/init/shell、现代 virtio-blk、受检 ext2 `/persist`、源码编辑器、sync/fsync、正常关机和重启保留 |
 | M8–M9 | 固定 BusyBox 1.36.1 CLI 子集；musl 1.2.4 静态、静态 PIE、动态 ELF；pthread/TLS/futex、信号处理与中断/重启、poll/非阻塞 I/O、四组 PTY、启动共享库与 dlopen/TLS |
 | M10 | 可选轮询式 virtio-net IPv4 TCP/UDP、有界 DNS、严格用户态 TLS、校验锁定包的安装/升级/回滚/卸载及用户数据保留 |
-| M11 | 源码构建的系统内 GCC/G++ 11.2.0、binutils/make、配套 musl/C++ sysroot；实际编辑/编译/运行、异常、线程与重启保留 |
+| M11 | 宿主从源码构建供 guest 使用的 GCC/G++ 11.2.0、binutils/make、配套 musl/C++ sysroot；实际 guest 编辑/编译/运行、异常、线程与重启保留 |
 | M12 | 系统内运行官方 Rust 1.90.0/std/Cargo 二进制工具；离线 vendor/build.rs/C FFI/过程宏；严格联网 registry/Git 和缓存离线重编译；固定公网来源通过配置的宿主代理验证 |
 | M13 | SDK 1.0.0、原生 C/C++/Rust 模板、ANOVAPK2 显式 ABI 包、安装策略与实际用户故障的源码符号化 |
 | M14.1–M14.4 | 受检 CPU framebuffer、轮询 PS/2 输入/游标、隔离 Rust 用户态合成器、版本化 `anova.gui.v1` C/C++/Rust SDK、系统内独立构建客户端、便笺和有界图形终端 |
 | M14.5 | 硬件 VirGL 离屏清屏/读回、受保护的逐像素对照、超时/reset/重新初始化和 CPU fallback；普通桌面仍采用软件合成 |
 | M15.1–M15.2 | 容量测量、锁定 bzip2 源码的系统内重建、固定样本精确比较、失败/重启恢复 |
-| M15.3–M15.4 | GCC 和 Rust/LLVM/Cargo 独立源码审计与实际 guest 前置依赖探测；编译器重建仍被阻塞 |
+| M15.3–M15.4 | GCC 和 Rust/LLVM/Cargo 独立源码审计与实际 guest 前置依赖探测，记录了该阶段的阻塞 |
 | M15.5 | 使用继承工具和目标库在系统内编译真实内核；保留 ELF 后由宿主辅助打包，验证启动身份与恢复 |
 | M15.6 | bzip2 和内核各进行两轮独立干净构建，最终产物逐字节一致，归档证据与全部 12 次启动/拒绝/恢复会话通过 |
 | M16（有界本地配置） | 受检输入、后端/缓存解耦、受控 ext4 只读/写入及 JBD2 恢复；新盘 bzip2/串口验收，以及堆/VFS/FD/任务/磁盘耗尽恢复后的真实内核重建；远端 CI 单独记录 |
@@ -41,6 +41,9 @@ GitHub Actions 暂时**仅在推送 `main` 时运行**，关闭 PR、手动和�
 | M17.3 | 文件浏览、有界源码编辑、保存保护及 PTY 共享工作盘；真实 GUI 大小/inode/磁盘满/写入/flush 故障、恢复副本、重试及正常重启已本地验收 |
 | M17.4 | 有界构建诊断、资源及任务实时观测、授权停止和合成器重连恢复 |
 | M17.5 | 固定 C、C++、Rust 图形流程、并发响应、取消、发布与重启恢复通过本地 QEMU |
+| M18.1 已本地验收 | Guest 从源码构建的 GCC/G++ 11.2.0 分别编译、链接并运行了 C 和 C++ 程序，独立重启核对了编译器及种子工具字节。[构建证据](docs/zh-CN/validation/M18.1.md) |
+| M18.2 独立 LLVM 组件 | 在 guest 内从锁定 Rust LLVM fork 构建两次 `LLVMDemangle`，归档及链接夹具逐字节相同，编译/链接失败与重启恢复通过 |
+| M18.3 基础光盘镜像 | AnovaOS 从保留的 guest 内核生成两份完全相同的 UEFI/Limine ISO；独立提取、真实启动、发布失败、取消及磁盘满恢复本地通过 |
 
 证据按阶段收录在[验收索引](docs/zh-CN/index.md#验收记录)，各记录明确实际运行的检查。
 已配置 CI、远端 CI 实际结果和本地验收是分别记录的事实。
@@ -52,7 +55,8 @@ GitHub Actions 暂时**仅在推送 `main` 时运行**，关闭 PR、手动和�
 系统当前为单 BSP、32 个进程/线程槽、内核不可抢占、固定 16 MiB 堆；外设 IRQ 保持屏蔽，
 设备 I/O 采用轮询。ext2 可写文件上限 4 MiB，受控 ext4 文件上限 256 MiB，tmpfs 和只读共享文件缓存上限仍为 1 MiB。
 ext2 没有日志或断电恢复。通用 Linux/glibc、SMP、USB/实机支持、原生 Rust `std`、
-编译器源码重建及完全由 guest 生成启动镜像仍未验证。详见
+编译器源码重建仍待验证。guest 生成的 UEFI 光盘镜像已验收有界无 GUI 配置。详见
+[M18.3](docs/zh-CN/validation/M18.3.md)、
 [当前状态](docs/zh-CN/guides/STATUS.md)和[兼容范围](docs/zh-CN/COMPATIBILITY.md)。
 
 `foundation-capacity-test` 已在新建 64 MiB ext4 工作盘上通过真实资源耗尽/恢复及内核重建。
@@ -64,15 +68,18 @@ ext2 没有日志或断电恢复。通用 Linux/glibc、SMP、USB/实机支持�
 项目所有者确定的顺序为 **M16 资源/VFS/ext4 → M17 开发桌面 → M18 有条件的编译器及镜像自举**。
 M16 已实现后端/缓存、受控 ext4 只读/写入、JBD2 恢复和显式启用的迁移/构建验收。
 M17.1–M17.5 均有声明桌面配置的本地 QEMU 证据，包括实时资源及任务控制、十次启动的
-编译器工作流程。远端 CI、物理硬件和 M18 独立跟踪。
+编译器工作流程。M18 已在 `feat/m18-bootstrap` 开始，远端 CI 与物理硬件独立跟踪。
 
 1. [M16 基础能力](docs/zh-CN/milestones/M16_FOUNDATION.md)：远端 CI 按所有者要求暂缓；声明的内核容量配置已本地通过，
    更广负载仍需独立定容。JBD2 与新盘迁移已有独立的 [M16.5](docs/zh-CN/validation/M16.5.md)/
    [M16.6](docs/zh-CN/validation/M16.6.md) 本地门禁。后端解耦、按需目录、可回收文件节点和受控
    ext4 只读访问已实现，可写范围见 [M16.4](docs/zh-CN/validation/M16.4.md)，既有证据见 [M16](docs/zh-CN/validation/M16.md)。
 2. [M17 开发桌面](docs/zh-CN/milestones/M17_DESKTOP.md)：使用资源面板和固定 C/C++/Rust 配方，验证并发交互与故障恢复。
-3. [M18 后续自举](docs/zh-CN/ROADMAP.md#m18有条件的自举)：满足实测前置条件后，分别重新评估
-   GCC、LLVM/rustc/Cargo 和 guest 独立镜像生成；完整编译器自举不阻塞 M17。
+3. [M18 重建](docs/zh-CN/milestones/M18_BOOTSTRAP.md)通过 `cargo xtask m18-gcc-test`
+   运行有界 GCC 构建入口配置，继续确定并测量 C/C++ 源码闭包。`cargo xtask m18-llvm-test`
+   验证独立 LLVM 解码库，完整 LLVM、rustc 与 Cargo 分别验收。
+   guest 启动镜像门禁 `cargo xtask m18-image-test REPORT GUEST_ELF` 接受已验证的保留
+   guest 内核及继承工具。带 GUI 的构建另行处理。
 
 保留既有运行时、存储、GUI 和 M15 重建门禁。原生 `std`、SMP、设备 IRQ/异步 I/O、实机和
 全新文件系统格式独立推进。[STATUS](docs/zh-CN/guides/STATUS.md) 将已观察到的工具链依赖下载

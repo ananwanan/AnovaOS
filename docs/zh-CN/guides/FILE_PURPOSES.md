@@ -27,10 +27,10 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `crates/abi/Cargo.toml` | 定义由内核与应用 SDK 共享、无需分配的原生 ABI。 |
 | `crates/abi/src/lib.rs` | 定义 native v1 常量、经检查的用户地址及无 padding 的进程/查询布局；这是 AnovaOS 接口，不实现 Linux syscall ABI。 |
 | `crates/abi/src/linux.rs` | 转换原生错误及受支持 Linux open flags，避免污染通用子系统。 |
-| `crates/abi/src/linux/strings.rs` | 通过 checked copy 回调解码页边界内 C 字符串和指针向量，无需分配。 |
+| `crates/abi/src/linux/strings.rs` | 解码按页检查的 C 字符串和向量，定义 Linux exec 每串限制。 |
 | `crates/elf/Cargo.toml` | 提供不依赖硬件的有界 ELF 验证及原生启动栈构造。 |
 | `crates/elf/src/lib.rs` | 映射前验证有界 native ET_EXEC、Linux ET_EXEC/ET_DYN 段、解释器路径和 TLS。 |
-| `crates/elf/src/stack.rs` | 在经检查的启动存储中编码有界 native/Linux 参数、环境和可执行文件/解释器 auxv。 |
+| `crates/elf/src/stack.rs` | 在受检启动块中按独立字符串限制编码原生/Linux 参数、环境和 auxv。 |
 | `crates/graphics/Cargo.toml` | 为内核和宿主检查构建无依赖 no_std 布局及软件绘图库。 |
 | `crates/graphics/src/lib.rs` | 验证有界 RGB 模式，提供固定光标光栅，并在调用者缓冲区内裁剪绘制像素、矩形和位图。 |
 | `crates/graphics/src/tests.rs` | 独立于硬件检查 RGB 打包、边界、哨兵、溢出、裁剪、字面量光标形状和确定性图案。 |
@@ -64,18 +64,18 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `crates/sched/src/lib.rs` | 提供无需硬件或分配的有界 BSP 调度策略及父子生命周期；上下文/资源由内核拥有，本策略不切栈或加锁。 |
 | `crates/storage/Cargo.toml` | 声明 no_std checked sector/ext2 crate 及其原生错误依赖。 |
 | `crates/storage/src/ext2.rs` | 实现声明范围内的 ext2、checked allocation、模式/时间戳保留、有序写入和正常关机。 |
-| `crates/storage/src/ext4.rs` | 读取受控 ext4 extent，并显式接入审计后的无日志可写及有界分配归属。 |
+| `crates/storage/src/ext4.rs` | 读取受检 ext4 extent 和目录记录，每次查找扫描各目录块一次，并接入经审计的无日志及 JBD2 写入。 |
 | `crates/storage/src/filesystem.rs` | 定义持久后端能力、稳定元数据及有界目录游标操作。 |
 | `crates/storage/src/lib.rs` | 定义自有同步扇区设备、只读/flush/stop 契约及 checked ranges。 |
 | `crates/storage/tests/ext2.rs` | 验证盘上 ext2 字节、间接块、稀疏数据、耗尽、重启及 I/O 故障注入。 |
-| `crates/storage/tests/ext4.rs` | 比较 e2fsprogs 镜像并注入 extent、几何、分配及只读设备故障。 |
+| `crates/storage/tests/ext4.rs` | 比较 e2fsprogs 镜像，统计目录查找读取并验证损坏数据及设备故障。 |
 | `crates/vfs/Cargo.toml` | 与宿主测试共享有界内存 VFS、归档、打开文件和管道语义。 |
 | `crates/vfs/src/archive.rs` | 以 checked byte ranges 解码项目 ANOVAFS1 归档，不做强制类型转换；条目为父目录优先绝对 UTF-8 路径，负载借用引导 RAM。 |
 | `crates/vfs/src/fd.rs` | 管理可失败共享描述符表、close-on-exec 状态及无需分配的空占位。 |
 | `crates/vfs/src/file_mapping.rs` | 独立于描述符生命周期保留有界共享文件字节，并为成功写入维护版本。 |
 | `crates/vfs/src/foundation_tests.rs` | 压力验证按需查询和 10,001 项遍历、缓存回收、身份、共享偏移与映射。 |
-| `crates/vfs/src/lib.rs` | 管理有界内存/ext2 namespace、显式 ABI 继承、与后端一致的时间戳精度、私有映射快照、共享打开文件、管道及 PTY。 |
-| `crates/vfs/src/tests.rs` | 测试 VFS 路径/挂载边界、描述符所有权、私有快照、持久时间戳一致性、管道关闭和容量回滚。 |
+| `crates/vfs/src/lib.rs` | 管理有界命名空间、ABI 继承、时间戳、映射快照、共享打开文件、Linux/原生不同字节流容量、packet 与 PTY。 |
+| `crates/vfs/src/tests.rs` | 测试路径/挂载边界、描述符、私有快照、时间戳、管道容量及槽位回收。 |
 | `docs/en/ARCHITECTURE.md` | 说明已实现子系统的所有权、隔离、ABI、驱动边界与后续架构（英文）。 |
 | `docs/en/COMPATIBILITY.md` | 区分已验证原生支持、Linux 软件兼容子集及需要独立验证的 ABI 功能（英文）。 |
 | `docs/en/PROJECT_OUTLINE.md` | 说明项目目标、交付等级、范围、工作包、设计决策与风险（英文）。 |
@@ -252,8 +252,8 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `kernel/src/serial.rs` | 实现单 BSP COM1 输出和非阻塞字节输入，无堆、锁或 firmware 依赖。 |
 | `kernel/src/task/bootstrap.rs` | 无需分配或公共 ABI，采样每个 scheduler 实例的页、堆、任务、描述符及 namespace 占用。 |
 | `kernel/src/task/diagnostics.rs` | 安全复制有界用户 frame-pointer 链，报告捕获异常寄存器和资源。 |
-| `kernel/src/task/linux.rs` | 分派有界 Linux 调用，包括 vfork、modes/umask 和资源查询；内存/线程/信号/terminal 布局委派给对应模块。 |
-| `kernel/src/task/linux/io.rs` | I/O 前导入 Linux writev 描述符，后续缓冲异常时保留已完成字节数。 |
+| `kernel/src/task/linux.rs` | 分派有界 Linux 调用并选择 Linux 字节流容量，委派内存、线程、信号及 terminal 布局。 |
+| `kernel/src/task/linux/io.rs` | 执行有界普通文件读取和向量 I/O，后续缓冲异常时保留已完成字节数。 |
 | `kernel/src/task/linux/memory.rs` | 转换有界 mmap/brk/munmap/mprotect、真实 PROT_NONE/W^X、私有文件 backing 和共享匿名页。 |
 | `kernel/src/task/linux/select.rs` | 实现 checked select 描述符集合、真实 readiness、有限等待、剩余时间及可中断阻塞。 |
 | `kernel/src/task/linux/signals.rs` | 转换 signal actions/masks/addressing，构造 AMD64 用户帧并导入 checked sigreturn 状态。 |
@@ -434,7 +434,7 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `xtask/src/gui_sdk.rs` | 验证 guest 编辑/构建、物理 GUI 输入、实际画面、故障和重启后保留文件哈希。 |
 | `xtask/src/gui_sdk_build.rs` | 导出含双语指南和校验清单的 GUI 源码 SDK，打包 guest 编译器/显示镜像。 |
 | `xtask/src/input.rs` | 注入 QMP 键鼠序列，比较全部光标/背景像素，并要求缺设备时串口恢复和正常关机。 |
-| `xtask/src/linux.rs` | 构建并记录锁定 musl/BusyBox 静态/动态夹具哈希，打包上游源码，保存有界 Linux 宿主追踪。 |
+| `xtask/src/linux.rs` | 构建并记录锁定 musl/BusyBox 夹具及可选 applet 配置哈希，打包上游源码，保留 Linux 宿主追踪。 |
 | `xtask/src/main.rs` | 提供可复现内核/应用构建、ISO 组装和 QEMU 验证的宿主命令行入口，包括解析后 MADT 的 I/O APIC 编号差异启动用例。 |
 | `xtask/src/network.rs` | 运行受控本地回环对端，用 watchdog 驱动真实 QEMU 网络验收。 |
 | `xtask/src/packages.rs` | 锁定并构建用户态 TLS 客户端、生成锁定包，验证安装、重启和 HTTPS 行为。 |
@@ -450,8 +450,8 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 
 | `crates/storage/src/ext4/audit.rs` | 审计可写位图/计数、全局块归属和根目录/链接关系。 |
 | `crates/storage/src/ext4/directory.rs` | 暂存 ext4 目录增长、重命名替换/移动、父目录链接和孤儿命名空间修改。 |
-| `crates/storage/src/ext4/write.rs` | 暂存有界 ext4 分配/数据/extent 修改，发布错误停止服务，正常关机 flush 清洁标记。 |
-| `crates/storage/tests/ext4_write.rs` | 验证真实 ext4 可写镜像、逐预检分配失败、ENOSPC、元数据和 I/O 边界。 |
+| `crates/storage/src/ext4/write.rs` | 暂存有界 ext4 修改，复用已归属 extent 树块，并在发布失败时停止服务。 |
+| `crates/storage/tests/ext4_write.rs` | 验证真实 ext4 可写镜像、稀疏输出增长、分配失败、ENOSPC、元数据和 I/O 边界。 |
 | `user/linux/ext4_write.c` | 通过真实 musl 验证 ext4 写入、目录/cwd 移动、孤儿/映射/fork 生命周期、元数据和满盘复用。 |
 | `xtask/src/foundation_write.rs` | 创建显式启用的 ext4 工作盘，保留六次 QEMU 写入/构建/重启/virtio 故障及宿主检查。 |
 | `docs/en/validation/M16.4.md` | 说明受控 ext4 write-v1 契约、故障与独立检查的本地证据（英文）。 |
@@ -556,3 +556,37 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `docs/zh-CN/validation/M17.5.md` | 提供实际图形构建、并发和恢复验收的中文记录。 |
 | `docs/assets/validation/M17_MONITOR_LOCAL.json` | 保留精确资源和恢复日志、解码校验和及画面指纹。 |
 | `docs/assets/validation/M17_WORKFLOW_LOCAL.json` | 保留编译工作流实测、输入身份及相关原始记录。 |
+## M18 编译器与启动镜像重建
+
+| 文件 | 用途 |
+| --- | --- |
+| `docs/en/milestones/M18_BOOTSTRAP.md` | 定义独立编译器、guest 镜像构建和重复/恢复门禁。 |
+| `docs/zh-CN/milestones/M18_BOOTSTRAP.md` | 翻译重建输入、预算、证据边界及退出条件。 |
+| `docs/en/validation/M18.1.md` | 记录 guest GCC 首阶段、实际 C/C++ 与重启结果以及保留的失败。 |
+| `docs/zh-CN/validation/M18.1.md` | 翻译 guest GCC 首阶段、应用及重启证据。 |
+| `docs/en/validation/M18.2.md` | 记录 LLVM/Rust/Cargo 组件实测，区分宿主、种子与 guest 证据。 |
+| `docs/zh-CN/validation/M18.2.md` | 翻译 LLVM/Rust/Cargo 组件结果、源码输入及独立前置条件。 |
+| `docs/en/validation/M18.3.md` | 记录宿主构建器检查和独立的 guest 镜像构建、提取、启动及恢复证据。 |
+| `docs/zh-CN/validation/M18.3.md` | 翻译独立宿主与 guest 镜像结果及其验收边界。 |
+| `docs/en/validation/M18.4.md` | 按组件跟踪 M18 精确产物比较及重复/恢复范围。 |
+| `docs/zh-CN/validation/M18.4.md` | 翻译重复/恢复证据及各组件限制。 |
+| `docs/assets/validation/M18_IMAGE_LOCAL.json` | 保留镜像、提取和六次启动恢复的受检记录、产物身份及原始日志。 |
+| `docs/assets/validation/M18_LLVM_LOCAL.json` | 保留受检 LLVM 源码闭包、精确产物及四次启动的构建/失败/恢复日志。 |
+| `user/linux/busybox-bootstrap.config` | 选择 M18 GCC configure 专用静态 BusyBox applet。 |
+| `ports/bootstrap/m18_gcc_source.py` | 校验源码归档并只准备声明的未修改 GCC 构建入口。 |
+| `ports/bootstrap/m18_arithmetic.py` | 在宿主构建并验证锁定的 Linux-musl 算术头文件、静态归档及原始声明。 |
+| `tests/guest/m18/posix.sh` | 运行实际 applet，检查输出、错误、重命名替换和当前链接创建边界。 |
+| `tests/guest/m18/arithmetic.c` | 使用继承的 guest GCC 链接并运行实际 GMP、MPFR 和 MPC 运算。 |
+| `tests/guest/m18/exec_bounds.c` | 检查 Linux exec 的字节和条目限制、启动栈布局及实测 shell 操作数长度。 |
+| `tests/guest/m18/gcc_configure.sh` | 保留依赖负例日志，执行未修改的 GCC configure 和单作业 make 入口。 |
+| `tests/guest/m18/gcc_stage1.sh` | 检查新构建的 GCC 和 G++ 驱动、前端、C/C++ 执行、拒绝行为和重新启动后的恢复。 |
+| `tests/guest/m18/stage1.c` | 测试静态 musl 链接并核对 C 程序的精确输出和退出状态。 |
+| `tests/guest/m18/stage1.cpp` | 测试静态 libstdc++ 链接并核对 C++ 程序的精确输出和退出状态。 |
+| `xtask/src/m18_gcc.rs` | 声明预算，驱动 guest 构建和重新启动，保留诊断与选定 GCC 产物的身份。 |
+| `ports/bootstrap/image-build.c` | 从显式输入流式生成 guest 内有界 UEFI/Limine ISO，并控制发布。 |
+| `ports/bootstrap/test_image_build.py` | 检查镜像写入字节、独立 ISO 提取及宿主负例。 |
+| `xtask/src/m18_image.rs` | 校验保留的 guest 内核证据，独立执行镜像构建和启动检查，并保留证据。 |
+| `ports/bootstrap/m18_llvm.py` | 验证发行归档并选取审计过的独立 demangle 源码。 |
+| `tests/guest/m18/llvm_demangle.cpp` | 使用 guest 构建的 demangle 归档检查选定符号类别及无效名称。 |
+| `tests/guest/m18/llvm_demangle.sh` | 编译上游 demangle 源码，链接并运行夹具，保留原始失败。 |
+| `xtask/src/m18_llvm.rs` | 执行有界 guest LLVM 组件构建，比较干净重复运行并保留恢复证据。 |

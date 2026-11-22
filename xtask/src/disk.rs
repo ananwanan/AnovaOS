@@ -413,6 +413,26 @@ pub(super) fn session_network(
     seconds: u64,
     network: bool,
 ) -> Result<()> {
+    session_observed(
+        root, iso, disk, name, readonly, fault, exchanges, poweroff, seconds, network,
+    )
+    .map(|_| ())
+}
+
+/// Record host-clock milliseconds at each completed UART exchange for latency measurements.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn session_observed(
+    root: &Path,
+    iso: &Path,
+    disk: &Path,
+    name: &str,
+    readonly: bool,
+    fault: Option<&str>,
+    exchanges: &[(&str, &[u8])],
+    poweroff: bool,
+    seconds: u64,
+    network: bool,
+) -> Result<Vec<u128>> {
     let logs = directory(root, "logs")?;
     let serial = logs.join(format!("{name}.serial.log"));
     let diagnostic = logs.join(format!("{name}.qemu.log"));
@@ -438,6 +458,7 @@ pub(super) fn session_network(
     )?;
     let mut input = guest.0.stdin.take().ok_or("Missing UART pipe")?;
     let start = Instant::now();
+    let mut observations = Vec::with_capacity(exchanges.len());
     let mut step = 0;
     let mut cursor = 0;
     let transcript = loop {
@@ -467,6 +488,8 @@ pub(super) fn session_network(
             "[FS:FAIL]",
             "[EDIT:FAIL]",
             "[M16:WRITE:FAIL]",
+            "[M18:GCC:FAIL]",
+            "[M18:LLVM:FAIL]",
             "edit: command/save failed; buffer retained",
             "[POWER:FAIL]",
         ]
@@ -482,6 +505,7 @@ pub(super) fn session_network(
             cursor = at + exchanges[step].0.len();
             input.write_all(exchanges[step].1)?;
             input.flush()?;
+            observations.push(start.elapsed().as_millis());
             step += 1;
         }
         if let Some(status) = exited {
@@ -543,5 +567,5 @@ pub(super) fn session_network(
         format!("scenario={name}\nresult=Ok\nsteps={step}\nacpi_shutdown={poweroff}\n"),
     )?;
     println!("Verified {name}; steps={step} acpi_shutdown={poweroff}");
-    Ok(())
+    Ok(observations)
 }
