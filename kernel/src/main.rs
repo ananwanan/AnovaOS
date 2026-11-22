@@ -9,6 +9,8 @@ extern crate alloc;
 mod abi;
 mod arch;
 mod boot;
+#[cfg(feature = "desktop")]
+mod boot_log;
 mod drivers;
 mod fs;
 #[cfg(feature = "graphics")]

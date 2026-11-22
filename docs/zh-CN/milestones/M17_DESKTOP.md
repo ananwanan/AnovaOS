@@ -145,3 +145,5 @@ USB、NVMe/AHCI 及广泛 Linux GUI 兼容仍是独立工作线，
 各自需要前置条件与验收，不能隐含为本开发桌面的要求。
 
 M17.2 实现契约见 [M17_PTY](M17_PTY.md)，实际两次启动证据见 [M17.2](../validation/M17.2.md)。历史 M14 echo/pwd 示例继续独立界定范围。
+
+键鼠均缺失时，普通桌面与 COM1 shell 可同时运行。专用测试合成器依然以状态 74 退出。见[启动日志用法](../guides/DEVELOPMENT.md)及[验证记录](../validation/M17.1.md)。

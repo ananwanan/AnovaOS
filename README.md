@@ -105,6 +105,8 @@ The owner deferred M16 remote closeout and authorized M17 development on `feat/m
 
 ## Build and boot
 
+A normal desktop keeps its windows visible when both input devices are unavailable. Read the boot snapshot with `cat /boot.log` on COM1. To enable copies on a writable virtio work disk, run `mkdir /persist/logs` once before the next boot.
+
 Use x86_64 Ubuntu 24.04 or WSL2 with rustup, QEMU 8.2.2, xorriso, curl,
 dpkg-deb, GCC/G++, make, musl-tools, QEMU-user, Python 3 and e2fsprogs.
 The repository pins Rust 1.90.0, rustfmt, Clippy and `x86_64-unknown-none`.

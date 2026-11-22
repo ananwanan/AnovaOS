@@ -35,7 +35,14 @@ pub fn verify(root: &Path) -> Result<()> {
     let result = work.join("desktop-test.result.txt");
     output_path(&result)?;
     fs::write(&result, "result=Running\n")?;
-    for name in ["journal", "reboot", "ext2", "no-display", "no-input"] {
+    for name in [
+        "journal",
+        "reboot",
+        "ext2",
+        "no-display",
+        "no-input",
+        "test-no-input",
+    ] {
         let path = work.join(format!("{name}.result.txt"));
         output_path(&path)?;
         fs::write(path, "result=Pending\n")?;
@@ -95,10 +102,14 @@ pub fn verify(root: &Path) -> Result<()> {
             &mut evidence,
         )?;
         inspect(&ext2, &work, "ext2", &mut evidence)?;
-        for (name, display, input) in [("no-display", false, true), ("no-input", true, false)] {
+        for (name, iso, display, input) in [
+            ("no-display", &normal_iso, false, true),
+            ("no-input", &normal_iso, true, false),
+            ("test-no-input", &test_iso, true, false),
+        ] {
             session(
                 root,
-                &normal_iso,
+                iso,
                 &ext2,
                 &work,
                 Profile {
@@ -112,6 +123,22 @@ pub fn verify(root: &Path) -> Result<()> {
             )?;
             foundation_journal::check(&ext2)?;
         }
+        // The ext2 session enabled logging before these three independent boots.
+        // Inspect both the no-input boot and its predecessor after the last shutdown.
+        for (slot, marker) in [
+            (1, "[GRAPHICS:FALLBACK]"),
+            (2, "[INPUT:FALLBACK]"),
+            (3, "[INPUT:FALLBACK]"),
+        ] {
+            let output = Command::new("debugfs")
+                .args(["-R", &format!("cat /logs/boot-{slot}.log")])
+                .arg(&ext2)
+                .output()?;
+            let log = String::from_utf8(output.stdout)?;
+            if !output.status.success() || !log.contains(marker) || !log.contains("[DISK:MOUNT]") {
+                return Err(format!("Missing boot diagnostics in ext2 log slot {slot}").into());
+            }
+        }
         Ok(())
     })();
     evidence.push_str(&match &outcome {
@@ -121,7 +148,7 @@ pub fn verify(root: &Path) -> Result<()> {
     fs::write(&result, evidence)?;
     outcome?;
     println!(
-        "Verified desktop clients/input, close/relaunch, quota/fault/restart recovery, UART, saved work and five clean boots"
+        "Verified desktop clients/input, recovery, UART, retained work and boot logs across six boots"
     );
     Ok(())
 }
@@ -200,8 +227,25 @@ fn session(
         deadline: DEADLINE,
     };
     d.wait("anova> ")?;
-    if display && input {
+    let display_only = name == "no-input";
+    if display && (input || display_only) {
         d.ready(0, 0)?;
+        if display_only {
+            d.wait_since(0, "[GUI:NO_INPUT]")?;
+            let mut windows = Vec::new();
+            for index in 0..3 {
+                let (x, y) = d.window(d.client_pid(index)?)?;
+                windows.push((x, y, false));
+            }
+            d.screenshot(work, name, &windows, evidence)?;
+            let bytes = read_ppm(&work.join("no-input.ppm"))?;
+            let screen = parse_ppm(&bytes)?;
+            // Top row of the N glyph starts with white, then the amber background.
+            let glyph = (4 * 800 + 4) * 3;
+            if screen.rgb[glyph..glyph + 6] != [255, 255, 255, 0x58, 0x35, 0x1b] {
+                return Err("Missing visible input diagnostic above desktop windows".into());
+            }
+        }
         if full {
             scenario(&mut d, work, evidence)?;
         }
@@ -215,6 +259,14 @@ fn session(
         };
         if !boot.contains(marker) {
             return Err("Desktop missing-device fallback was not established".into());
+        }
+        if name == "test-no-input" {
+            let pid = field(last_line(&boot, "[GUI:SERVER_READY]")?, "pid")?;
+            if !boot.contains("[GUI:NO_INPUT]")
+                || !boot.contains(&format!("[USER:EXIT] pid={pid} status=74"))
+            {
+                return Err("Strict no-input compositor did not exit with status 74".into());
+            }
         }
     }
     let recovery = Instant::now();
@@ -236,6 +288,9 @@ fn session(
         }
     } else {
         d.command("echo M17-persisted-work > /persist/m17-work.txt", 0)?;
+        if name == "ext2" {
+            d.command("mkdir /persist/logs", 0)?;
+        }
         d.command("sync", 0)?;
     }
     if display && input && !full {
@@ -263,6 +318,14 @@ fn session(
     d.command("echo M17-SHELL-RESTARTED", 0)?;
     d.shutdown()?;
     let text = d.output.text();
+    if display_only
+        && (!text.contains("[INPUT:FALLBACK]")
+            || text.matches("[GUI:NO_INPUT]").count() != 1
+            || text.contains("[DESKTOP:RESTART]")
+            || text.contains("[INIT] desktop exited"))
+    {
+        return Err("Display-only desktop restarted or lost the independent serial shell".into());
+    }
     check_guest(&text, false, &d.faults)?;
     validate_resources(&text)?;
     for line in text

@@ -232,6 +232,7 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `kernel/src/arch/x86_64/traps.rs` | Dispatch kernel diagnostics, native user faults, Linux signals, syscalls and checked usercopy recovery with IF=0 and IRETQ. |
 | `kernel/src/arch/x86_64/user.S` | Resume saved user GPR/FPU state and use its own trusted SYSCALL stack. Every user trap returns to a single BSP scheduler continuation with IF=0. |
 | `kernel/src/arch/x86_64/user.rs` | BSP saved GPR/segment/x87/SSE2 contexts, native SYSCALL and IRETQ transitions. Each user trap returns to the trusted scheduler root/stack; kernel code remains SIMD-free. |
+| `kernel/src/boot_log.rs` | Capture and seal early desktop messages and optionally publish them to a writable work disk. |
 | `kernel/src/boot.rs` | Borrow retained Limine data. M3 allocates only USABLE RAM; bootloader data, original stacks/tables, modules, firmware and the early pool remain reserved. Retained native ELF modules support isolation tests; a tagged archive supplies the M6 root. |
 | `kernel/src/drivers/gpu.rs` | Own an optional polled modern virtio-gpu queue, fenced hardware readback, reset and DMA quarantine. |
 | `kernel/src/drivers/input.rs` | Own i8042 setup/polling/expiry, hand off exclusive physical events to the admitted user compositor, and retain diagnostic/lifecycle checks. |

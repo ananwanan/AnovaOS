@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Single-BSP COM1 output and nonblocking byte input; no heap, locks or firmware.
+//! Single-BSP COM1 I/O and early desktop boot capture. Fatal output bypasses capture.
 use core::{
     arch::asm,
     fmt::{self, Write},
@@ -36,6 +36,17 @@ pub fn init() {
 
 struct EmergencyWriter;
 
+#[cfg(feature = "desktop")]
+struct BootWriter;
+
+#[cfg(feature = "desktop")]
+impl Write for BootWriter {
+    fn write_str(&mut self, value: &str) -> fmt::Result {
+        crate::boot_log::append(value.as_bytes());
+        EmergencyWriter.write_str(value)
+    }
+}
+
 impl Write for EmergencyWriter {
     fn write_str(&mut self, value: &str) -> fmt::Result {
         for byte in value.bytes() {
@@ -61,6 +72,11 @@ fn write_byte(byte: u8) {
 }
 
 pub fn write(args: fmt::Arguments<'_>) {
+    #[cfg(feature = "desktop")]
+    crate::arch::x86_64::cpu::without_interrupts(|| {
+        let _ = BootWriter.write_fmt(args);
+    });
+    #[cfg(not(feature = "desktop"))]
     crate::arch::x86_64::cpu::without_interrupts(|| emergency(args));
 }
 

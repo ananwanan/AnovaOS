@@ -1018,6 +1018,8 @@ fn run(bytes: &[u8], args: &[&str], pid: u64) -> Result<Outcome, loader::LoadErr
             ));
         }
         if args.first() == Some(&"/bin/init") {
+            #[cfg(feature = "desktop")]
+            crate::boot_log::publish(&mut kernel.fs);
             kernel.network =
                 crate::net::Stack::attach().map_err(|_| anova_memory::Error::OutOfMemory)?;
         }

@@ -804,3 +804,5 @@ reads and copies checked segments into private user pages. It commits the new
 image after segment, interpreter and startup checks succeed. The backend remains
 borrowed during each read in the non-preemptible load. Native image admission,
 initramfs slice parsing and interpreter materialization use their existing paths.
+
+The desktop compositor overlays an input warning on damaged scanout while continuing IPC. The desktop kernel seals its boot log before init executes. VFS exposes those bytes read-only at `/boot.log`. Optional work-disk publication runs once outside the serial and exception writers.

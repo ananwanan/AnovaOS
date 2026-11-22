@@ -89,6 +89,8 @@ M17.1–M17.5 均有声明桌面配置的本地 QEMU 证据，包括实时资源
 
 ## 构建与启动
 
+普通桌面在键盘和鼠标均不可用时仍显示窗口。可在 COM1 执行 `cat /boot.log` 查看启动记录。在可写 virtio 工作盘上执行一次 `mkdir /persist/logs`，从下次启动起即可保留副本。
+
 宿主使用 x86_64 Ubuntu 24.04 或 WSL2，安装 rustup、QEMU 8.2.2、xorriso、curl、
 dpkg-deb、GCC/G++、make、musl-tools、QEMU-user、Python 3 和 e2fsprogs。
 仓库固定 Rust 1.90.0、rustfmt、Clippy 与 `x86_64-unknown-none`。

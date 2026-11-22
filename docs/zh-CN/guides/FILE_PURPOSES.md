@@ -230,6 +230,7 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `kernel/src/arch/x86_64/traps.rs` | 在 IF=0 下分派内核诊断、原生用户异常、Linux 信号、syscall 和 checked usercopy 恢复，并使用 IRETQ。 |
 | `kernel/src/arch/x86_64/user.S` | 恢复用户 GPR/FPU 状态并使用自有可信 SYSCALL 栈；每次用户 trap 返回 IF=0 的单 BSP scheduler continuation。 |
 | `kernel/src/arch/x86_64/user.rs` | 管理 BSP GPR/segment/x87/SSE2 上下文和原生 SYSCALL/IRETQ；用户 trap 返回可信 scheduler root/stack，内核保持无 SIMD。 |
+| `kernel/src/boot_log.rs` | 收集、封存桌面早期启动消息，可选保存到可写工作盘。 |
 | `kernel/src/boot.rs` | 借用保留 Limine 数据；M3 仅分配 USABLE RAM，引导器数据、原始栈/页表、模块、firmware 和早期池保持保留；原生 ELF 模块支撑隔离测试，标记归档提供 M6 root。 |
 | `kernel/src/drivers/gpu.rs` | 管理可选轮询 modern virtio-gpu 队列、带 fence 硬件读回、reset 和 DMA 隔离。 |
 | `kernel/src/drivers/input.rs` | 管理 i8042 初始化/轮询/超时，向获准用户合成器独占交接物理事件，并保留诊断/生命周期检查。 |

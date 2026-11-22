@@ -3,6 +3,10 @@
 
 **English** | [简体中文](../../zh-CN/guides/STATUS.md)
 
+## Desktop boot diagnostics (2026-11-22)
+
+A normal desktop keeps its windows visible when both input devices are unavailable. Read the boot snapshot with `cat /boot.log` on COM1. To enable copies on a writable virtio work disk, run `mkdir /persist/logs` once before the next boot. See the [follow-up checks](../validation/M17.1.md).
+
 ## M18.1 GCC first stage locally accepted (2026-11-22)
 
 The separate M18.1 profile admits a new BusyBox applet set and host-built GMP/MPFR/MPC

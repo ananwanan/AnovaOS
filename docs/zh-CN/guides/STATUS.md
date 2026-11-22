@@ -3,6 +3,10 @@
 
 [English](../../en/guides/STATUS.md) | **简体中文**
 
+## 桌面启动诊断（2026-11-22）
+
+普通桌面在键盘和鼠标均不可用时仍显示窗口。可在 COM1 执行 `cat /boot.log` 查看启动记录。在可写 virtio 工作盘上执行一次 `mkdir /persist/logs`，从下次启动起即可保留副本。 验证范围见[后续记录](../validation/M17.1.md)。
+
 ## M18.1 GCC 第一阶段已本地验收（2026-11-22）
 
 独立 M18.1 配置准入新的 BusyBox applet 集合及宿主构建的 GMP/MPFR/MPC 开发输入。

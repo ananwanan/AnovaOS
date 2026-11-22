@@ -8,6 +8,7 @@
 mod gpu;
 
 use anova_gui::{Compositor, Error, Reply, Request, STORAGE_PIXELS, reply_kind, transport as t};
+use anova_gui_runtime::render::Canvas;
 use anova_gui_user as gui;
 use anova_rt::{self as rt, abi::*};
 use core::{
@@ -16,6 +17,7 @@ use core::{
 };
 
 const SCREEN_PIXELS: usize = 800 * 600;
+const NOTICE_HEIGHT: u32 = 15;
 
 struct Storage {
     surfaces: [u32; STORAGE_PIXELS],
@@ -33,8 +35,24 @@ static STORAGE: PrivateStorage = PrivateStorage(UnsafeCell::new(Storage {
     frame: [0; SCREEN_PIXELS],
 }));
 
-fn present(core: &mut Compositor<'_>, frame: &mut [u32], width: u32) {
+fn present(core: &mut Compositor<'_>, frame: &mut [u32], width: u32, input_notice: bool) {
     if let Some(rect) = core.render(frame).unwrap() {
+        if input_notice && rect.y < NOTICE_HEIGHT as i32 {
+            let rows = NOTICE_HEIGHT.min((frame.len() / width as usize) as u32);
+            let strip = &mut frame[..(width * rows) as usize];
+            strip.fill(0x58351b);
+            Canvas {
+                pixels: strip,
+                width,
+                height: rows,
+            }
+            .text(
+                4,
+                4,
+                "No keyboard or mouse detected. Use the COM1 serial shell.",
+                0xffffff,
+            );
+        }
         let offset = rect.y as usize * width as usize + rect.x as usize;
         let scanout = t::Scanout {
             pixels: frame[offset..].as_ptr() as u64,
@@ -157,13 +175,15 @@ fn run(test: bool, restart: bool, desktop: bool) -> u32 {
         &mut storage.surfaces,
     )
     .unwrap();
-    present(&mut core, &mut storage.frame, display.width);
+    let frame = &mut storage.frame[..(display.width * display.height) as usize];
+    present(&mut core, frame, display.width, false);
     gui::log(format_args!(
         "[GUI:SERVER_READY] pid={} session={session} userspace=true\n",
         rt::info().unwrap().process_id
     ));
     let mut envelope = t::Envelope::default();
     let mut no_input = false;
+    let notice = anova_gui::Rect::new(0, 0, display.width, NOTICE_HEIGHT);
     let mut no_input_deadline = None;
     loop {
         for _ in 0..8 {
@@ -189,7 +209,7 @@ fn run(test: bool, restart: bool, desktop: bool) -> u32 {
                     let reply = request(&mut core, &envelope, desktop);
                     reset_old_focus(&mut core, previous, window);
                     // A successful PRESENT reply follows actual CPU scanout completion.
-                    present(&mut core, &mut storage.frame, display.width);
+                    present(&mut core, frame, display.width, desktop && no_input);
                     deliver(&mut core, envelope.client, &reply);
                 }
                 _ => panic!("GUI invalid kernel envelope"),
@@ -198,15 +218,20 @@ fn run(test: bool, restart: bool, desktop: bool) -> u32 {
         for _ in 0..16 {
             let mut event = t::HardwareEvent::default();
             // SAFETY: HardwareEvent is the exact initialized 24-byte INPUT output layout.
-            match unsafe { gui::output(t::INPUT, &mut event) } {
-                Err(WOULD_BLOCK) => break,
-                Err(UNSUPPORTED) => {
-                    if !no_input {
-                        rt::write(b"[GUI:NO_INPUT]\n");
-                    }
-                    no_input = true;
-                    break;
+            let input = unsafe { gui::output(t::INPUT, &mut event) };
+            let unavailable = input == Err(UNSUPPORTED);
+            if unavailable != no_input {
+                no_input = unavailable;
+                no_input_deadline = None;
+                if no_input {
+                    rt::write(b"[GUI:NO_INPUT]\n");
                 }
+                if desktop {
+                    core.mark(notice);
+                }
+            }
+            match input {
+                Err(WOULD_BLOCK | UNSUPPORTED) => break,
                 Err(_) => panic!("GUI physical input receive failed"),
                 Ok(()) => {}
             }
@@ -232,7 +257,7 @@ fn run(test: bool, restart: bool, desktop: bool) -> u32 {
                 _ => panic!("GUI invalid physical event kind"),
             };
             reset_old_focus(&mut core, previous, window);
-            present(&mut core, &mut storage.frame, display.width);
+            present(&mut core, frame, display.width, false);
             if let Some(routed) = routed {
                 deliver(&mut core, routed.client, &routed.reply);
             }
@@ -243,8 +268,8 @@ fn run(test: bool, restart: bool, desktop: bool) -> u32 {
                 ));
             }
         }
-        present(&mut core, &mut storage.frame, display.width);
-        if no_input && desktop {
+        present(&mut core, frame, display.width, desktop && no_input);
+        if no_input && desktop && test {
             return 74;
         }
         if no_input && test && core.window_count() == 2 {

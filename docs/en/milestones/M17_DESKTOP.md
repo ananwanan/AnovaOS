@@ -153,3 +153,5 @@ GUI compatibility remain independent workstreams with their own prerequisites
 and acceptance; they are not implicit requirements for this development desktop.
 
 Implemented M17.2 contract: [M17_PTY](M17_PTY.md); actual two-boot evidence: [M17.2](../validation/M17.2.md). The historical M14 echo/pwd example remains separately scoped.
+
+A missing keyboard and mouse now leave the ordinary desktop and COM1 shell running together. The dedicated test compositor still exits with status 74. See the [boot-log instructions](../guides/DEVELOPMENT.md) and [validation record](../validation/M17.1.md).

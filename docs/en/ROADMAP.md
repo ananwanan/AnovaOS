@@ -515,3 +515,5 @@ in [M16 capacity](validation/M16_CAPACITY.md), separately from historical bzip2
 acceptance. Completion requires actual successful runs and retained evidence.
 
 Current Actions policy is main-push only; complete remote acceptance remains pending under that policy.
+
+The [display-only desktop follow-up](validation/M17.1.md) covers missing input and boot diagnostics. Native USB HID input and physical mass-storage drivers remain separate hardware milestones.

@@ -458,7 +458,9 @@ bzip2、中断/重启保留和宿主测量的前台 UART 预算。见 [M16.5](..
 
 `cargo xtask desktop-build` 构建原生监督器及宿主构建的既有 C/C++/Rust 客户端，并显式准入一个小型 Linux personality 边界探针，不下载编译器种子。`cargo xtask desktop-image` 生成 `build/images/anova-desktop.iso`，`cargo xtask run --desktop [--disk build/disks/work.ext4]` 启动桌面及独立 COM1 shell。先聚焦启动器，使用 `1`/`2`/`3` 启动或停止、`r` 替换会话、`q` 退出。
 
-`cargo xtask desktop-test` 通过仅回环 TCP QMP 执行五次无窗口 QEMU 启动，验证实际物理输入/故障/重启、任务/FD 压力、精确保存内容、普通 ext4 重启、ext2 及缺设备回退。证据位于 `build/desktop-test/`，`desktop-test.result.txt` 报告整体结果，失败不会被掩盖。显式 `desktop test` 会话（专用测试 ISO 自动选择）启用启动器 `f`/`b` 原始客户端探针和 F12 合成器 UD2，不属于普通桌面快捷键。选定的 5 秒操作/UART 预算及原资源限额已本地通过。实测边界和保留记录见 [M17.1](../validation/M17.1.md)。此项保留 M17.1 配置；另行验收的 M17.2 终端见下文。
+普通桌面在键盘和鼠标均不可用时仍显示窗口。可在 COM1 执行 `cat /boot.log` 查看启动记录。在可写 virtio 工作盘上执行一次 `mkdir /persist/logs`，从下次启动起即可保留副本。 无盘或只读启动时，快照保留在内存。桌面内核保存从入口到 init 尝试挂载工作盘期间最后 32 KiB 的常规内核消息。日志目录不存在时跳过写盘。每次成功保存占用 `boot-1.log` 至 `boot-4.log` 的首个空位；移出或删除旧文件后即可复用。写入中断遗留的 `boot.tmp` 会阻止发布新日志，可检查后移走或删除。致命异常及此后的 GUI 日志仍输出到 COM1。仅提供 USB 接口的键鼠需要 USB 输入驱动。
+
+`cargo xtask desktop-test` 通过仅回环 TCP QMP 执行六次无窗口 QEMU 启动，验证实际物理输入/故障/重启、任务/FD 压力、精确保存内容、普通 ext4 重启、ext2 及缺设备回退。证据位于 `build/desktop-test/`，`desktop-test.result.txt` 报告整体结果，失败不会被掩盖。显式 `desktop test` 会话（专用测试 ISO 自动选择）启用启动器 `f`/`b` 原始客户端探针和 F12 合成器 UD2，不属于普通桌面快捷键。选定的 5 秒操作/UART 预算及原资源限额已本地通过。实测边界和保留记录见 [M17.1](../validation/M17.1.md)。此项保留 M17.1 配置；另行验收的 M17.2 终端见下文。
 
 ## M17.2 真实 PTY 终端
 
