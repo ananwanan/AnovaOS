@@ -132,6 +132,8 @@ extern "C" fn kernel_main(timer_port: u64, timer_mask: u64) -> ! {
     assert!(cpu::flags() & (1 << 9) != 0, "IRET failed to restore IF");
     PHASE.store(6, Ordering::Relaxed);
     mm::inject_fault();
+    #[cfg(feature = "xhci")]
+    cpu::without_interrupts(drivers::xhci::start);
     #[cfg(feature = "graphics")]
     {
         graphics::show();

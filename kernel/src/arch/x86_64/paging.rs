@@ -188,6 +188,25 @@ impl<'a> EarlyMapper<'a> {
         self.set_leaf(address, 0);
     }
 
+    /// Optional PCI devices may reject an aperture without taking down the boot path.
+    #[cfg(feature = "xhci")]
+    pub fn try_mmio(&mut self, physical: PhysAddr, address: VirtAddr) -> Result<(), i64> {
+        if physical.0 == 0
+            || physical.0 & !ADDRESS != 0
+            || address.0 & 4095 != 0
+            || !self.info.permits_mmio(physical)
+            || (cpu::read_msr(0x277) >> 24) & 255 != 0
+        {
+            return Err(anova_abi::INVALID_ARGUMENT);
+        }
+        // A single leaf can require at most three private intermediate tables.
+        if POOL_SIZE - self.used < 3 {
+            return Err(anova_abi::NO_SPACE);
+        }
+        self.mmio(physical, address);
+        Ok(())
+    }
+
     pub fn mmio(&mut self, physical: PhysAddr, virtual_address: VirtAddr) {
         assert!(
             physical.0 != 0 && physical.0 & 0xfff == 0 && physical.0 & !ADDRESS == 0,

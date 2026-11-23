@@ -705,3 +705,9 @@ rerun passed all 48 tests. Strict host Clippy and the bare-metal
 formatting, Python/workflow parsing, bilingual documentation, 454-file purpose
 coverage and `git diff --check`. Remote CI was configured, not accepted by these
 local results; at that historical delivery the workflow triggered on `dev` pushes/PRs or manual dispatch; current policy is main-push only.
+
+## USB keyboard and mouse
+
+USB.1 has an opt-in xHCI command-ring implementation awaiting kernel compilation and QEMU verification. USB.2–USB.5 are pending; USB.6 is planned.
+
+[USB development milestone](../milestones/USB_INPUT.md) · [test guide and evidence](../validation/USB_INPUT.md)

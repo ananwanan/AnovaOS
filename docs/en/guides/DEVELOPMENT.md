@@ -756,3 +756,10 @@ Use a retained M16 capacity report and its verified guest-built kernel for
 The image gate exports the guest-produced ISO and verifies extracted bytes, actual boots
 and recovery without a host final-packaging step. Read [M18.3](../validation/M18.3.md)
 for the accepted source/seed identity and retained output locations.
+
+## USB keyboard and mouse
+
+Run `cargo xtask xhci-test` for the controller-present and controller-absent boots. Inspect UART
+and exit evidence under `build/logs/`. Execution is pending.
+
+[USB development milestone](../milestones/USB_INPUT.md) · [test guide and evidence](../validation/USB_INPUT.md)

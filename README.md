@@ -199,3 +199,9 @@ git diff --check
 Original code, documentation and examples use [Apache-2.0](LICENSE);
 [NOTICE](NOTICE) and third-party licenses retain their own attribution and terms.
 See [licensing](docs/en/guides/LICENSING.md).
+
+## USB keyboard and mouse
+
+USB.1 has an opt-in xHCI command-ring implementation awaiting kernel compilation and QEMU verification. USB.2–USB.5 are pending; USB.6 is planned.
+
+[USB development milestone](docs/en/milestones/USB_INPUT.md) · [test guide and evidence](docs/en/validation/USB_INPUT.md)

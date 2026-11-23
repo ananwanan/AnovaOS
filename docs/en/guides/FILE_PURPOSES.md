@@ -594,3 +594,10 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `tests/guest/m18/llvm_demangle.cpp` | Exercise the guest-built demangle archive across the selected supported symbol families and an invalid name. |
 | `tests/guest/m18/llvm_demangle.sh` | Compile the upstream demangle sources, link and run the fixture, and retain original failures. |
 | `xtask/src/m18_llvm.rs` | Run the bounded guest LLVM component build, compare clean rounds and retain recovery evidence. |
+| `kernel/src/drivers/xhci/mod.rs` | Own the controller, command submission, completion matching and DMA failure lifetime. |
+| `kernel/src/drivers/xhci/registers.rs` | Validate MMIO, firmware ownership, register offsets and bounded hardware waits. |
+| `kernel/src/drivers/xhci/rings.rs` | Lay out DMA32 storage, publish command TRBs and consume event TRBs across wraps. |
+| `docs/en/milestones/USB_INPUT.md` | Define USB ownership, phased HID input delivery and the USB.6 design. |
+| `docs/en/validation/USB_INPUT.md` | Separate observed results from host, QEMU and physical USB test procedures. |
+| `docs/zh-CN/milestones/USB_INPUT.md` | Define USB ownership, phased HID input delivery and the USB.6 design. |
+| `docs/zh-CN/validation/USB_INPUT.md` | Separate observed results from host, QEMU and physical USB test procedures. |

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Enumerate PCI configuration mechanism 1 and validate/probe modern virtio MMIO capabilities.
+//! Walk PCI mechanism 1 bridges and validate memory BARs for virtio and optional xHCI.
 //! BAR probing disables memory decoding/bus mastering; restored BARs are mapped UC and NX.
 use crate::{
     arch::x86_64::{cpu, paging::EarlyMapper},
@@ -89,9 +89,29 @@ fn discover_device(
     window_offset: u64,
     device_bytes: u32,
 ) -> Result<Option<VirtioConfig>, i64> {
+    let mut found = None;
+    let count = walk(|f, id| {
+        if id == identity {
+            if found.is_some() {
+                return Err(UNSUPPORTED);
+            }
+            serial::write(format_args!(
+                "[PCI:BLK] bdf={:02x}:{:02x}.{} device={identity:#x}\n",
+                f.bus, f.device, f.function
+            ));
+            found = Some(capabilities(f, mapper, window_offset, device_bytes)?);
+        }
+        Ok(())
+    })?;
+    serial::write(format_args!(
+        "[PCI:ENUM] functions={count} modern_blk={}\n",
+        found.is_some()
+    ));
+    Ok(found)
+}
+fn walk(mut visit: impl FnMut(Function, u32) -> Result<(), i64>) -> Result<usize, i64> {
     let mut buses = [false; 256];
     buses[0] = true;
-    let mut found = None;
     let mut count = 0;
     for bus in 0..256 {
         if !buses[bus] {
@@ -127,35 +147,15 @@ fn discover_device(
                     }
                     buses[secondary..=subordinate].fill(true);
                 }
-                if id == identity {
-                    if found.is_some() {
-                        return Err(UNSUPPORTED);
-                    }
-                    serial::write(format_args!(
-                        "[PCI:BLK] bdf={bus:02x}:{device:02x}.{function} device={identity:#x}\n"
-                    ));
-                    found = Some(capabilities(f, mapper, window_offset, device_bytes)?);
-                }
+                visit(f, id)?;
             }
         }
     }
-    serial::write(format_args!(
-        "[PCI:ENUM] functions={count} modern_blk={}\n",
-        found.is_some()
-    ));
-    Ok(found)
+    Ok(count)
 }
-fn capabilities(
-    f: Function,
-    mapper: &mut EarlyMapper<'_>,
-    window_offset: u64,
-    device_bytes: u32,
-) -> Result<VirtioConfig, i64> {
-    if f.read(0x0c) & 0x007f_0000 != 0 || f.read(4) & (1 << 20) == 0 {
-        return Err(UNSUPPORTED);
-    }
-    let original = f.read(4) as u16;
-    f.command(original & !6);
+
+/// Caller holds boot-time configuration ownership and has disabled memory decode and mastering.
+fn memory_bars(f: Function) -> Result<[Bar; 6], i64> {
     let mut bars = [Bar::default(); 6];
     let mut i = 0;
     while i < 6 {
@@ -167,7 +167,6 @@ fn capabilities(
         }
         let wide = low & 6 == 4;
         if low & 6 != 0 && !wide || wide && i == 5 {
-            f.command(original);
             return Err(UNSUPPORTED);
         }
         let high = if wide { f.read(offset + 4) } else { 0 };
@@ -189,6 +188,27 @@ fn capabilities(
         }
         i += if wide { 2 } else { 1 };
     }
+    Ok(bars)
+}
+
+fn capabilities(
+    f: Function,
+    mapper: &mut EarlyMapper<'_>,
+    window_offset: u64,
+    device_bytes: u32,
+) -> Result<VirtioConfig, i64> {
+    if f.read(0x0c) & 0x007f_0000 != 0 || f.read(4) & (1 << 20) == 0 {
+        return Err(UNSUPPORTED);
+    }
+    let original = f.read(4) as u16;
+    f.command(original & !6);
+    let bars = match memory_bars(f) {
+        Ok(bars) => bars,
+        Err(error) => {
+            f.command(original);
+            return Err(error);
+        }
+    };
     // Restore decoding only after every probed BAR has been restored. INTx stays disabled.
     f.command((original | 2 | 1 << 10) & !4);
     let mut result = VirtioConfig {
@@ -271,4 +291,46 @@ fn capabilities(
         return Err(UNSUPPORTED);
     }
     Ok(result)
+}
+
+#[cfg(feature = "xhci")]
+pub(super) fn first_xhci() -> Result<Option<Function>, i64> {
+    let mut found = None;
+    walk(|f, _| {
+        if found.is_none() && f.read(8) >> 8 == 0x0c0330 && f.read(0x0c) & 0x007f_0000 == 0 {
+            serial::write(format_args!(
+                "[USB:PCI] bdf={:02x}:{:02x}.{} class=0c0330\n",
+                f.bus, f.device, f.function
+            ));
+            found = Some(f);
+        }
+        Ok(())
+    })?;
+    Ok(found)
+}
+
+#[cfg(feature = "xhci")]
+impl Function {
+    pub(super) fn bar0_base(self) -> Result<u64, i64> {
+        let low = self.read(0x10);
+        let high = match low & 7 {
+            0 => 0,
+            4 => self.read(0x14),
+            _ => return Err(UNSUPPORTED),
+        };
+        Ok(u64::from(high) << 32 | u64::from(low & !15))
+    }
+
+    /// Size the aperture only after the firmware handoff and a confirmed controller halt.
+    pub(super) fn halted_bar0_size(self, expected: u64) -> Result<u64, i64> {
+        let command = self.read(4) as u16;
+        self.command(command & !6);
+        let bars = memory_bars(self);
+        self.command((command | 2 | 1 << 10) & !4);
+        let bar = bars?[0];
+        if bar.base != expected || bar.size < 4096 {
+            return Err(INVALID_ARGUMENT);
+        }
+        Ok(bar.size)
+    }
 }

@@ -175,3 +175,9 @@ git diff --check
 
 原创代码、文档与示例采用 [Apache-2.0](LICENSE)；[NOTICE](NOTICE) 和第三方许可证保留
 各自的归属与条款，详见[许可指南](docs/zh-CN/guides/LICENSING.md)。
+
+## USB 键鼠
+
+USB.1 已写入可选 xHCI 命令环代码，等待内核编译及 QEMU 验证。USB.2～USB.5 待实现，USB.6 仅规划。
+
+[USB 开发里程碑](docs/zh-CN/milestones/USB_INPUT.md) · [测试指南及证据](docs/zh-CN/validation/USB_INPUT.md)

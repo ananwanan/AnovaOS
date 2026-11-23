@@ -517,3 +517,10 @@ acceptance. Completion requires actual successful runs and retained evidence.
 Current Actions policy is main-push only; complete remote acceptance remains pending under that policy.
 
 The [display-only desktop follow-up](validation/M17.1.md) covers missing input and boot diagnostics. Native USB HID input and physical mass-storage drivers remain separate hardware milestones.
+
+## USB keyboard and mouse
+
+The dependency order is host controller, root enumeration, boot keyboard, boot mouse, report
+protocol and desktop regression. USB.1 has an opt-in xHCI command-ring implementation awaiting kernel compilation and QEMU verification. USB.2–USB.5 are pending; USB.6 is planned.
+
+[USB development milestone](milestones/USB_INPUT.md) · [test guide and evidence](validation/USB_INPUT.md)

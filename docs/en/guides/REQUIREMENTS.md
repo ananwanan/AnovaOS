@@ -94,3 +94,11 @@ Added 2026-11-21. Work from `dev` on `feat/m18-bootstrap`, keep pull requests ta
 - Repeat viable components on clean disks, retaining hashes, logs, failure recovery and
   differences. Accept a substage only after its actual positive, negative and recovery checks.
   Read the [M18 contract](../milestones/M18_BOOTSTRAP.md).
+
+## USB keyboard and mouse
+
+DEV-006 requires sequential USB.1–USB.5 acceptance through real transfers, the shared input
+dispatcher, headless-input desktop startup and COM1 recovery. External hubs, hotplug and fault
+recovery are scoped to the subsequent USB.6 design.
+
+[USB development milestone](../milestones/USB_INPUT.md) · [test guide and evidence](../validation/USB_INPUT.md)

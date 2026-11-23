@@ -486,3 +486,10 @@ Linux `execve` 通过有界的按位置读取校验持久化主程序，将受�
 原生映像准入、initramfs 切片解析及解释器载入使用各自的既有路径。
 
 桌面合成器在更新画面时叠加无输入提示，并继续处理 IPC。桌面内核在执行 init 前封存启动日志，通过 VFS 在 `/boot.log` 提供只读快照。可选的工作盘保存发生在串口和异常输出路径之外，每次启动执行一次。
+
+## USB 键鼠
+
+USB 主机控制器复用 PCI、UC 映射和 DMA32 页。后续由 USB Core 枚举并按接口绑定 HID，
+HID 将物理输入送入 M14 调度轮询与统一事件队列，M17 桌面继续按焦点分发。
+
+[USB 开发里程碑](milestones/USB_INPUT.md) · [测试指南及证据](validation/USB_INPUT.md)

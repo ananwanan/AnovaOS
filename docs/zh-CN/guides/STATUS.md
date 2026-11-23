@@ -465,3 +465,9 @@ zero-copy、性能提升、物理 GPU passthrough 或未确认 reset 后恢复�
 Clippy、裸机 `ext4-write,bootstrap-metrics` 内核 Clippy、workspace/user 格式、Python/
 workflow 解析、双语文档、454 个文件用途覆盖及 `git diff --check` 均通过。以上为本地结果，
 远端 CI 已配置但未据此验收；当时 workflow 由 `dev` 推送/PR 或手动 dispatch 触发；当前策略已改为仅 main 推送。
+
+## USB 键鼠
+
+USB.1 已写入可选 xHCI 命令环代码，等待内核编译及 QEMU 验证。USB.2～USB.5 待实现，USB.6 仅规划。
+
+[USB 开发里程碑](../milestones/USB_INPUT.md) · [测试指南及证据](../validation/USB_INPUT.md)

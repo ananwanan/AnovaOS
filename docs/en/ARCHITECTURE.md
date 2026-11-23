@@ -806,3 +806,11 @@ borrowed during each read in the non-preemptible load. Native image admission,
 initramfs slice parsing and interpreter materialization use their existing paths.
 
 The desktop compositor overlays an input warning on damaged scanout while continuing IPC. The desktop kernel seals its boot log before init executes. VFS exposes those bytes read-only at `/boot.log`. Optional work-disk publication runs once outside the serial and exception writers.
+
+## USB keyboard and mouse
+
+The USB host controller reuses PCI, UC mapping and DMA32 pages. USB Core will enumerate
+and bind HID interfaces; HID producers will feed the M14 scheduler-polled input dispatcher.
+The M17 compositor retains focus policy.
+
+[USB development milestone](milestones/USB_INPUT.md) · [test guide and evidence](validation/USB_INPUT.md)

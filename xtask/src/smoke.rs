@@ -11,6 +11,47 @@ pub enum Failure {
     Markers,
 }
 
+/// Require the normal boot/storage profile as well as a correlated xHCI command sequence.
+pub fn assess_xhci(
+    log: &str,
+    code: Option<i32>,
+    timed_out: bool,
+    present: bool,
+) -> Result<(), Failure> {
+    assess(log, code, timed_out)?;
+    if log.contains("[USB:REJECT]") || log.contains("[USB:QUARANTINE]") {
+        return Err(Failure::Markers);
+    }
+    let absent = log.lines().any(|line| line == "[USB:ABSENT] class=0c0330");
+    let mut lines = log.lines();
+    let pci = lines.any(|line| line.starts_with("[USB:PCI]") && line.ends_with("class=0c0330"));
+    if !present {
+        return if absent && !pci && !log.contains("[USB:XHCI]") && !log.contains("[USB:RINGS]") {
+            Ok(())
+        } else {
+            Err(Failure::Markers)
+        };
+    }
+    if absent || !pci {
+        return Err(Failure::Markers);
+    }
+    let ready = lines
+        .find(|line| line.starts_with("[USB:XHCI] noop=complete "))
+        .ok_or(Failure::Markers)?;
+    let slots = field(ready, "slots").and_then(|value| value.parse::<u8>().ok());
+    let proof = lines
+        .find(|line| line.starts_with("[USB:RINGS] noops=34 "))
+        .ok_or(Failure::Markers)?;
+    let slot = field(proof, "slot").and_then(|value| value.parse::<u8>().ok());
+    if field(ready, "irq") != Some("poll")
+        || field(proof, "disable") != Some("complete")
+        || !matches!((slot, slots), (Some(id), Some(max)) if (1..=max).contains(&id))
+    {
+        return Err(Failure::Markers);
+    }
+    Ok(())
+}
+
 pub fn assess_ioapic_id_mismatch(
     log: &str,
     code: Option<i32>,
@@ -606,6 +647,30 @@ mod tests {
             );
         }
     }
+    #[test]
+    fn xhci_gate_requires_a_completed_slot_cycle_and_disjoint_absence() {
+        let proof = "[USB:PCI] bdf=00:05.0 class=0c0330\n[USB:XHCI] noop=complete slots=8 ports=8 scratchpads=0 irq=poll\n[USB:RINGS] noops=34 slot=1 disable=complete\n";
+        let present = format!("{GOOD}\n{proof}");
+        let absent = format!("{GOOD}\n[USB:ABSENT] class=0c0330\n");
+        assert_eq!(assess_xhci(&present, Some(33), false, true), Ok(()));
+        assert_eq!(assess_xhci(&absent, Some(33), false, false), Ok(()));
+        for invalid in [
+            absent,
+            present.replace("noops=34", "noops=1"),
+            present.replace("slot=1", "slot=9"),
+            present.replace("disable=complete", "disable=timeout"),
+            format!("{present}[USB:QUARANTINE] controller DMA retained"),
+        ] {
+            assert_eq!(
+                assess_xhci(&invalid, Some(33), false, true),
+                Err(Failure::Markers)
+            );
+        }
+        assert!(assess_xhci(&present, Some(33), false, false).is_err());
+        assert!(assess_xhci(&present, Some(35), false, true).is_err());
+        assert!(assess_xhci(&present, Some(33), true, true).is_err());
+    }
+
     #[test]
     fn m7_gate_requires_mount_disk_io_and_acknowledged_dma_release() {
         for marker in [

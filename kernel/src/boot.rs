@@ -225,19 +225,25 @@ impl BootInfo {
     }
 
     pub fn check_mmio(&self, physical: PhysAddr) {
-        let end = physical.0.checked_add(4096).expect("MMIO range overflow");
         assert!(
-            self.entries.iter().all(|entry| {
-                let mapped_ram = entry.entry_type == EntryType::USABLE
-                    || entry.entry_type == EntryType::BOOTLOADER_RECLAIMABLE
-                    || entry.entry_type == EntryType::EXECUTABLE_AND_MODULES
-                    || entry.entry_type == EntryType::FRAMEBUFFER
-                    || entry.entry_type == EntryType::ACPI_RECLAIMABLE
-                    || entry.entry_type == EntryType::ACPI_NVS;
-                !mapped_ram || end <= entry.base || physical.0 >= entry.base + entry.length
-            }),
+            self.permits_mmio(physical),
             "Device page overlaps RAM, firmware, or a framebuffer"
         );
+    }
+
+    pub fn permits_mmio(&self, physical: PhysAddr) -> bool {
+        let Some(end) = physical.0.checked_add(4096) else {
+            return false;
+        };
+        self.entries.iter().all(|entry| {
+            let mapped_ram = entry.entry_type == EntryType::USABLE
+                || entry.entry_type == EntryType::BOOTLOADER_RECLAIMABLE
+                || entry.entry_type == EntryType::EXECUTABLE_AND_MODULES
+                || entry.entry_type == EntryType::FRAMEBUFFER
+                || entry.entry_type == EntryType::ACPI_RECLAIMABLE
+                || entry.entry_type == EntryType::ACPI_NVS;
+            !mapped_ram || end <= entry.base || physical.0 >= entry.base + entry.length
+        })
     }
 
     pub fn report(&self) {

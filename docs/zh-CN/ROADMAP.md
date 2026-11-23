@@ -507,3 +507,10 @@ M17 已通过各项声明的本地实测。M16 远端收尾仍待处理。M18 �
 当前 Actions 策略仅限 main 推送；完整远端验收在此策略下仍待完成。
 
 [桌面无输入启动修复](validation/M17.1.md)覆盖缺少输入时的显示与启动诊断。原生 USB HID 输入及物理存储驱动另行开发、验收。
+
+## USB 键鼠
+
+依赖顺序为主机控制器 → 根端口枚举 → Boot 键盘 → Boot 鼠标 → Report Protocol → 桌面回归。
+USB.1 已写入可选 xHCI 命令环代码，等待内核编译及 QEMU 验证。USB.2～USB.5 待实现，USB.6 仅规划。
+
+[USB 开发里程碑](milestones/USB_INPUT.md) · [测试指南及证据](validation/USB_INPUT.md)

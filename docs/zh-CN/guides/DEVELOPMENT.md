@@ -543,3 +543,10 @@ M15 的 `bootstrap-gcc-test`、`bootstrap-rust-test`、`bootstrap-kernel-test`
 `build/foundation/capacity-*/guest-kernel.elf`，应保留相互匹配的报告及 ELF。
 镜像门禁导出 guest 生成的 ISO，并验证提取字节、真实启动和恢复，最终打包在 guest 中完成。
 已验收的源码/种子身份及保留路径见 [M18.3](../validation/M18.3.md)。
+
+## USB 键鼠
+
+使用 `cargo xtask xhci-test` 运行带控制器和缺控制器的两次启动，串口与退出结果写入 `build/logs/`。
+本批尚无执行证据。
+
+[USB 开发里程碑](../milestones/USB_INPUT.md) · [测试指南及证据](../validation/USB_INPUT.md)
