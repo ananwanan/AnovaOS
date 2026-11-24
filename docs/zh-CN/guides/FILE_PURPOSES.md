@@ -591,3 +591,18 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `tests/guest/m18/llvm_demangle.cpp` | 使用 guest 构建的 demangle 归档检查选定符号类别及无效名称。 |
 | `tests/guest/m18/llvm_demangle.sh` | 编译上游 demangle 源码，链接并运行夹具，保留原始失败。 |
 | `xtask/src/m18_llvm.rs` | 执行有界 guest LLVM 组件构建，比较干净重复运行并保留恢复证据。 |
+| `kernel/src/drivers/xhci/mod.rs` | 管理控制器、命令提交、完成匹配和失败后的 DMA 生命周期。 |
+| `kernel/src/drivers/xhci/registers.rs` | 校验 MMIO、固件接管、协议端口范围及有界根端口复位。 |
+| `kernel/src/drivers/xhci/rings.rs` | 布局 DMA32 存储，发布命令 TRB 并跨回绕消费事件 TRB。 |
+| `docs/en/milestones/USB_INPUT.md` | 定义 USB 所有权、HID 输入交付阶段及 USB.6 设计。 |
+| `docs/en/validation/USB_INPUT.md` | 区分实际结果与宿主、QEMU 和实机 USB 验收步骤。 |
+| `docs/zh-CN/milestones/USB_INPUT.md` | 定义 USB 所有权、HID 输入交付阶段及 USB.6 设计。 |
+| `docs/zh-CN/validation/USB_INPUT.md` | 区分实际结果与宿主、QEMU 和实机 USB 验收步骤。 |
+
+| `crates/usb/Cargo.toml` | Define the no_std descriptor and HID validation crate. |
+| `crates/usb/src/lib.rs` | Validate bounded USB device/configuration/interface/endpoint descriptors. |
+| `crates/usb/src/hid.rs` | Parse bounded HID layouts and transactionally decode boot/report input. |
+| `kernel/src/drivers/xhci/device.rs` | Own device contexts, EP0 enumeration and interrupt endpoint records. |
+| `kernel/src/drivers/xhci/transfer.rs` | Publish transfer TRBs and read completed coherent DMA payloads. |
+
+| `xtask/src/usb_input.rs` | Drive independent USB/PS2 desktop topologies and inspect exact graphical PTY bytes. |

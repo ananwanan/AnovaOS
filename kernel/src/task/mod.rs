@@ -730,6 +730,8 @@ impl Kernel {
             }
             #[cfg(feature = "graphics")]
             crate::drivers::input::poll();
+            #[cfg(all(feature = "xhci", not(feature = "graphics")))]
+            crate::drivers::xhci::poll(|_, _| {});
             self.terminal.poll();
             self.linux_wake();
             for i in 0..CAPACITY {

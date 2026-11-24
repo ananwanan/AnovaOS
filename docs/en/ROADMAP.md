@@ -517,3 +517,9 @@ acceptance. Completion requires actual successful runs and retained evidence.
 Current Actions policy is main-push only; complete remote acceptance remains pending under that policy.
 
 The [display-only desktop follow-up](validation/M17.1.md) covers missing input and boot diagnostics. Native USB HID input and physical mass-storage drivers remain separate hardware milestones.
+
+## USB keyboard and mouse
+
+The opt-in USB.2–USB.5 implementation enumerates root devices and delivers Boot/Report keyboards and relative mice through the existing desktop. Boot and Report each passed five independent QEMU topologies, including full/high speed; desktop, PTY, UART, storage and runtime regressions passed. The validation record separates modeled, host-only and physical coverage. Native/GUI public ABIs stay frozen. USB.6 hubs, runtime hotplug and general recovery remain separate. Physical hardware is pending.
+
+[USB milestone](milestones/USB_INPUT.md) · [validation and limits](validation/USB_INPUT.md)

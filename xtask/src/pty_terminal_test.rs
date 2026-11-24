@@ -313,44 +313,7 @@ pub(super) fn type_text(d: &mut Driver, text: &str) -> Result<()> {
     // Every byte becomes physical make/break input. Small batches stay below the PS/2
     // queue bound; no UART or file injection substitutes for terminal keyboard input.
     for byte in text.bytes() {
-        let (key, shift) = match byte {
-            b'a'..=b'z' => ((byte as char).to_string(), false),
-            b'A'..=b'Z' => (((byte + 32) as char).to_string(), true),
-            b'0'..=b'9' => ((byte as char).to_string(), false),
-            b' ' => ("spc".into(), false),
-            b'/' => ("slash".into(), false),
-            b'-' => ("minus".into(), false),
-            b'.' => ("dot".into(), false),
-            b';' => ("semicolon".into(), false),
-            b'>' => ("dot".into(), true),
-            b'$' => ("4".into(), true),
-            b'?' => ("slash".into(), true),
-            b'\n' => ("ret".into(), false),
-            b'\t' => ("tab".into(), false),
-            b'_' => ("minus".into(), true),
-            b'=' => ("equal".into(), false),
-            b'+' => ("equal".into(), true),
-            b'(' => ("9".into(), true),
-            b')' => ("0".into(), true),
-            b'[' => ("bracket_left".into(), false),
-            b']' => ("bracket_right".into(), false),
-            b'{' => ("bracket_left".into(), true),
-            b'}' => ("bracket_right".into(), true),
-            b'<' => ("comma".into(), true),
-            b',' => ("comma".into(), false),
-            b':' => ("semicolon".into(), true),
-            b'\"' => ("apostrophe".into(), true),
-            b'\'' => ("apostrophe".into(), false),
-            b'!' => ("1".into(), true),
-            b'~' => ("grave_accent".into(), true),
-            b'#' => ("3".into(), true),
-            b'&' => ("7".into(), true),
-            b'*' => ("8".into(), true),
-            b'%' => ("5".into(), true),
-            b'|' => ("backslash".into(), true),
-            b'\\' => ("backslash".into(), false),
-            _ => return Err(format!("Unsupported PTY test input byte {byte}").into()),
-        };
+        let (key, shift) = text_key(byte)?;
         let mut events = Vec::new();
         if shift {
             events.push(key_event("shift", true));
@@ -366,6 +329,47 @@ pub(super) fn type_text(d: &mut Driver, text: &str) -> Result<()> {
         thread::sleep(Duration::from_millis(12));
     }
     Ok(())
+}
+
+pub(super) fn text_key(byte: u8) -> Result<(String, bool)> {
+    Ok(match byte {
+        b'a'..=b'z' => ((byte as char).to_string(), false),
+        b'A'..=b'Z' => (((byte + 32) as char).to_string(), true),
+        b'0'..=b'9' => ((byte as char).to_string(), false),
+        b' ' => ("spc".into(), false),
+        b'/' => ("slash".into(), false),
+        b'-' => ("minus".into(), false),
+        b'.' => ("dot".into(), false),
+        b';' => ("semicolon".into(), false),
+        b'>' => ("dot".into(), true),
+        b'$' => ("4".into(), true),
+        b'?' => ("slash".into(), true),
+        b'\n' => ("ret".into(), false),
+        b'\t' => ("tab".into(), false),
+        b'_' => ("minus".into(), true),
+        b'=' => ("equal".into(), false),
+        b'+' => ("equal".into(), true),
+        b'(' => ("9".into(), true),
+        b')' => ("0".into(), true),
+        b'[' => ("bracket_left".into(), false),
+        b']' => ("bracket_right".into(), false),
+        b'{' => ("bracket_left".into(), true),
+        b'}' => ("bracket_right".into(), true),
+        b'<' => ("comma".into(), true),
+        b',' => ("comma".into(), false),
+        b':' => ("semicolon".into(), true),
+        b'\"' => ("apostrophe".into(), true),
+        b'\'' => ("apostrophe".into(), false),
+        b'!' => ("1".into(), true),
+        b'~' => ("grave_accent".into(), true),
+        b'#' => ("3".into(), true),
+        b'&' => ("7".into(), true),
+        b'*' => ("8".into(), true),
+        b'%' => ("5".into(), true),
+        b'|' => ("backslash".into(), true),
+        b'\\' => ("backslash".into(), false),
+        _ => return Err(format!("Unsupported PTY test input byte {byte}").into()),
+    })
 }
 
 fn key_event(key: &str, down: bool) -> serde_json::Value {

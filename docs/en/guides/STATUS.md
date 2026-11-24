@@ -705,3 +705,9 @@ rerun passed all 48 tests. Strict host Clippy and the bare-metal
 formatting, Python/workflow parsing, bilingual documentation, 454-file purpose
 coverage and `git diff --check`. Remote CI was configured, not accepted by these
 local results; at that historical delivery the workflow triggered on `dev` pushes/PRs or manual dispatch; current policy is main-push only.
+
+## USB keyboard and mouse
+
+The opt-in USB.2–USB.5 implementation enumerates root devices and delivers Boot/Report keyboards and relative mice through the existing desktop. Boot and Report each passed five independent QEMU topologies, including full/high speed; desktop, PTY, UART, storage and runtime regressions passed. The validation record separates modeled, host-only and physical coverage. Native/GUI public ABIs stay frozen. USB.6 hubs, runtime hotplug and general recovery remain separate. Physical hardware is pending.
+
+[USB milestone](../milestones/USB_INPUT.md) · [validation and limits](../validation/USB_INPUT.md)

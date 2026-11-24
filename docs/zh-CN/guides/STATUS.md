@@ -465,3 +465,9 @@ zero-copy、性能提升、物理 GPU passthrough 或未确认 reset 后恢复�
 Clippy、裸机 `ext4-write,bootstrap-metrics` 内核 Clippy、workspace/user 格式、Python/
 workflow 解析、双语文档、454 个文件用途覆盖及 `git diff --check` 均通过。以上为本地结果，
 远端 CI 已配置但未据此验收；当时 workflow 由 `dev` 推送/PR 或手动 dispatch 触发；当前策略已改为仅 main 推送。
+
+## USB 键鼠
+
+可选 USB.2–USB.5 已实现根设备枚举、Boot/Report 键盘和相对鼠标，并接入现有桌面。Boot 与 Report 各通过五种独立 QEMU 拓扑，包含全速／高速；桌面、PTY、串口、存储及运行时回归通过。验证记录区分模拟设备、仅宿主及实机覆盖范围。native/GUI 公共 ABI 保持冻结。USB.6 Hub、运行时热插拔和完整恢复另行验收。实机待验。
+
+[USB 里程碑](../milestones/USB_INPUT.md) · [验证与限制](../validation/USB_INPUT.md)

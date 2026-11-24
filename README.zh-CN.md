@@ -54,7 +54,7 @@ GitHub Actions 暂时**仅在推送 `main` 时运行**，关闭 PR、手动和�
 
 系统当前为单 BSP、32 个进程/线程槽、内核不可抢占、固定 16 MiB 堆；外设 IRQ 保持屏蔽，
 设备 I/O 采用轮询。ext2 可写文件上限 4 MiB，受控 ext4 文件上限 256 MiB，tmpfs 和只读共享文件缓存上限仍为 1 MiB。
-ext2 没有日志或断电恢复。通用 Linux/glibc、SMP、USB/实机支持、原生 Rust `std`、
+ext2 没有日志或断电恢复。通用 Linux/glibc、SMP、USB 实机支持、原生 Rust `std`、
 编译器源码重建仍待验证。guest 生成的 UEFI 光盘镜像已验收有界无 GUI 配置。详见
 [M18.3](docs/zh-CN/validation/M18.3.md)、
 [当前状态](docs/zh-CN/guides/STATUS.md)和[兼容范围](docs/zh-CN/COMPATIBILITY.md)。
@@ -175,3 +175,11 @@ git diff --check
 
 原创代码、文档与示例采用 [Apache-2.0](LICENSE)；[NOTICE](NOTICE) 和第三方许可证保留
 各自的归属与条款，详见[许可指南](docs/zh-CN/guides/LICENSING.md)。
+
+## USB 键鼠
+
+可选 USB.2–USB.5 已实现根设备枚举、Boot/Report 键盘和相对鼠标，并接入现有桌面。Boot 与 Report 各通过五种独立 QEMU 拓扑，包含全速／高速；桌面、PTY、串口、存储及运行时回归通过。验证记录区分模拟设备、仅宿主及实机覆盖范围。native/GUI 公共 ABI 保持冻结。USB.6 Hub、运行时热插拔和完整恢复另行验收。实机待验。
+
+使用 `cargo xtask run --desktop --usb [--toolchain | --rust] [--disk build/disks/work.ext4]` 启动可选 QEMU 会话，连接 xHCI 键鼠并保留 PS/2。`cargo xtask usb-image` 构建生产 USB 桌面 ISO；这些命令只写入仓库构建文件。
+
+[USB 里程碑](docs/zh-CN/milestones/USB_INPUT.md) · [验证与限制](docs/zh-CN/validation/USB_INPUT.md)

@@ -27,6 +27,10 @@ pub const DISCONNECTED: u32 = 3;
 pub const RESET: u32 = 1;
 pub const KEY: u32 = 2;
 pub const POINTER: u32 = 3;
+/// Experimental hardware-only signed i16 wheel delta in value (sign-extended to i32).
+/// The compositor consumes it as bounded history navigation using existing GUI key events.
+/// POINTER value/flags carry eight button bits here; public GUI events keep three buttons.
+pub const WHEEL: u32 = 4;
 
 #[repr(C)]
 pub struct Envelope {

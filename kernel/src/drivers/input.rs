@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Own the QEMU i8042 ports with PM-timer-bounded setup and scheduler-only byte polling.
+//! Poll bounded i8042 and optional xHCI producers into shared physical state and cursor delivery.
 //! IRQ1/12 remain masked. The diagnostic yields exclusive events/cursor to an admitted
 //! user compositor; physical keys never become COM1 text or a frozen public ABI.
 use crate::{arch::x86_64::cpu, graphics::Cursor, serial};
@@ -20,6 +20,8 @@ struct State {
     timer: PmTimer,
     last_keyboard: u32,
     last_mouse: u32,
+    #[cfg(feature = "xhci")]
+    usb_repeat: (u64, u32, u32),
     #[cfg(feature = "gui")]
     gui: bool,
 }
@@ -189,7 +191,10 @@ pub fn init(timer: PmTimer) {
                 serial::write(format_args!(
                     "[INPUT:FALLBACK] keyboard=false pointer=false reason={reason}; COM1 available\n"
                 ));
-                return;
+                if !usb_available() {
+                    return;
+                }
+                (false, false)
             }
         };
         let cursor = Cursor::new().ok();
@@ -234,6 +239,8 @@ pub fn init(timer: PmTimer) {
             timer,
             last_keyboard: now,
             last_mouse: now,
+            #[cfg(feature = "xhci")]
+            usb_repeat: (0, now, now),
             #[cfg(feature = "gui")]
             gui: false,
         };
@@ -260,6 +267,9 @@ pub fn poll() {
     // traffic on the other port must not keep a truncated packet/prefix alive.
     state.expire_partial(cpu::in32(state.timer.port) & state.timer.mask);
     for _ in 0..BUDGET {
+        if !state.keyboard && !state.pointer {
+            break;
+        }
         let status = read(STATUS);
         if status & 1 == 0 {
             break;
@@ -275,6 +285,21 @@ pub fn poll() {
         } else if state.keyboard {
             state.last_keyboard = cpu::in32(state.timer.port) & state.timer.mask;
             state.dispatcher.feed_keyboard(byte);
+        }
+    }
+    #[cfg(feature = "xhci")]
+    crate::drivers::xhci::poll(|source, sample| state.dispatcher.feed_usb(source, sample));
+    #[cfg(feature = "xhci")]
+    {
+        let now = cpu::in32(state.timer.port);
+        let generation = state.dispatcher.usb_generation();
+        if state.usb_repeat.0 != generation {
+            state.usb_repeat = (generation, now, now);
+        } else if u64::from(pm_elapsed(state.usb_repeat.1, now, state.timer.mask)) >= PM_HZ / 2
+            && u64::from(pm_elapsed(state.usb_repeat.2, now, state.timer.mask)) >= PM_HZ / 30
+        {
+            state.dispatcher.repeat_usb();
+            state.usb_repeat.2 = now;
         }
     }
     #[cfg(feature = "gui")]
@@ -308,6 +333,7 @@ pub fn poll() {
                     event.overflow
                 ));
             }
+            Event::Wheel(delta) => serial::write(format_args!("[INPUT:WHEEL] delta={delta}\n")),
             Event::Reset(reason) => {
                 if let Some(cursor) = &mut state.cursor {
                     cursor.hide();
@@ -339,14 +365,28 @@ pub fn gui_event() -> Result<anova_gui::transport::HardwareEvent, i64> {
     let state = unsafe { &mut *OWNER.0.get() }
         .as_mut()
         .ok_or(anova_abi::UNSUPPORTED)?;
-    if !state.keyboard && !state.pointer {
+    if !state.keyboard && !state.pointer && !usb_available() {
         return Err(anova_abi::UNSUPPORTED);
     }
     if !state.gui {
         return Err(anova_abi::PERMISSION_DENIED);
     }
     let event = state.dispatcher.pop_event().ok_or(anova_abi::WOULD_BLOCK)?;
+    #[cfg(feature = "usb-input-test")]
+    if let Event::Key(key) = event {
+        serial::write(format_args!(
+            "[USB:KEY] code={} state={:?} modifiers={}\n",
+            key.key.number(),
+            key.state,
+            key.modifiers.bits()
+        ));
+    }
     Ok(match event {
+        Event::Wheel(delta) => HardwareEvent {
+            kind: anova_gui::transport::WHEEL,
+            value: (i32::from(delta)) as u32,
+            ..HardwareEvent::default()
+        },
         Event::Reset(_) => HardwareEvent {
             kind: RESET,
             ..HardwareEvent::default()
@@ -443,4 +483,15 @@ fn self_test_timeout(state: &mut State) {
     serial::write(format_args!(
         "[INPUT:TIMEOUT-TEST] sources=independent prefeed=true wrap=true\n"
     ));
+}
+
+fn usb_available() -> bool {
+    #[cfg(feature = "xhci")]
+    {
+        crate::drivers::xhci::input_available()
+    }
+    #[cfg(not(feature = "xhci"))]
+    {
+        false
+    }
 }

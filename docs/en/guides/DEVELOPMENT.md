@@ -756,3 +756,15 @@ Use a retained M16 capacity report and its verified guest-built kernel for
 The image gate exports the guest-produced ISO and verifies extracted bytes, actual boots
 and recovery without a host final-packaging step. Read [M18.3](../validation/M18.3.md)
 for the accepted source/seed identity and retained output locations.
+
+## USB keyboard and mouse
+
+The opt-in USB.2–USB.5 implementation enumerates root devices and delivers Boot/Report keyboards and relative mice through the existing desktop. Boot and Report each passed five independent QEMU topologies, including full/high speed; desktop, PTY, UART, storage and runtime regressions passed. The validation record separates modeled, host-only and physical coverage. Native/GUI public ABIs stay frozen. USB.6 hubs, runtime hotplug and general recovery remain separate. Physical hardware is pending.
+
+Use `cargo xtask run --desktop --usb [--toolchain | --rust] [--disk build/disks/work.ext4]` for an opt-in QEMU session with xHCI keyboard/mouse and PS/2 retained. `cargo xtask usb-image` builds the production USB desktop ISO. These commands write only repository build files.
+
+Run `cargo xtask xhci-test` for attached/empty/absent controllers plus submitted EP0 timeout and real STALL. Run `cargo xtask usb-input-test --boot` and `cargo xtask usb-input-test` for independent USB-only, coexistence, full-speed USB, PS/2-only and no-input sessions. UART, QMP, scanout, exact PTY bytes/status and result files are retained under `build/usb-boot-test/`, `build/usb-input-test/` and `build/usb-input/`; reruns preserve prior attempts. Desktop sessions have 180-second watchdogs and five-second input/echo scanout guards; controller sessions retain 90 seconds. Physical input never becomes COM1 text.
+
+[USB milestone](../milestones/USB_INPUT.md) · [validation and limits](../validation/USB_INPUT.md)
+
+`cargo xtask xhci-packet-test` independently exercises full-speed EP0 `8 → 64` Evaluate Context using an unbound model, with output-context readback and full descriptor/configuration transfers. The command does not admit a USB network driver.

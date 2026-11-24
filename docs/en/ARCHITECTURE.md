@@ -806,3 +806,13 @@ borrowed during each read in the non-preemptible load. Native image admission,
 initramfs slice parsing and interpreter materialization use their existing paths.
 
 The desktop compositor overlays an input warning on damaged scanout while continuing IPC. The desktop kernel seals its boot log before init executes. VFS exposes those bytes read-only at `/boot.log`. Optional work-disk publication runs once outside the serial and exception writers.
+
+## USB keyboard and mouse
+
+The opt-in USB.2–USB.5 implementation enumerates root devices and delivers Boot/Report keyboards and relative mice through the existing desktop. Boot and Report each passed five independent QEMU topologies, including full/high speed; desktop, PTY, UART, storage and runtime regressions passed. The validation record separates modeled, host-only and physical coverage. Native/GUI public ABIs stay frozen. USB.6 hubs, runtime hotplug and general recovery remain separate. Physical hardware is pending.
+
+The no-allocation `anova-usb` crate validates USB configuration chains and HID layouts/reports. xHCI owns MMIO, contexts, EP0 and interrupt rings, verifies slot/endpoint/TRB/completion/residual identity and retains DMA until hardware quiescence. Device records retain VID/PID/class, configuration and interface endpoints. Scheduler polling submits no blocking runtime control requests.
+
+Dispatcher aggregates PS/2 and 32 USB interface sources before emitting physical transitions. Each HID interface aggregates independent Report IDs; rejected reports preserve prior state. Layout/text/focus remain in existing consumers. USB repeats use 500 ms delay and 30 Hz events; PS/2 make/repeat semantics are retained. Experimental wheel/button transport is consumed by the compositor without changing the public GUI ABI.
+
+[USB milestone](milestones/USB_INPUT.md) · [validation](validation/USB_INPUT.md)

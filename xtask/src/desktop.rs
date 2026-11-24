@@ -189,25 +189,39 @@ pub fn prepare(root: &Path) -> Result<PathBuf> {
 }
 
 pub fn image(root: &Path) -> Result<PathBuf> {
+    image_mode(root, Mode::Desktop)
+}
+pub(super) fn image_mode(root: &Path, mode: Mode) -> Result<PathBuf> {
     let archive = prepare(root)?;
     assets::check(root)?;
-    let kernel = build(root, Mode::Desktop)?;
-    image_contents(root, &kernel, Some(&archive), "desktop")
+    let kernel = build(root, mode)?;
+    image_contents(root, &kernel, Some(&archive), mode.name())
 }
 
-pub fn run(root: &Path, disk: Option<&Path>, compiler: bool, rust: bool) -> Result<()> {
+pub fn run(root: &Path, disk: Option<&Path>, compiler: bool, rust: bool, usb: bool) -> Result<()> {
+    let mode = if usb { Mode::UsbDesktop } else { Mode::Desktop };
     let iso = if rust {
-        pty_terminal::development_image(root)?
+        pty_terminal::development_image_mode(root, mode)?
     } else if compiler {
-        pty_terminal::image(root, true)?
+        pty_terminal::image_mode(root, true, mode)?
     } else {
-        image(root)?
+        image_mode(root, mode)?
     };
     let vars = Temporary::new(root, "desktop-run")?;
     let mut cmd = qemu_disk(root, &iso, &vars.0, false, disk, false)?;
     cmd.args([
         "-m", "3G", "-vga", "std", "-display", "gtk", "-serial", "stdio",
     ]);
+    if usb {
+        cmd.args([
+            "-device",
+            "qemu-xhci,id=xhci",
+            "-device",
+            "usb-kbd,bus=xhci.0",
+            "-device",
+            "usb-mouse,bus=xhci.0",
+        ]);
+    }
     let result = command(&mut cmd);
     vars.cleanup()?;
     result

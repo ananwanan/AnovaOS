@@ -50,6 +50,7 @@ mod transcript;
 #[cfg(test)]
 #[path = "../../kernel/src/fs/tty_ready.rs"]
 mod tty_ready;
+mod usb_input;
 
 use std::{
     boxed::Box,
@@ -72,6 +73,15 @@ enum Mode {
     Foundation,
     Bootstrap,
     Graphics,
+    Xhci,
+    XhciEmpty,
+    XhciAbsent,
+    XhciPacket,
+    XhciTimeout,
+    XhciStall,
+    UsbDesktop,
+    UsbTestDesktop,
+    UsbBootDesktop,
     Input,
     Gui,
     GuiTest,
@@ -102,6 +112,15 @@ impl Mode {
             Self::Foundation => "foundation",
             Self::Bootstrap => "bootstrap",
             Self::Graphics => "graphics",
+            Self::Xhci => "xhci",
+            Self::XhciEmpty => "xhci-empty",
+            Self::XhciAbsent => "xhci-absent",
+            Self::XhciPacket => "xhci-packet",
+            Self::XhciTimeout => "xhci-timeout",
+            Self::XhciStall => "xhci-stall",
+            Self::UsbDesktop => "usb-desktop",
+            Self::UsbTestDesktop => "usb-test-desktop",
+            Self::UsbBootDesktop => "usb-boot-desktop",
             Self::Input => "input",
             Self::Gui => "gui",
             Self::GuiTest => "gui-test",
@@ -131,6 +150,14 @@ impl Mode {
             Self::Foundation => Some("ext4-write,bootstrap-metrics"),
             Self::Bootstrap => Some("bootstrap-metrics"),
             Self::Graphics => Some("graphics"),
+            Self::Xhci | Self::XhciEmpty | Self::XhciAbsent | Self::XhciPacket => {
+                Some("xhci,qemu-test")
+            }
+            Self::XhciTimeout => Some("usb-test-control-timeout"),
+            Self::XhciStall => Some("usb-test-control-stall"),
+            Self::UsbDesktop => Some("desktop,xhci"),
+            Self::UsbTestDesktop => Some("desktop,usb-input-test"),
+            Self::UsbBootDesktop => Some("desktop,usb-boot-only,usb-input-test"),
             Self::Input => Some("graphics,input-test"),
             Self::Gui => Some("graphics,gui"),
             Self::GuiTest => Some("graphics,gui,gui-test"),
@@ -217,6 +244,7 @@ fn execute() -> Result<()> {
     if !matches!(
         action,
         "smoke"
+            | "usb-input-test"
             | "root-image"
             | "run"
             | "sdk"
@@ -260,11 +288,28 @@ fn execute() -> Result<()> {
         "graphics-test" => graphics::verify(&root),
         "gpu-test" => gpu::verify(&root),
         "gpu-fallback-test" => gpu::verify_fallback(&root),
+        "usb-input-test" => usb_input::verify(&root, args.get(1).is_some_and(|s| s == "--boot")),
+        "xhci-packet-test" => smoke(&root, Mode::XhciPacket, 90)?
+            .map_err(|e| format!("EP0 packet test failed: {e:?}").into()),
+        "xhci-test" => {
+            for mode in [
+                Mode::Xhci,
+                Mode::XhciEmpty,
+                Mode::XhciAbsent,
+                Mode::XhciTimeout,
+                Mode::XhciStall,
+            ] {
+                smoke(&root, mode, 90)?
+                    .map_err(|error| format!("{} failed: {error:?}", mode.name()))?;
+            }
+            Ok(())
+        }
         "input-test" => input::verify(&root),
         "gui-image" => image(&root, Mode::Gui).map(|_| ()),
         "gui-test" => gui::verify(&root),
         "desktop-build" => desktop::prepare(&root).map(|_| ()),
         "desktop-image" => desktop::image(&root).map(|_| ()),
+        "usb-image" => desktop::image_mode(&root, Mode::UsbDesktop).map(|_| ()),
         "desktop-development-image" => pty_terminal::development_image(&root).map(|_| ()),
         "desktop-test" => desktop_test::verify(&root),
         "desktop-monitor-test" => desktop_monitor_test::verify(&root),
@@ -310,6 +355,7 @@ fn execute() -> Result<()> {
             let mut gui = false;
             let mut gui_sdk = false;
             let mut desktop = false;
+            let mut usb = false;
             let mut ext4_write = false;
             let mut options = args.iter().skip(1);
             while let Some(option) = options.next() {
@@ -322,6 +368,7 @@ fn execute() -> Result<()> {
                     "--gui" if !gui => gui = true,
                     "--gui-sdk" if !gui_sdk => gui_sdk = true,
                     "--desktop" if !desktop => desktop = true,
+                    "--usb" if !usb => usb = true,
                     "--disk" if disk.is_none() => {
                         disk = Some(disk::user_path(
                             &root,
@@ -342,7 +389,10 @@ fn execute() -> Result<()> {
                         "Select --desktop with optional --toolchain or --rust and --disk".into(),
                     );
                 }
-                return desktop::run(&root, disk.as_deref(), toolchain, rust);
+                return desktop::run(&root, disk.as_deref(), toolchain, rust, usb);
+            }
+            if usb {
+                return Err("Select --usb with --desktop".into());
             }
             if gui_sdk && (graphics || gui || toolchain || rust) {
                 return Err("Select --gui-sdk without another image profile".into());
@@ -526,6 +576,8 @@ fn execute() -> Result<()> {
                 "-p",
                 "anova-input",
                 "-p",
+                "anova-usb",
+                "-p",
                 "anova-gui",
                 "-p",
                 "anova-gui-runtime",
@@ -559,7 +611,7 @@ fn execute() -> Result<()> {
         }
         "help" | "--help" | "-h" => {
             println!(
-                "AnovaOS host tools\n\n  cargo xtask doctor\n  cargo xtask fetch\n  cargo xtask build\n  cargo xtask image\n  cargo xtask run [--graphics | --gui | --gui-sdk | --desktop] [--network] [--toolchain | --rust] [--disk build/disks/NAME.ext2]\n  cargo xtask smoke [--case CASE] [--timeout-secs 1..300]\n  cargo xtask verify\n  cargo xtask test-host\n  cargo xtask test-compat\n  cargo xtask trace-compat\n  cargo xtask apps\n  cargo xtask check-apps\n  cargo xtask check-files\n  cargo xtask network-test\n  cargo xtask package-test\n  cargo xtask sdk\n  cargo xtask app-new <c|cpp|rust> PROJECT\n  cargo xtask app-build PROJECT\n  cargo xtask app-pack MANIFEST OUTPUT\n  cargo xtask app-image PACKAGE SHA256\n  cargo xtask app-run PACKAGE SHA256 [--disk build/disks/NAME.ext2]\n  cargo xtask app-test\n  cargo xtask sdk-test\n  cargo xtask package-v2-test\n  cargo xtask diagnostics-test\n  cargo xtask symbolize ELF [--base 0xBIAS] ADDRESS... | --log LOG [--pid PID]\n  cargo xtask toolchain-build\n  cargo xtask toolchain-image\n  cargo xtask toolchain-test\n  cargo xtask bootstrap-prepare\n  cargo xtask bootstrap-test\n  cargo xtask bootstrap-gcc-test\n  cargo xtask bootstrap-rust-test\n  cargo xtask bootstrap-kernel-test\n  cargo xtask bootstrap-repeat-test\n  cargo xtask m18-gcc-test [--entry]\n  cargo xtask m18-llvm-test\n  cargo xtask m18-image-test REPORT GUEST_ELF\n  cargo xtask rust-build\n  cargo xtask rust-image\n  cargo xtask rust-cross-test\n  cargo xtask rust-runtime-test\n  cargo xtask rust-test\n  cargo xtask rust-online-test\n  cargo xtask rust-public-test\n  cargo xtask terminal-test\n  cargo xtask root-image [--linux] build/disks/NAME.ext2\n  cargo xtask persistence-test\n  cargo xtask foundation-test\n  cargo xtask foundation-write-test\n  cargo xtask foundation-journal-test\n  cargo xtask foundation-migrate-test\n  cargo xtask foundation-capacity-test\n  cargo xtask ext4-journal-image [--linux] build/disks/NAME.ext4\n  cargo xtask ext4-migrate build/disks/SOURCE.ext2 build/disks/NEW.ext4\n  cargo xtask ext4-image [--linux] build/disks/NAME.ext4\n  cargo xtask run --ext4-write [--toolchain] --disk build/disks/NAME.ext4\n  cargo xtask graphics-image\n  cargo xtask graphics-test\n  cargo xtask gpu-test\n  cargo xtask gpu-fallback-test\n  cargo xtask input-test\n  cargo xtask desktop-build\n  cargo xtask desktop-image\n  cargo xtask desktop-development-image\n  cargo xtask desktop-test\n  cargo xtask desktop-monitor-test\n  cargo xtask desktop-workflow-test [--case c|cpp|rust]\n  cargo xtask desktop-build-test\n  cargo xtask desktop-files-test\n  cargo xtask desktop-files-fault-test [--case NAME]\n  cargo xtask desktop-pty-test [--without-toolchain]\n  cargo xtask terminal-image [--toolchain]\n  cargo xtask run --desktop [--toolchain | --rust] [--disk build/disks/work.ext4]\n  cargo xtask gui-image\n  cargo xtask gui-test\n  cargo xtask gui-sdk\n  cargo xtask gui-sdk-image\n  cargo xtask gui-sdk-test\n  cargo xtask gui-sdk-replay\n\nCASE: boot, ioapic-id-mismatch, panic, timeout, invalid-opcode, general-protection, page-fault, double-fault, stack-guard, read-only, no-execute, direct-no-execute, unmapped, oom.\nOutputs stay in build/; run uses disposable OVMF variables and a temporary data disk unless --disk is explicit. Use guest shutdown for persistent images. TCG is mandatory."
+                "AnovaOS host tools\n\n  cargo xtask doctor\n  cargo xtask fetch\n  cargo xtask build\n  cargo xtask image\n  cargo xtask run [--graphics | --gui | --gui-sdk | --desktop] [--network] [--toolchain | --rust] [--disk build/disks/NAME.ext2]\n  cargo xtask smoke [--case CASE] [--timeout-secs 1..300]\n  cargo xtask verify\n  cargo xtask test-host\n  cargo xtask test-compat\n  cargo xtask trace-compat\n  cargo xtask apps\n  cargo xtask check-apps\n  cargo xtask check-files\n  cargo xtask network-test\n  cargo xtask package-test\n  cargo xtask sdk\n  cargo xtask app-new <c|cpp|rust> PROJECT\n  cargo xtask app-build PROJECT\n  cargo xtask app-pack MANIFEST OUTPUT\n  cargo xtask app-image PACKAGE SHA256\n  cargo xtask app-run PACKAGE SHA256 [--disk build/disks/NAME.ext2]\n  cargo xtask app-test\n  cargo xtask sdk-test\n  cargo xtask package-v2-test\n  cargo xtask diagnostics-test\n  cargo xtask symbolize ELF [--base 0xBIAS] ADDRESS... | --log LOG [--pid PID]\n  cargo xtask toolchain-build\n  cargo xtask toolchain-image\n  cargo xtask toolchain-test\n  cargo xtask bootstrap-prepare\n  cargo xtask bootstrap-test\n  cargo xtask bootstrap-gcc-test\n  cargo xtask bootstrap-rust-test\n  cargo xtask bootstrap-kernel-test\n  cargo xtask bootstrap-repeat-test\n  cargo xtask m18-gcc-test [--entry]\n  cargo xtask m18-llvm-test\n  cargo xtask m18-image-test REPORT GUEST_ELF\n  cargo xtask rust-build\n  cargo xtask rust-image\n  cargo xtask rust-cross-test\n  cargo xtask rust-runtime-test\n  cargo xtask rust-test\n  cargo xtask rust-online-test\n  cargo xtask rust-public-test\n  cargo xtask terminal-test\n  cargo xtask root-image [--linux] build/disks/NAME.ext2\n  cargo xtask persistence-test\n  cargo xtask foundation-test\n  cargo xtask foundation-write-test\n  cargo xtask foundation-journal-test\n  cargo xtask foundation-migrate-test\n  cargo xtask foundation-capacity-test\n  cargo xtask ext4-journal-image [--linux] build/disks/NAME.ext4\n  cargo xtask ext4-migrate build/disks/SOURCE.ext2 build/disks/NEW.ext4\n  cargo xtask ext4-image [--linux] build/disks/NAME.ext4\n  cargo xtask run --ext4-write [--toolchain] --disk build/disks/NAME.ext4\n  cargo xtask graphics-image\n  cargo xtask graphics-test\n  cargo xtask gpu-test\n  cargo xtask gpu-fallback-test\n  cargo xtask input-test\n  cargo xtask xhci-test\n  cargo xtask xhci-packet-test\n  cargo xtask usb-image\n  cargo xtask usb-input-test [--boot]\n  cargo xtask desktop-build\n  cargo xtask desktop-image\n  cargo xtask desktop-development-image\n  cargo xtask desktop-test\n  cargo xtask desktop-monitor-test\n  cargo xtask desktop-workflow-test [--case c|cpp|rust]\n  cargo xtask desktop-build-test\n  cargo xtask desktop-files-test\n  cargo xtask desktop-files-fault-test [--case NAME]\n  cargo xtask desktop-pty-test [--without-toolchain]\n  cargo xtask terminal-image [--toolchain]\n  cargo xtask run --desktop [--usb] [--toolchain | --rust] [--disk build/disks/work.ext4]\n  cargo xtask gui-image\n  cargo xtask gui-test\n  cargo xtask gui-sdk\n  cargo xtask gui-sdk-image\n  cargo xtask gui-sdk-test\n  cargo xtask gui-sdk-replay\n\nCASE: boot, ioapic-id-mismatch, panic, timeout, invalid-opcode, general-protection, page-fault, double-fault, stack-guard, read-only, no-execute, direct-no-execute, unmapped, oom.\nOutputs stay in build/; run uses disposable OVMF variables and a temporary data disk unless --disk is explicit. Use guest shutdown for persistent images. TCG is mandatory."
             );
             Ok(())
         }
@@ -1071,6 +1123,23 @@ fn smoke(root: &Path, mode: Mode, seconds: u64) -> Result<std::result::Result<()
     fs::write(&serial, [])?;
     let log = File::create(&diagnostic)?;
     let mut cmd = qemu(root, &iso, &vars.0, true)?;
+    if matches!(
+        mode,
+        Mode::Xhci | Mode::XhciEmpty | Mode::XhciTimeout | Mode::XhciStall | Mode::XhciPacket
+    ) {
+        cmd.args(["-device", "qemu-xhci,id=xhci"]);
+    }
+    if mode == Mode::XhciPacket {
+        cmd.args(["-device", "usb-net,bus=xhci.0"]);
+    }
+    if matches!(mode, Mode::Xhci | Mode::XhciTimeout | Mode::XhciStall) {
+        cmd.args([
+            "-device",
+            "usb-kbd,bus=xhci.0",
+            "-device",
+            "usb-mouse,bus=xhci.0",
+        ]);
+    }
     cmd.arg("-serial").arg(format!("file:{}", serial.display()));
     cmd.stdin(Stdio::null())
         .stdout(log.try_clone()?)
@@ -1095,7 +1164,31 @@ fn smoke(root: &Path, mode: Mode, seconds: u64) -> Result<std::result::Result<()
     if let Some(start) = transcript.find("[BOOT:ENTRY]") {
         print!("{}", &transcript[start..]);
     }
-    let result = if mode == Mode::IoApicIdMismatch {
+    let result = if matches!(mode, Mode::Xhci | Mode::XhciEmpty | Mode::XhciAbsent) {
+        smoke::assess_xhci(
+            &transcript,
+            code,
+            timed_out,
+            match mode {
+                Mode::Xhci => Some(2),
+                Mode::XhciEmpty => Some(0),
+                _ => None,
+            },
+        )
+    } else if mode == Mode::XhciPacket {
+        smoke::assess_ep0_packet(&transcript, code, timed_out)
+    } else if matches!(mode, Mode::XhciTimeout | Mode::XhciStall) {
+        smoke::assess_xhci_failure(
+            &transcript,
+            code,
+            timed_out,
+            if mode == Mode::XhciTimeout {
+                "control-timeout"
+            } else {
+                "control-completion"
+            },
+        )
+    } else if mode == Mode::IoApicIdMismatch {
         smoke::assess_ioapic_id_mismatch(&transcript, code, timed_out)
     } else {
         smoke::assess(&transcript, code, timed_out)

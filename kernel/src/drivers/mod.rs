@@ -7,6 +7,8 @@ pub mod input;
 pub mod network;
 pub mod pci;
 pub mod virtio;
+#[cfg(feature = "xhci")]
+pub mod xhci;
 use crate::{
     arch::x86_64::{cpu, paging::EarlyMapper},
     serial,
@@ -27,6 +29,8 @@ pub fn prepare(mapper: &mut EarlyMapper<'_>, timer: PmTimer) {
     network::prepare(mapper, timer);
     #[cfg(feature = "gpu")]
     gpu::prepare(mapper, timer);
+    #[cfg(feature = "xhci")]
+    xhci::prepare(mapper, timer);
     match pci::discover(mapper, false) {
         Ok(config) => {
             // SAFETY: Sole BSP boot writer; the handoff is consumed once in attach().

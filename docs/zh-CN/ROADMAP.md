@@ -507,3 +507,9 @@ M17 已通过各项声明的本地实测。M16 远端收尾仍待处理。M18 �
 当前 Actions 策略仅限 main 推送；完整远端验收在此策略下仍待完成。
 
 [桌面无输入启动修复](validation/M17.1.md)覆盖缺少输入时的显示与启动诊断。原生 USB HID 输入及物理存储驱动另行开发、验收。
+
+## USB 键鼠
+
+可选 USB.2–USB.5 已实现根设备枚举、Boot/Report 键盘和相对鼠标，并接入现有桌面。Boot 与 Report 各通过五种独立 QEMU 拓扑，包含全速／高速；桌面、PTY、串口、存储及运行时回归通过。验证记录区分模拟设备、仅宿主及实机覆盖范围。native/GUI 公共 ABI 保持冻结。USB.6 Hub、运行时热插拔和完整恢复另行验收。实机待验。
+
+[USB 里程碑](milestones/USB_INPUT.md) · [验证与限制](validation/USB_INPUT.md)
