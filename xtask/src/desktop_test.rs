@@ -542,7 +542,7 @@ pub(super) struct Driver {
     pub(super) qmp: Qmp,
     start: Instant,
     cursor: usize,
-    pointer: (u32, u32),
+    pub(super) pointer: (u32, u32),
     buttons: u8,
     pub(super) faults: Vec<u64>,
     deadline: Duration,
@@ -588,6 +588,29 @@ impl Driver {
         configuration: Option<&str>,
         deadline: Duration,
     ) -> Result<(Self, Temporary)> {
+        Self::boot_options(root, iso, disk, work, name, (configuration, &[]), deadline)
+    }
+    /// Boot an independent input topology with the same UART, QMP and watchdog driver.
+    pub(super) fn boot_input(
+        root: &Path,
+        iso: &Path,
+        disk: &Path,
+        work: &Path,
+        name: &str,
+        options: &[&str],
+    ) -> Result<(Self, Temporary)> {
+        Self::boot_options(root, iso, disk, work, name, (None, options), DEADLINE)
+    }
+    fn boot_options(
+        root: &Path,
+        iso: &Path,
+        disk: &Path,
+        work: &Path,
+        name: &str,
+        settings: (Option<&str>, &[&str]),
+        deadline: Duration,
+    ) -> Result<(Self, Temporary)> {
+        let (configuration, options) = settings;
         let vars = Temporary::new(root, "desktop-pty")?;
         if let Some(configuration) = configuration {
             let retained = work.join(format!("{name}.blkdebug.conf"));
@@ -628,6 +651,7 @@ impl Driver {
                 ));
             }
         }
+        cmd.args(options);
         cmd.args(["-m", "3G", "-vga", "std", "-serial", "stdio", "-qmp"])
             .arg(format!("tcp:127.0.0.1:{port},server=on,wait=off"))
             .stdin(Stdio::piped())

@@ -489,7 +489,10 @@ Linux `execve` 通过有界的按位置读取校验持久化主程序，将受�
 
 ## USB 键鼠
 
-USB 主机控制器复用 PCI、UC 映射和 DMA32 页。后续由 USB Core 枚举并按接口绑定 HID，
-HID 将物理输入送入 M14 调度轮询与统一事件队列，M17 桌面继续按焦点分发。
+可选 USB.2–USB.5 已实现根设备枚举、Boot/Report 键盘和相对鼠标，并接入现有桌面。Boot 与 Report 各通过五种独立 QEMU 拓扑，包含全速／高速；桌面、PTY、串口、存储及运行时回归通过。验证记录区分模拟设备、仅宿主及实机覆盖范围。native/GUI 公共 ABI 保持冻结。USB.6 Hub、运行时热插拔和完整恢复另行验收。实机待验。
 
-[USB 开发里程碑](milestones/USB_INPUT.md) · [测试指南及证据](validation/USB_INPUT.md)
+`anova-usb` 无分配 crate 校验 USB 配置链及 HID 布局／报告。xHCI 管理 MMIO、上下文、EP0 和中断环，检查 slot、端点、TRB、完成码及残余长度，并在硬件静止确认前保留 DMA。设备记录保存 VID/PID/类、配置及接口端点。调度器轮询不发起运行时阻塞控制请求。
+
+Dispatcher 在发出物理转换前聚合 PS/2 和 32 个 USB 接口源；每个 HID 接口再聚合独立 Report ID，拒绝报告时保留旧状态。布局、文本和焦点仍由现有消费端处理。USB 重复延迟为 500 ms，频率为 30 Hz；保留 PS/2 make/repeat 语义。合成器消费实验滚轮／附加按钮传输，公共 GUI ABI 不变。
+
+[USB 里程碑](milestones/USB_INPUT.md) · [验证](validation/USB_INPUT.md)

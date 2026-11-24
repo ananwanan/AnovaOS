@@ -759,7 +759,12 @@ for the accepted source/seed identity and retained output locations.
 
 ## USB keyboard and mouse
 
-Run `cargo xtask xhci-test` for the controller-present and controller-absent boots. Inspect UART
-and exit evidence under `build/logs/`. Execution is pending.
+The opt-in USB.2–USB.5 implementation enumerates root devices and delivers Boot/Report keyboards and relative mice through the existing desktop. Boot and Report each passed five independent QEMU topologies, including full/high speed; desktop, PTY, UART, storage and runtime regressions passed. The validation record separates modeled, host-only and physical coverage. Native/GUI public ABIs stay frozen. USB.6 hubs, runtime hotplug and general recovery remain separate. Physical hardware is pending.
 
-[USB development milestone](../milestones/USB_INPUT.md) · [test guide and evidence](../validation/USB_INPUT.md)
+Use `cargo xtask run --desktop --usb [--toolchain | --rust] [--disk build/disks/work.ext4]` for an opt-in QEMU session with xHCI keyboard/mouse and PS/2 retained. `cargo xtask usb-image` builds the production USB desktop ISO. These commands write only repository build files.
+
+Run `cargo xtask xhci-test` for attached/empty/absent controllers plus submitted EP0 timeout and real STALL. Run `cargo xtask usb-input-test --boot` and `cargo xtask usb-input-test` for independent USB-only, coexistence, full-speed USB, PS/2-only and no-input sessions. UART, QMP, scanout, exact PTY bytes/status and result files are retained under `build/usb-boot-test/`, `build/usb-input-test/` and `build/usb-input/`; reruns preserve prior attempts. Desktop sessions have 180-second watchdogs and five-second input/echo scanout guards; controller sessions retain 90 seconds. Physical input never becomes COM1 text.
+
+[USB milestone](../milestones/USB_INPUT.md) · [validation and limits](../validation/USB_INPUT.md)
+
+`cargo xtask xhci-packet-test` independently exercises full-speed EP0 `8 → 64` Evaluate Context using an unbound model, with output-context readback and full descriptor/configuration transfers. The command does not admit a USB network driver.

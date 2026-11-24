@@ -237,3 +237,7 @@ Linux 普通文件的标量 `read` 通过逐页受检复制，每次可读取最
 
 只含 `.tbss` 的 Linux ELF TLS 模板仍受文件和已映射内存范围检查。模板含已初始化的文件字节时，
 其 TLS 文件偏移须与虚拟地址对应。[ELF gABI TLS](https://gabi.xinuos.com/elf/07-pheader.html#thread-local-storage)
+
+## 可选 USB 输入范围
+
+USB 输入范围使用 QEMU `qemu-xhci`、`usb-kbd` 和相对 `usb-mouse`，独立于 Linux 可执行文件兼容性。Boot 与 Report 协议进入同一合成器／图形 PTY，保留 PS/2 和 COM1。Report ID、键盘位图、复合描述符链和附加按钮有有界宿主夹具；QEMU 模拟键鼠传输有单独端到端证据。这不代表任意 USB 设备或实机控制器可用。参阅 [USB 范围](milestones/USB_INPUT.md)和[证据](validation/USB_INPUT.md)。

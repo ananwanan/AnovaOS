@@ -64,7 +64,7 @@ The current system uses one BSP, 32 process/thread slots, a non-preemptible
 kernel, a fixed 16 MiB heap and masked peripheral IRQs with polled device I/O.
 Writable ext2 files are bounded at 4 MiB; controlled ext4 files allow 256 MiB; tmpfs and readonly shared-file caches
 remain at 1 MiB. Ext2 has no journal or power-loss recovery. General Linux/glibc,
-SMP, USB/physical hardware support, native Rust `std` and reconstructed compilers
+SMP, physical USB/hardware support, native Rust `std` and reconstructed compilers
 remain unverified. The guest-generated UEFI optical image has bounded non-GUI
 acceptance. See [M18.3](docs/en/validation/M18.3.md),
 [status](docs/en/guides/STATUS.md) and [compatibility](docs/en/COMPATIBILITY.md).
@@ -202,6 +202,8 @@ See [licensing](docs/en/guides/LICENSING.md).
 
 ## USB keyboard and mouse
 
-USB.1 has an opt-in xHCI command-ring implementation awaiting kernel compilation and QEMU verification. USB.2–USB.5 are pending; USB.6 is planned.
+The opt-in USB.2–USB.5 implementation enumerates root devices and delivers Boot/Report keyboards and relative mice through the existing desktop. Boot and Report each passed five independent QEMU topologies, including full/high speed; desktop, PTY, UART, storage and runtime regressions passed. The validation record separates modeled, host-only and physical coverage. Native/GUI public ABIs stay frozen. USB.6 hubs, runtime hotplug and general recovery remain separate. Physical hardware is pending.
 
-[USB development milestone](docs/en/milestones/USB_INPUT.md) · [test guide and evidence](docs/en/validation/USB_INPUT.md)
+Use `cargo xtask run --desktop --usb [--toolchain | --rust] [--disk build/disks/work.ext4]` for an opt-in QEMU session with xHCI keyboard/mouse and PS/2 retained. `cargo xtask usb-image` builds the production USB desktop ISO. These commands write only repository build files.
+
+[USB milestone](docs/en/milestones/USB_INPUT.md) · [validation and limits](docs/en/validation/USB_INPUT.md)

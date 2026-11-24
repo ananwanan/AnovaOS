@@ -595,9 +595,17 @@ New shared assets are listed here when actual images/diagrams are introduced.
 | `tests/guest/m18/llvm_demangle.sh` | Compile the upstream demangle sources, link and run the fixture, and retain original failures. |
 | `xtask/src/m18_llvm.rs` | Run the bounded guest LLVM component build, compare clean rounds and retain recovery evidence. |
 | `kernel/src/drivers/xhci/mod.rs` | Own the controller, command submission, completion matching and DMA failure lifetime. |
-| `kernel/src/drivers/xhci/registers.rs` | Validate MMIO, firmware ownership, register offsets and bounded hardware waits. |
+| `kernel/src/drivers/xhci/registers.rs` | Validate MMIO, firmware ownership, protocol port ranges and bounded root-port resets. |
 | `kernel/src/drivers/xhci/rings.rs` | Lay out DMA32 storage, publish command TRBs and consume event TRBs across wraps. |
 | `docs/en/milestones/USB_INPUT.md` | Define USB ownership, phased HID input delivery and the USB.6 design. |
 | `docs/en/validation/USB_INPUT.md` | Separate observed results from host, QEMU and physical USB test procedures. |
 | `docs/zh-CN/milestones/USB_INPUT.md` | Define USB ownership, phased HID input delivery and the USB.6 design. |
 | `docs/zh-CN/validation/USB_INPUT.md` | Separate observed results from host, QEMU and physical USB test procedures. |
+
+| `crates/usb/Cargo.toml` | Define the no_std descriptor and HID validation crate. |
+| `crates/usb/src/lib.rs` | Validate bounded USB device/configuration/interface/endpoint descriptors. |
+| `crates/usb/src/hid.rs` | Parse bounded HID layouts and transactionally decode boot/report input. |
+| `kernel/src/drivers/xhci/device.rs` | Own device contexts, EP0 enumeration and interrupt endpoint records. |
+| `kernel/src/drivers/xhci/transfer.rs` | Publish transfer TRBs and read completed coherent DMA payloads. |
+
+| `xtask/src/usb_input.rs` | Drive independent USB/PS2 desktop topologies and inspect exact graphical PTY bytes. |

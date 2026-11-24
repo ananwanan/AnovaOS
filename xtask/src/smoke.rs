@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Require CPU/memory/native/Linux runtime, checked file publication and storage proof plus exits.
 //! Assess the injected firmware I/O APIC ID mismatch against real QEMU registers and mask readback.
+//! Keep optional xHCI command/root-port proof distinct from empty and absent-controller boots.
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Failure {
@@ -11,22 +12,30 @@ pub enum Failure {
     Markers,
 }
 
-/// Require the normal boot/storage profile as well as a correlated xHCI command sequence.
+/// Require boot/storage proof, correlated commands and the declared USB 2 root-port count.
 pub fn assess_xhci(
     log: &str,
     code: Option<i32>,
     timed_out: bool,
-    present: bool,
+    expected_ports: Option<u8>,
 ) -> Result<(), Failure> {
     assess(log, code, timed_out)?;
     if log.contains("[USB:REJECT]") || log.contains("[USB:QUARANTINE]") {
         return Err(Failure::Markers);
     }
+    if expected_ports == Some(2) {
+        assess_usb_enumeration(log)?;
+    }
     let absent = log.lines().any(|line| line == "[USB:ABSENT] class=0c0330");
     let mut lines = log.lines();
     let pci = lines.any(|line| line.starts_with("[USB:PCI]") && line.ends_with("class=0c0330"));
-    if !present {
-        return if absent && !pci && !log.contains("[USB:XHCI]") && !log.contains("[USB:RINGS]") {
+    if expected_ports.is_none() {
+        return if absent
+            && !pci
+            && !log.contains("[USB:XHCI]")
+            && !log.contains("[USB:RINGS]")
+            && !log.contains("[USB:PORT")
+        {
             Ok(())
         } else {
             Err(Failure::Markers)
@@ -40,12 +49,130 @@ pub fn assess_xhci(
         .ok_or(Failure::Markers)?;
     let slots = field(ready, "slots").and_then(|value| value.parse::<u8>().ok());
     let proof = lines
-        .find(|line| line.starts_with("[USB:RINGS] noops=34 "))
+        .find(|line| line.starts_with("[USB:RINGS] noops=130 "))
         .ok_or(Failure::Markers)?;
     let slot = field(proof, "slot").and_then(|value| value.parse::<u8>().ok());
     if field(ready, "irq") != Some("poll")
         || field(proof, "disable") != Some("complete")
         || !matches!((slot, slots), (Some(id), Some(max)) if (1..=max).contains(&id))
+    {
+        return Err(Failure::Markers);
+    }
+    let mut ports = [false; 256];
+    let mut count = 0;
+    for line in lines.by_ref() {
+        if line.starts_with("[USB:PORTS] ") {
+            return if Some(count) == expected_ports
+                && field(line, "connected").and_then(|value| value.parse::<u8>().ok())
+                    == expected_ports
+                && field(line, "reset") == Some("complete")
+            {
+                Ok(())
+            } else {
+                Err(Failure::Markers)
+            };
+        }
+        if !line.starts_with("[USB:PORT] ") {
+            continue;
+        }
+        let port = field(line, "port")
+            .and_then(|value| value.parse::<u8>().ok())
+            .filter(|port| *port != 0)
+            .ok_or(Failure::Markers)?;
+        let max = field(ready, "ports").and_then(|value| value.parse::<u8>().ok());
+        if max.is_none_or(|max| port > max)
+            || ports[usize::from(port)]
+            || field(line, "protocol") != Some("2")
+            || !matches!(field(line, "speed"), Some("1" | "2" | "3"))
+            || field(line, "enabled") != Some("true")
+        {
+            return Err(Failure::Markers);
+        }
+        ports[usize::from(port)] = true;
+        count += 1;
+    }
+    Err(Failure::Markers)
+}
+
+/// Exercise real Evaluate Context with the full-speed 64-byte EP0 of an unbound USB model.
+pub fn assess_ep0_packet(log: &str, code: Option<i32>, timed_out: bool) -> Result<(), Failure> {
+    assess_xhci(log, code, timed_out, Some(1))?;
+    let device = log
+        .lines()
+        .find(|l| l.starts_with("[USB:DEVICE]"))
+        .ok_or(Failure::Markers)?;
+    let slot = field(device, "slot").ok_or(Failure::Markers)?;
+    if !log.contains(&format!(
+        "[USB:EP0] slot={slot} old=8 new=64 evaluate=complete"
+    )) || field(device, "vid") != Some("0525")
+        || field(device, "pid") != Some("a4a2")
+        || field(device, "class") != Some("2")
+        || field(device, "config") != Some("2")
+        || field(device, "interfaces") != Some("2")
+        || field(device, "ep0") != Some("64")
+        || log.contains("[USB:HID]")
+    {
+        return Err(Failure::Markers);
+    }
+    Ok(())
+}
+
+fn assess_usb_enumeration(log: &str) -> Result<(), Failure> {
+    let mut slots = 0u16;
+    let mut protocols = 0u8;
+    let mut bindings = 0;
+    for line in log.lines() {
+        if line.starts_with("[USB:DEVICE] ") {
+            let slot = field(line, "slot")
+                .and_then(|s| s.parse::<u8>().ok())
+                .filter(|s| (1..=8).contains(s))
+                .ok_or(Failure::Markers)?;
+            if slots & (1 << slot) != 0
+                || field(line, "vid") != Some("0627")
+                || field(line, "pid") != Some("0001")
+                || field(line, "config") != Some("1")
+                || field(line, "interfaces") != Some("1")
+                || field(line, "ep0") != Some("64")
+            {
+                return Err(Failure::Markers);
+            }
+            slots |= 1 << slot;
+        }
+        if line.starts_with("[USB:INTERFACE] ") {
+            if field(line, "class") != Some("3") || field(line, "endpoint") != Some("129") {
+                return Err(Failure::Markers);
+            }
+            let protocol = field(line, "protocol")
+                .and_then(|s| s.parse::<u8>().ok())
+                .filter(|s| matches!(s, 1 | 2))
+                .ok_or(Failure::Markers)?;
+            if protocols & (1 << protocol) != 0 {
+                return Err(Failure::Markers);
+            }
+            protocols |= 1 << protocol;
+        }
+        if line.starts_with("[USB:HID] ") && field(line, "bound") == Some("true") {
+            bindings += 1;
+        }
+    }
+    if slots.count_ones() != 2 || protocols != 6 || bindings != 2 {
+        return Err(Failure::Markers);
+    }
+    Ok(())
+}
+
+/// A submitted EP0 timeout/STALL must preserve ordinary boot and acknowledge reset before freeing DMA.
+pub fn assess_xhci_failure(
+    log: &str,
+    code: Option<i32>,
+    timed_out: bool,
+    reason: &str,
+) -> Result<(), Failure> {
+    assess(log, code, timed_out)?;
+    if !log.contains(&format!("[USB:REJECT] phase=start reason={reason}"))
+        || !log.contains("[USB:STOP] halted=true reset=true dma_released=true frames_restored=true")
+        || log.contains("[USB:QUARANTINE]")
+        || log.contains("[USB:HID]")
     {
         return Err(Failure::Markers);
     }
@@ -648,27 +775,85 @@ mod tests {
         }
     }
     #[test]
+    fn xhci_control_failure_requires_confirmed_dma_reclamation_and_runtime() {
+        let proof = format!(
+            "{GOOD}\n[USB:STOP] halted=true reset=true dma_released=true frames_restored=true\n[USB:REJECT] phase=start reason=control-timeout\n"
+        );
+        assert_eq!(
+            assess_xhci_failure(&proof, Some(33), false, "control-timeout"),
+            Ok(())
+        );
+        for broken in [
+            proof.replace("frames_restored=true", "frames_restored=false"),
+            proof.replace("reset=true", "reset=false"),
+            proof.replace("[USB:STOP]", "[USB:QUARANTINE]"),
+            proof.replace("control-timeout", "control-completion"),
+            format!("{proof}[USB:HID]"),
+        ] {
+            assert!(assess_xhci_failure(&broken, Some(33), false, "control-timeout").is_err());
+        }
+        assert!(assess_xhci_failure(&proof, Some(33), true, "control-timeout").is_err());
+        assert!(assess_xhci_failure(&proof, Some(35), false, "control-timeout").is_err());
+    }
+    #[test]
+    fn ep0_packet_gate_requires_real_evaluation_and_unbound_descriptors() {
+        let proof = format!(
+            "{GOOD}\n[USB:PCI] bdf=00:03.0 class=0c0330\n[USB:XHCI] noop=complete slots=8 ports=8 irq=poll\n[USB:RINGS] noops=130 slot=1 disable=complete\n[USB:PORT] port=5 protocol=2 speed=1 enabled=true\n[USB:PORTS] connected=1 reset=complete\n[USB:EP0] slot=1 old=8 new=64 evaluate=complete\n[USB:DEVICE] slot=1 vid=0525 pid=a4a2 class=2 config=2 interfaces=2 ep0=64\n"
+        );
+        assert_eq!(assess_ep0_packet(&proof, Some(33), false), Ok(()));
+        for broken in [
+            proof.replace("evaluate=complete", "evaluate=skipped"),
+            proof.replace("old=8", "old=64"),
+            proof.replace("ep0=64", "ep0=8"),
+            proof.replace("interfaces=2", "interfaces=0"),
+            format!("{proof}[USB:HID]"),
+        ] {
+            assert!(assess_ep0_packet(&broken, Some(33), false).is_err());
+        }
+        assert!(assess_ep0_packet(&proof, Some(33), true).is_err());
+    }
+    #[test]
     fn xhci_gate_requires_a_completed_slot_cycle_and_disjoint_absence() {
-        let proof = "[USB:PCI] bdf=00:05.0 class=0c0330\n[USB:XHCI] noop=complete slots=8 ports=8 scratchpads=0 irq=poll\n[USB:RINGS] noops=34 slot=1 disable=complete\n";
-        let present = format!("{GOOD}\n{proof}");
+        let proof = "[USB:PCI] bdf=00:05.0 class=0c0330\n[USB:XHCI] noop=complete slots=8 ports=8 scratchpads=0 irq=poll\n[USB:RINGS] noops=130 slot=1 disable=complete\n[USB:PORT] port=5 protocol=2 speed=1 enabled=true\n[USB:PORT] port=6 protocol=2 speed=1 enabled=true\n[USB:PORTS] connected=2 reset=complete\n";
+        let enumeration = "[USB:DEVICE] port=5 slot=1 vid=0627 pid=0001 config=1 interfaces=1 ep0=64\n[USB:INTERFACE] class=3 protocol=1 endpoint=129\n[USB:HID] slot=1 bound=true\n[USB:DEVICE] port=6 slot=2 vid=0627 pid=0001 config=1 interfaces=1 ep0=64\n[USB:INTERFACE] class=3 protocol=2 endpoint=129\n[USB:HID] slot=2 bound=true\n";
+        let present = format!("{GOOD}\n{proof}{enumeration}");
         let absent = format!("{GOOD}\n[USB:ABSENT] class=0c0330\n");
-        assert_eq!(assess_xhci(&present, Some(33), false, true), Ok(()));
-        assert_eq!(assess_xhci(&absent, Some(33), false, false), Ok(()));
+        assert_eq!(assess_xhci(&present, Some(33), false, Some(2)), Ok(()));
+        assert_eq!(assess_xhci(&absent, Some(33), false, None), Ok(()));
         for invalid in [
             absent,
-            present.replace("noops=34", "noops=1"),
+            present.replace("noops=130", "noops=1"),
+            present.replace("[USB:DEVICE]", "[USB:SKIPPED]"),
+            present.replace("bound=true", "bound=false"),
+            present.replace("protocol=1 endpoint=129", "protocol=2 endpoint=129"),
             present.replace("slot=1", "slot=9"),
             present.replace("disable=complete", "disable=timeout"),
+            present.replace("port=6", "port=5"),
+            present.replace("port=6", "port=9"),
+            present.replace("protocol=2", "protocol=3"),
+            present.replace("speed=1", "speed=0"),
+            present.replace("enabled=true", "enabled=false"),
+            present.replace("connected=2", "connected=1"),
+            present.replace("[USB:PORTS] connected=2 reset=complete", ""),
+            present.replace("[USB:PORT] port=6 protocol=2 speed=1 enabled=true", ""),
             format!("{present}[USB:QUARANTINE] controller DMA retained"),
         ] {
             assert_eq!(
-                assess_xhci(&invalid, Some(33), false, true),
+                assess_xhci(&invalid, Some(33), false, Some(2)),
                 Err(Failure::Markers)
             );
         }
-        assert!(assess_xhci(&present, Some(33), false, false).is_err());
-        assert!(assess_xhci(&present, Some(35), false, true).is_err());
-        assert!(assess_xhci(&present, Some(33), true, true).is_err());
+        let empty = present
+            .lines()
+            .filter(|line| !line.starts_with("[USB:PORT] "))
+            .collect::<Vec<_>>()
+            .join("\n")
+            .replace("connected=2", "connected=0");
+        assert_eq!(assess_xhci(&empty, Some(33), false, Some(0)), Ok(()));
+        assert!(assess_xhci(&empty, Some(33), false, Some(2)).is_err());
+        assert!(assess_xhci(&present, Some(33), false, None).is_err());
+        assert!(assess_xhci(&present, Some(35), false, Some(2)).is_err());
+        assert!(assess_xhci(&present, Some(33), true, Some(2)).is_err());
     }
 
     #[test]

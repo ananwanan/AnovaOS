@@ -250,10 +250,35 @@ fn run(test: bool, restart: bool, desktop: bool) -> u32 {
             }
             let previous = core.focused_client();
             let window = core.focused_window();
+            if event.kind == t::WHEEL
+                || event.kind == t::POINTER && event.value & event.flags & 0xf8 != 0
+            {
+                let delta = if event.kind == t::WHEEL {
+                    event.value as i32
+                } else if event.value & event.flags & 8 != 0 {
+                    1
+                } else {
+                    -1
+                };
+                if !(-32768..=32767).contains(&delta) {
+                    panic!("GUI invalid wheel range");
+                }
+                for _ in 0..delta.unsigned_abs().min(8) {
+                    if let Some(routed) = core.key(if delta > 0 { 0x149 } else { 0x151 }, 1, 1) {
+                        deliver(&mut core, routed.client, &routed.reply);
+                    }
+                }
+                gui::log(format_args!(
+                    "[GUI:WHEEL] delta={delta} history_keys=true\n"
+                ));
+                if event.kind == t::WHEEL {
+                    continue;
+                }
+            }
             let routed = match event.kind {
                 t::RESET => core.input_reset(),
                 t::KEY => core.key(event.value, (event.flags & 255) + 1, event.flags >> 8),
-                t::POINTER => core.pointer(event.x, event.y, event.value, event.flags),
+                t::POINTER => core.pointer(event.x, event.y, event.value & 7, event.flags & 7),
                 _ => panic!("GUI invalid physical event kind"),
             };
             reset_old_focus(&mut core, previous, window);
@@ -262,6 +287,15 @@ fn run(test: bool, restart: bool, desktop: bool) -> u32 {
                 deliver(&mut core, routed.client, &routed.reply);
             }
             if event.kind == t::POINTER {
+                if let Some(info) = core
+                    .focused_window()
+                    .and_then(|handle| core.window_info(handle))
+                {
+                    gui::log(format_args!(
+                        "[GUI:INPUT_WINDOW] x={} y={} width={} height={}\n",
+                        info.rect.x, info.rect.y, info.rect.width, info.rect.height
+                    ));
+                }
                 gui::log(format_args!(
                     "[GUI:POINTER] x={} y={} buttons={}\n",
                     event.x, event.y, event.value

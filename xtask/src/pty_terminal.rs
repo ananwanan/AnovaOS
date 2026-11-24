@@ -72,6 +72,9 @@ pub(super) fn append(root: &Path, archive: &mut Vec<u8>) -> Result<()> {
 }
 
 pub fn image(root: &Path, compiler: bool) -> Result<PathBuf> {
+    image_mode(root, compiler, Mode::Desktop)
+}
+pub(super) fn image_mode(root: &Path, compiler: bool, mode: Mode) -> Result<PathBuf> {
     let path = desktop::prepare(root)?;
     let path = if compiler {
         let mut bytes = fs::read(&path)?;
@@ -85,7 +88,7 @@ pub fn image(root: &Path, compiler: bool) -> Result<PathBuf> {
         path
     };
     assets::check(root)?;
-    let kernel = build(root, Mode::Desktop)?;
+    let kernel = build(root, mode)?;
     image_contents(
         root,
         &kernel,
@@ -99,6 +102,9 @@ pub fn image(root: &Path, compiler: bool) -> Result<PathBuf> {
 }
 
 pub fn development_image(root: &Path) -> Result<PathBuf> {
+    development_image_mode(root, Mode::Desktop)
+}
+pub(super) fn development_image_mode(root: &Path, mode: Mode) -> Result<PathBuf> {
     let mut bytes = fs::read(desktop::prepare(root)?)?;
     toolchain::append_profile(root, &mut bytes)?;
     // Rust's dynamic compiler uses the same pinned musl interpreter as the M9/M12 image.
@@ -116,6 +122,6 @@ pub fn development_image(root: &Path) -> Result<PathBuf> {
     output_path(&archive)?;
     fs::write(&archive, bytes)?;
     assets::check(root)?;
-    let kernel = build(root, Mode::Desktop)?;
+    let kernel = build(root, mode)?;
     image_contents(root, &kernel, Some(&archive), "desktop-development")
 }

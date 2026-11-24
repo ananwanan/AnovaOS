@@ -520,7 +520,6 @@ The [display-only desktop follow-up](validation/M17.1.md) covers missing input a
 
 ## USB keyboard and mouse
 
-The dependency order is host controller, root enumeration, boot keyboard, boot mouse, report
-protocol and desktop regression. USB.1 has an opt-in xHCI command-ring implementation awaiting kernel compilation and QEMU verification. USB.2–USB.5 are pending; USB.6 is planned.
+The opt-in USB.2–USB.5 implementation enumerates root devices and delivers Boot/Report keyboards and relative mice through the existing desktop. Boot and Report each passed five independent QEMU topologies, including full/high speed; desktop, PTY, UART, storage and runtime regressions passed. The validation record separates modeled, host-only and physical coverage. Native/GUI public ABIs stay frozen. USB.6 hubs, runtime hotplug and general recovery remain separate. Physical hardware is pending.
 
-[USB development milestone](milestones/USB_INPUT.md) · [test guide and evidence](validation/USB_INPUT.md)
+[USB milestone](milestones/USB_INPUT.md) · [validation and limits](validation/USB_INPUT.md)

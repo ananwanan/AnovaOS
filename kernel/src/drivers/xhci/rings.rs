@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Own coherent DMA32 storage for the DCBAA, scratchpad array, ERST and two single-segment rings.
+//! Own coherent DMA32 command/event storage with headroom for all 32 admitted HID completions.
 
 use crate::mm::DmaPage;
 use alloc::vec::Vec;
@@ -13,11 +13,14 @@ const ERST: usize = 128;
 const SCRATCH_ARRAY: usize = 256;
 const COMMAND: usize = 1024;
 const EVENTS: usize = 2048;
-const ENTRIES: usize = 16;
+const COMMAND_ENTRIES: usize = 16;
+const EVENT_ENTRIES: usize = 64;
+const _: () = assert!(EVENT_ENTRIES > 8 * anova_usb::MAX_INTERFACES + 16);
 const STRIDE: usize = 16;
 const _: () = assert!(9 * 8 <= ERST && ERST + 16 <= SCRATCH_ARRAY);
-const _: () = assert!(SCRATCH_ARRAY + 32 * 8 <= COMMAND && COMMAND + ENTRIES * STRIDE <= EVENTS);
-const _: () = assert!(EVENTS + ENTRIES * STRIDE <= 4096);
+const _: () =
+    assert!(SCRATCH_ARRAY + 32 * 8 <= COMMAND && COMMAND + COMMAND_ENTRIES * STRIDE <= EVENTS);
+const _: () = assert!(EVENTS + EVENT_ENTRIES * STRIDE <= 4096);
 
 pub(super) struct Rings {
     page: DmaPage,
@@ -60,7 +63,7 @@ impl Rings {
             rings.write_address(DCBAA, rings.physical(SCRATCH_ARRAY));
         }
         rings.write_address(ERST, rings.physical(EVENTS));
-        rings.write(ERST + 8, ENTRIES as u32);
+        rings.write(ERST + 8, EVENT_ENTRIES as u32);
         Ok(rings)
     }
 
@@ -89,6 +92,11 @@ impl Rings {
         self.physical(DCBAA)
     }
 
+    pub fn device(&self, slot: u8, pointer: u64) {
+        assert!((1..=8).contains(&slot));
+        self.write_address(DCBAA + usize::from(slot) * 8, pointer);
+    }
+
     pub fn command_base(&self) -> u64 {
         self.physical(COMMAND)
     }
@@ -102,11 +110,11 @@ impl Rings {
     }
 
     /// Boot commands are serialized until the matching completion retires this TRB.
-    pub fn submit(&mut self, kind: u8, slot: u8) -> u64 {
+    pub fn submit(&mut self, kind: u8, slot: u8, pointer: u64) -> u64 {
         let offset = COMMAND + self.producer * STRIDE;
         let cycle = u32::from(self.producer_cycle);
         self.producer += 1;
-        if self.producer == ENTRIES - 1 {
+        if self.producer == COMMAND_ENTRIES - 1 {
             let link = COMMAND + self.producer * STRIDE;
             self.write_address(link, self.command_base());
             self.write(link + 8, 0);
@@ -115,7 +123,7 @@ impl Rings {
             self.producer = 0;
             self.producer_cycle = !self.producer_cycle;
         }
-        self.write_address(offset, 0);
+        self.write_address(offset, pointer);
         self.write(offset + 8, 0);
         fence(Ordering::Release);
         self.write(
@@ -139,7 +147,7 @@ impl Rings {
             control,
         };
         self.consumer += 1;
-        if self.consumer == ENTRIES {
+        if self.consumer == EVENT_ENTRIES {
             self.consumer = 0;
             self.consumer_cycle = !self.consumer_cycle;
         }

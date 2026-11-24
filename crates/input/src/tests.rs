@@ -415,3 +415,93 @@ fn cursor_remains_clipped_during_many_movement_packets_and_overflow() {
     send_mouse(&mut input, [0xc8, 127, 127]);
     assert_eq!((input.pointer().x, input.pointer().y), (point.x, point.y));
 }
+
+#[test]
+fn independent_usb_and_ps2_keys_aggregate_before_modifiers_and_release() {
+    let mut d = Dispatcher::<64>::new(800, 600).unwrap();
+    let shift = anova_usb::hid::boot_keyboard(&[2, 0, 0, 0, 0, 0, 0, 0]).unwrap();
+    d.feed_usb(1, shift);
+    d.feed_usb(2, shift);
+    assert!(matches!(d.pop_event(),Some(Event::Key(k)) if k.modifiers.shift()));
+    assert_eq!(d.pop_event(), None);
+    d.feed_keyboard(0x2a);
+    d.feed_usb(1, Default::default());
+    d.feed_usb(2, Default::default());
+    assert_eq!(d.pop_event(), None);
+    d.feed_keyboard(0x1e);
+    assert!(
+        matches!(d.pop_event(),Some(Event::Key(k)) if k.modifiers.shift() && k.state==KeyState::Pressed)
+    );
+    d.feed_keyboard(0xaa);
+    assert!(matches!(d.pop_event(),Some(Event::Key(k)) if !k.modifiers.shift()));
+}
+#[test]
+fn usb_repeat_has_no_phantom_source_and_pointer_buttons_aggregate() {
+    let mut d = Dispatcher::<64>::new(800, 600).unwrap();
+    d.feed_usb(
+        2,
+        anova_usb::hid::boot_keyboard(&[0, 0, 4, 0, 0, 0, 0, 0]).unwrap(),
+    );
+    let _ = d.pop_event();
+    d.repeat_usb();
+    assert!(matches!(d.pop_event(),Some(Event::Key(k)) if k.state==KeyState::Repeat));
+    d.feed_usb(2, Default::default());
+    assert!(matches!(d.pop_event(),Some(Event::Key(k)) if k.state==KeyState::Released));
+    d.repeat_usb();
+    assert_eq!(d.pop_event(), None);
+    d.feed_usb(
+        1,
+        anova_usb::hid::Sample {
+            buttons: 1,
+            x: 32767,
+            ..Default::default()
+        },
+    );
+    d.feed_usb(
+        2,
+        anova_usb::hid::Sample {
+            buttons: 1,
+            y: -32768,
+            ..Default::default()
+        },
+    );
+    d.feed_usb(1, Default::default());
+    assert_eq!(d.pointer().buttons.bits(), 1);
+    assert_eq!(d.pointer().x, 799);
+    assert_eq!(d.pointer().y, 0);
+}
+
+#[test]
+fn usb_repeat_returns_to_an_earlier_held_key_after_last_key_release() {
+    let mut d = Dispatcher::<64>::new(800, 600).unwrap();
+    for keys in [
+        [0, 0, 4, 0, 0, 0, 0, 0],
+        [0, 0, 4, 5, 0, 0, 0, 0],
+        [0, 0, 4, 0, 0, 0, 0, 0],
+    ] {
+        d.feed_usb(1, anova_usb::hid::boot_keyboard(&keys).unwrap());
+    }
+    while d.pop_event().is_some() {}
+    d.repeat_usb();
+    assert!(
+        matches!(d.pop_event(),Some(Event::Key(k)) if k.key.code==30 && k.state==KeyState::Repeat)
+    );
+    d.feed_usb(1, Default::default());
+    let _ = d.pop_event();
+    d.repeat_usb();
+    assert_eq!(d.pop_event(), None);
+}
+
+#[test]
+fn usb_snapshot_queue_overflow_stops_committing_the_current_report() {
+    let mut d = Dispatcher::<2>::new(800, 600).unwrap();
+    let sample = anova_usb::hid::boot_keyboard(&[0, 0, 4, 5, 6, 7, 0, 0]).unwrap();
+    d.feed_usb(1, sample);
+    assert_eq!(
+        d.pop_event(),
+        Some(Event::Reset(ResetReason::QueueOverflow))
+    );
+    assert_eq!(d.pop_event(), None);
+    d.repeat_usb();
+    assert_eq!(d.pop_event(), None);
+}

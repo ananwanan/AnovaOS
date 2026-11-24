@@ -546,7 +546,12 @@ M15 的 `bootstrap-gcc-test`、`bootstrap-rust-test`、`bootstrap-kernel-test`
 
 ## USB 键鼠
 
-使用 `cargo xtask xhci-test` 运行带控制器和缺控制器的两次启动，串口与退出结果写入 `build/logs/`。
-本批尚无执行证据。
+可选 USB.2–USB.5 已实现根设备枚举、Boot/Report 键盘和相对鼠标，并接入现有桌面。Boot 与 Report 各通过五种独立 QEMU 拓扑，包含全速／高速；桌面、PTY、串口、存储及运行时回归通过。验证记录区分模拟设备、仅宿主及实机覆盖范围。native/GUI 公共 ABI 保持冻结。USB.6 Hub、运行时热插拔和完整恢复另行验收。实机待验。
 
-[USB 开发里程碑](../milestones/USB_INPUT.md) · [测试指南及证据](../validation/USB_INPUT.md)
+使用 `cargo xtask run --desktop --usb [--toolchain | --rust] [--disk build/disks/work.ext4]` 启动可选 QEMU 会话，连接 xHCI 键鼠并保留 PS/2。`cargo xtask usb-image` 构建生产 USB 桌面 ISO；这些命令只写入仓库构建文件。
+
+使用 `cargo xtask xhci-test` 检查带设备／空／无控制器、实际提交的 EP0 超时和真实 STALL；使用 `cargo xtask usb-input-test --boot`、`cargo xtask usb-input-test` 分别验证 USB-only、共存、全速 USB、PS/2-only 和无输入的独立会话。UART、QMP、scanout、精确 PTY 字节／状态和结果保存在 `build/usb-boot-test/`、`build/usb-input-test/` 及 `build/usb-input/`；重跑会保留旧尝试。桌面会话看门狗为 180 秒，按键／echo scanout 上限为五秒；控制器会话保留 90 秒。物理输入不转换为 COM1 文本。
+
+[USB 里程碑](../milestones/USB_INPUT.md) · [验证与限制](../validation/USB_INPUT.md)
+
+`cargo xtask xhci-packet-test` 使用未绑定的模型独立验证全速 EP0 `8 → 64` Evaluate Context，包含输出上下文回读及完整设备／配置描述符传输；该命令不接纳 USB 网络驱动。

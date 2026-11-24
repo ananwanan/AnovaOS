@@ -290,3 +290,7 @@ For a Linux ELF with a `.tbss`-only TLS template, the checked file and mapped
 memory bounds still apply. The TLS offset need only correspond to the virtual
 address when the template contains initialized file bytes.
 [ELF gABI TLS](https://gabi.xinuos.com/elf/07-pheader.html#thread-local-storage)
+
+## Opt-in USB input profile
+
+The USB input profile uses QEMU `qemu-xhci`, `usb-kbd` and relative `usb-mouse`, independently of Linux executable compatibility. Boot and Report protocols feed the same existing compositor/graphical PTY, retaining PS/2 and COM1. Report IDs, keyboard bitmaps, composite descriptor chains and extra buttons have bounded host fixtures; modeled QEMU keyboard/mouse transport has separate end-to-end evidence. This does not establish arbitrary USB devices or physical controllers. See [USB scope](milestones/USB_INPUT.md) and [evidence](validation/USB_INPUT.md).

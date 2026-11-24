@@ -123,3 +123,7 @@ process-local clipboard, a versioned C ABI and independently guest-built
 C/C++/Rust GUI applications. M14.5 separately verifies bounded hardware
 clear/readback and CPU fallback; ordinary desktop composition remains software. Physical hardware, SMP and Linux
 GUI compatibility remain independent work.
+
+## USB experimental hardware transport (2026-11-25)
+
+`HardwareEvent` retains its 24-byte layout. Internal kind `4` carries a signed i16 wheel delta sign-extended in `value`; other words are zero. Internal POINTER `value`/`flags` carry eight button bits/changed bits. The compositor masks pointer data to three buttons for the frozen GUI ABI. Wheel steps and extra button presses are consumed as existing Shift-PageUp/Down key events for the focused window: positive wheel or button 4 goes up; negative wheel or buttons 5–8 go down. At most eight history key events are emitted per wheel transport event; an extra-button pointer event emits one. Button 4 takes priority when several extra buttons are pressed together. This changes neither physical modifier state nor native/GUI public layouts. The terminal consumes those existing keys as bounded history navigation; other clients may ignore them. USB acceptance is separate from historical M14 evidence. See [USB validation](../validation/USB_INPUT.md).

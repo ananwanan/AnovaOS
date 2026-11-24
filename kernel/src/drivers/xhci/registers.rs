@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Validate xHCI BAR subregions, transfer firmware ownership and bound hardware waits.
+//! Validate xHCI BAR subregions, firmware ownership and root-port protocol/reset operations.
 
 use super::super::pci::Function;
 use crate::arch::x86_64::{cpu, paging::EarlyMapper};
@@ -95,6 +95,9 @@ pub(super) struct Registers {
     pub op: Region,
     pub interrupt: Region,
     pub doorbell: Region,
+    pub port_regs: Region,
+    pub protocols: [u8; 256],
+    pub context_bytes: usize,
     pub slots: u8,
     pub ports: u8,
     pub scratchpads: usize,
@@ -161,7 +164,43 @@ impl Registers {
         let rt = bar.read(0x18) & !31;
         let db = bar.read(0x14) & !3;
         let port_bytes = u32::from(ports) * 16;
-        bar.region(length + 0x400, port_bytes)?;
+        let port_regs = bar.region(length + 0x400, port_bytes)?;
+        let mut protocols = [0; 256];
+        let mut offset = (bar.read(0x10) >> 16) * 4;
+        while offset != 0 {
+            let entry = bar.region(offset, 4)?;
+            let header = entry.read(0);
+            if header & 255 == 2 {
+                let protocol = bar.region(offset, 16)?;
+                let major = (header >> 24) as u8;
+                let range = protocol.read(8);
+                let first = (range & 255) as usize;
+                let count = ((range >> 8) & 255) as usize;
+                if protocol.read(4) != 0x2042_5355
+                    || !matches!(major, 2 | 3)
+                    || first == 0
+                    || count == 0
+                    || first + count > usize::from(ports) + 1
+                {
+                    return Err("port-protocol-range");
+                }
+                // Nonstandard protocol speed IDs need their own interpretation before reset.
+                if range >> 28 != 0 {
+                    return Err("port-protocol-speed-table");
+                }
+                for owner in &mut protocols[first..first + count] {
+                    if *owner != 0 {
+                        return Err("port-protocol-overlap");
+                    }
+                    *owner = major;
+                }
+            }
+            let next = (header >> 8) & 255;
+            if next == 0 {
+                break;
+            }
+            offset = offset.checked_add(next * 4).ok_or("protocol-offset")?;
+        }
         let op_end = length + 0x400 + port_bytes;
         let doorbell_bytes = (u32::from(slots) + 1) * 4;
         let interrupt = bar.region(rt.checked_add(32).ok_or("runtime-offset")?, 32)?;
@@ -174,6 +213,9 @@ impl Registers {
             op,
             interrupt,
             doorbell,
+            port_regs,
+            protocols,
+            context_bytes: if bar.read(0x10) & 4 != 0 { 64 } else { 32 },
             slots,
             ports,
             scratchpads,
@@ -192,5 +234,69 @@ impl Registers {
     pub fn halt(self) -> Result<(), &'static str> {
         self.op.write(0, self.op.read(0) & !1);
         wait(self.timer, "halt-timeout", || self.op.read(4) & 1 != 0)
+    }
+
+    /// Called only during BSP boot, before asynchronous device requests exist.
+    pub fn reset_port(self, port: u8) -> Result<Option<u8>, &'static str> {
+        if port == 0 || port > self.ports {
+            return Err("root-port-range");
+        }
+        let offset = u32::from(port - 1) * 16;
+        let read = || self.port_regs.read(offset);
+        let status = read();
+        if status & 1 == 0 {
+            return Ok(None);
+        }
+        let protocol = self.protocols[usize::from(port)];
+        if !matches!(protocol, 2 | 3) {
+            return Err("root-port-protocol");
+        }
+        // Preserve only RW power/indicator/wake fields. Never echo PED (RW1CS),
+        // change bits (RW1C), reset or link-state strobes from a PORTSC read.
+        const RW: u32 = 1 << 9 | 3 << 14 | 7 << 25;
+        const CHANGES: u32 = 0x7f << 17;
+        self.port_regs.write(offset, (status & RW) | 1 << 9);
+        let start = cpu::in32(self.timer.port);
+        wait(self.timer, "port-power-timeout", || {
+            u64::from(pm_elapsed(
+                start,
+                cpu::in32(self.timer.port),
+                self.timer.mask,
+            )) >= PM_HZ / 10
+        })?;
+        if read() & 1 == 0 {
+            return Err("root-port-disconnected");
+        }
+        if protocol == 2 || read() & 2 == 0 {
+            let reset = if protocol == 2 { 1 << 4 } else { 1 << 31 };
+            self.port_regs.write(offset, (read() & RW) | reset);
+            wait(self.timer, "port-reset-timeout", || {
+                let current = read();
+                current & 1 == 0 || current & (1 << 4 | 1 << 31) == 0 && current & 2 != 0
+            })?;
+        }
+        let status = read();
+        let speed = ((status >> 10) & 15) as u8;
+        if status & 3 != 3 || status & (15 << 5) != 0 {
+            return Err("root-port-not-enabled");
+        }
+        if !(protocol == 2 && (1..=3).contains(&speed) || protocol == 3 && speed == 4) {
+            return Err("root-port-speed");
+        }
+        self.port_regs
+            .write(offset, (status & RW) | (status & CHANGES));
+        // USB 2.0 7.1.7.5 requires at least 10 ms reset recovery before device requests.
+        let start = cpu::in32(self.timer.port);
+        wait(self.timer, "port-recovery-timeout", || {
+            u64::from(pm_elapsed(
+                start,
+                cpu::in32(self.timer.port),
+                self.timer.mask,
+            )) >= PM_HZ / 100
+        })?;
+        if read() & 3 != 3 {
+            return Err("root-port-disconnected");
+        }
+        Ok(Some(speed))
     }
 }

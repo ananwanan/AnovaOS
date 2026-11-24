@@ -510,7 +510,6 @@ M17 已通过各项声明的本地实测。M16 远端收尾仍待处理。M18 �
 
 ## USB 键鼠
 
-依赖顺序为主机控制器 → 根端口枚举 → Boot 键盘 → Boot 鼠标 → Report Protocol → 桌面回归。
-USB.1 已写入可选 xHCI 命令环代码，等待内核编译及 QEMU 验证。USB.2～USB.5 待实现，USB.6 仅规划。
+可选 USB.2–USB.5 已实现根设备枚举、Boot/Report 键盘和相对鼠标，并接入现有桌面。Boot 与 Report 各通过五种独立 QEMU 拓扑，包含全速／高速；桌面、PTY、串口、存储及运行时回归通过。验证记录区分模拟设备、仅宿主及实机覆盖范围。native/GUI 公共 ABI 保持冻结。USB.6 Hub、运行时热插拔和完整恢复另行验收。实机待验。
 
-[USB 开发里程碑](milestones/USB_INPUT.md) · [测试指南及证据](validation/USB_INPUT.md)
+[USB 里程碑](milestones/USB_INPUT.md) · [验证与限制](validation/USB_INPUT.md)
