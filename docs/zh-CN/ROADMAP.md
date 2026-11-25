@@ -510,6 +510,17 @@ M17 已通过各项声明的本地实测。M16 远端收尾仍待处理。M18 �
 
 ## USB 键鼠
 
-可选 USB.2–USB.5 已实现根设备枚举、Boot/Report 键盘和相对鼠标，并接入现有桌面。Boot 与 Report 各通过五种独立 QEMU 拓扑，包含全速／高速；桌面、PTY、串口、存储及运行时回归通过。验证记录区分模拟设备、仅宿主及实机覆盖范围。native/GUI 公共 ABI 保持冻结。USB.6 Hub、运行时热插拔和完整恢复另行验收。实机待验。
+可选 USB 驱动通过现有桌面提供 Boot/Report 键盘和相对鼠标输入。USB.6 已实现协作式根端口／Hub 插拔、按住状态释放、停止端点后的槽位／DMA 回收、有界端点恢复和一次控制器重启。USB2 Hub 使用经检查的路由／TT 记录；总量仍限制为八个设备（含 Hub）。验证记录分别列明实际执行的 QEMU 门禁、仅宿主 TT 检查和待完成的实机覆盖。native/GUI 公共 ABI 保持冻结。SuperSpeed Hub、任意控制器故障及实机仍需独立验收。
 
 [USB 里程碑](milestones/USB_INPUT.md) · [验证与限制](validation/USB_INPUT.md)
+
+键盘和鼠标均不可用时，桌面现自动显示 USB 启动诊断，无需键鼠或 COM1 即可读取。请在开机前连接设备并拍摄面板；它是启动快照，不是实时日志。实机兼容性仍待验收。
+
+下一项实机工作：使用修复扩展能力有界映射后的诊断镜像复测 `phase=pci reason=register-range`，保留完整面板和 PCI 标识。此步骤独立于本地 QEMU 验收。
+
+历史实机阻塞（2026-11-25，已由下述用户反馈关闭）：Intel 8086:a12f 已越过寄存器映射／接管和 34 个 Scratchpad 的准入检查，但在 HID 枚举前报 port-protocol-speed-table。下一项开发为 Protocol Speed ID 表支持；实机键鼠仍未验收。
+## 显式 USB 协议速度表（2026-11-25）
+
+Intel 8086:A12F 实机后续已加入 USB2 低速／全速／高速及对称 SuperSpeed 5 Gb/s 的显式 PSI 表解析。八组共享映射及字节端口索引限制异步栈占用；Slot Context 使用控制器 ID，数据包／TT 逻辑使用 USB 速度类别。未支持速度按端口跳过；SuperSpeedPlus、非对称传输及非零 Slot Type 仍不支持。重建诊断 ISO 后进行实机复测，保留 USB:PROTOCOL／USB:PORT_SKIP 及最后的错误；详细范围与本地证据见 USB 验证记录。
+
+2026-11-26，用户在此前照片中的 Intel 8086:a12f 机器测试速度表修复镜像（SHA-256 07b34f7cb0b7713e198bbe32e65bb5d329d6c6cefcf7017b844f570ab7a22cc7）后，反馈 USB 键盘／鼠标已正常。本配置的无输入阻塞据此关闭。这是用户报告的实机证据；其他控制器、实机 Hub／插拔／恢复压力、SuperSpeedPlus 及无限制 HID 仍需独立验证。CI 仍仅由 main 推送触发，不宣称远端 CI 通过。

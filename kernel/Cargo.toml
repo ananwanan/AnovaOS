@@ -35,6 +35,7 @@ anova-usb = { path = "../crates/usb", optional = true }
 xhci = ["dep:anova-usb"]
 usb-boot-only = ["xhci"]
 usb-input-test = ["xhci"]
+usb-recovery-test = ["usb-input-test"]
 usb-test-control-timeout = ["xhci", "qemu-test"]
 usb-test-control-stall = ["xhci", "qemu-test"]
 ext4-write = []

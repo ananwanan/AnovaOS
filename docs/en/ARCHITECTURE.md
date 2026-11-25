@@ -809,10 +809,27 @@ The desktop compositor overlays an input warning on damaged scanout while contin
 
 ## USB keyboard and mouse
 
-The opt-in USB.2–USB.5 implementation enumerates root devices and delivers Boot/Report keyboards and relative mice through the existing desktop. Boot and Report each passed five independent QEMU topologies, including full/high speed; desktop, PTY, UART, storage and runtime regressions passed. The validation record separates modeled, host-only and physical coverage. Native/GUI public ABIs stay frozen. USB.6 hubs, runtime hotplug and general recovery remain separate. Physical hardware is pending.
+The opt-in USB driver delivers Boot/Report keyboards and relative mice through the existing desktop. USB.6 now implements cooperative root/hub attachment, held-input release, stopped-slot/DMA reclamation, bounded endpoint recovery and one controller restart. USB2 hubs have checked route/TT records; the total remains eight devices, including hubs. The validation record separates executed QEMU gates, host-only TT checks and pending physical coverage. Native/GUI public ABIs stay frozen. SuperSpeed hubs, arbitrary controller faults and physical hardware remain separate.
 
 The no-allocation `anova-usb` crate validates USB configuration chains and HID layouts/reports. xHCI owns MMIO, contexts, EP0 and interrupt rings, verifies slot/endpoint/TRB/completion/residual identity and retains DMA until hardware quiescence. Device records retain VID/PID/class, configuration and interface endpoints. Scheduler polling submits no blocking runtime control requests.
 
 Dispatcher aggregates PS/2 and 32 USB interface sources before emitting physical transitions. Each HID interface aggregates independent Report IDs; rejected reports preserve prior state. Layout/text/focus remain in existing consumers. USB repeats use 500 ms delay and 30 Hz events; PS/2 make/repeat semantics are retained. Experimental wheel/button transport is consumed by the compositor without changing the public GUI ABI.
 
 [USB milestone](milestones/USB_INPUT.md) · [validation](validation/USB_INPUT.md)
+
+The user-space compositor reads at most 32 KiB from the existing `/boot.log` once. Its no-input overlay retains the first USB line and latest eleven lines, each capped at 126 printable ASCII bytes. This adds no kernel/GUI ABI or live log channel. Full damage redraw removes the overlay when input becomes available.
+
+Firmware handoff maps only controller-advertised extended-capability pages as needed, with
+UC/NX attributes, firmware MMIO admission and the existing 256 KiB virtual-window ceiling.
+The initial ceiling is not a measured BAR size: probing the live firmware-owned BAR would
+interrupt its decoding. After ownership transfer and confirmed halt, BAR sizing must cover
+every bootstrap register touched before DMA setup can proceed. Both capability walks limit
+work to 256 headers and reject invalid headers, bad alignment, overflow and out-of-range
+links before the next access. The new `anova-usb::xhci` helpers are shared with host tests.
+
+Scratchpad follow-up: the controller buffer limit is now 512 instead of 32. A separate owned 4 KiB DMA pointer array prevents overlap with command/event rings; zero buffers allocate no array. Allocation errors release unpublished buffers through ownership, while existing controller halt/quarantine rules retain published DMA. The boot log reports requested count, limit and raw HCSPARAMS2. QEMU-only checks construct 0/33/512 buffers, inspect every pointer and reject 513. This checks allocation/layout, not physical controller consumption. Hardware retest remains pending; controllers requiring more than 512 buffers remain unsupported.
+## Explicit USB protocol speed tables (2026-11-25)
+
+The Intel 8086:A12F physical follow-up now parses explicit PSI tables for USB2 low/full/high speed and symmetric SuperSpeed 5 Gb/s. Eight shared maps and byte port indices keep asynchronous stack use bounded. Slot Context retains controller IDs while packet/TT logic uses USB speed classes. Unsupported speeds are skipped per port; SuperSpeedPlus, asymmetric transport and nonzero Slot Type remain unsupported. Rebuild the diagnostic ISO and retain USB:PROTOCOL/USB:PORT_SKIP plus the final error from the physical retest. Detailed boundaries and local evidence are in the USB validation record.
+
+On 2026-11-26 the owner reported normal USB keyboard/mouse operation after testing the speed-table fix image (SHA-256 07b34f7cb0b7713e198bbe32e65bb5d329d6c6cefcf7017b844f570ab7a22cc7) on the previously photographed Intel 8086:a12f machine. This closes the reported no-input blocker for that setup. This is owner-reported physical evidence; other controllers, physical hub/hotplug/recovery stress, SuperSpeedPlus and unrestricted HID remain independently unverified. Main-push-only CI remains unchanged; no remote CI pass is claimed.

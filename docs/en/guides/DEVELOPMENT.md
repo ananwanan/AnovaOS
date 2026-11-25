@@ -655,7 +655,7 @@ closure and complete retained logs before applying these figures to another reci
 
 `cargo xtask desktop-build` builds the native supervisor and existing host-built C/C++/Rust clients, plus a tiny explicitly Linux-personality boundary fixture, without compiler seed downloads. `cargo xtask desktop-image` creates `build/images/anova-desktop.iso`; `cargo xtask run --desktop [--disk build/disks/work.ext4]` boots it with an independent COM1 shell. Launcher keys: `1`/`2`/`3` launch or stop, `r` replaces the session, `q` exits. Focus the launcher first.
 
-A normal desktop keeps its windows visible when both input devices are unavailable. Read the boot snapshot with `cat /boot.log` on COM1. To enable copies on a writable virtio work disk, run `mkdir /persist/logs` once before the next boot. On a diskless or read-only boot the snapshot remains in RAM. The desktop kernel captures the last 32 KiB of normal kernel messages from entry through the init mount attempt. A missing log directory leaves disk logging disabled. A successful save occupies the first free file from `boot-1.log` through `boot-4.log`. Archive or remove a slot to reuse it. An existing `boot.tmp` from an interrupted save blocks publication until inspected and moved or removed. Fatal diagnostics and later GUI messages still use COM1. USB-only keyboards and mice require a USB input driver.
+A normal desktop keeps its windows visible when both input devices are unavailable. Read the boot snapshot with `cat /boot.log` on COM1. To enable copies on a writable virtio work disk, run `mkdir /persist/logs` once before the next boot. On a diskless or read-only boot the snapshot remains in RAM. The desktop kernel captures the last 32 KiB of normal kernel messages from entry through the init mount attempt. A missing log directory leaves disk logging disabled. A successful save occupies the first free file from `boot-1.log` through `boot-4.log`. Archive or remove a slot to reuse it. An existing `boot.tmp` from an interrupted save blocks publication until inspected and moved or removed. Fatal diagnostics and later GUI messages still use COM1. The USB desktop image now shows USB boot details automatically when input is unavailable.
 
 `cargo xtask desktop-test` runs six headless QEMU boots with loopback-only TCP QMP, genuine physical input/fault/restart scenarios, task/FD pressure, exact saved bytes, ordinary ext4 reboot, ext2 and missing-device fallback. Evidence is under `build/desktop-test/`; `desktop-test.result.txt` reports the overall result and failures remain failures. The explicit `desktop test` session (selected automatically by the dedicated test ISO) enables launcher `f`/`b` raw-client probes and F12 compositor UD2; these are not ordinary desktop shortcuts. The selected 5-second gesture/UART budgets and unchanged resource limits passed locally. See [M17.1](../validation/M17.1.md) for measured scope and preserved records. This retains the M17.1 profile; the separately accepted M17.2 terminal is described below.
 
@@ -759,7 +759,7 @@ for the accepted source/seed identity and retained output locations.
 
 ## USB keyboard and mouse
 
-The opt-in USB.2–USB.5 implementation enumerates root devices and delivers Boot/Report keyboards and relative mice through the existing desktop. Boot and Report each passed five independent QEMU topologies, including full/high speed; desktop, PTY, UART, storage and runtime regressions passed. The validation record separates modeled, host-only and physical coverage. Native/GUI public ABIs stay frozen. USB.6 hubs, runtime hotplug and general recovery remain separate. Physical hardware is pending.
+The opt-in USB driver delivers Boot/Report keyboards and relative mice through the existing desktop. USB.6 now implements cooperative root/hub attachment, held-input release, stopped-slot/DMA reclamation, bounded endpoint recovery and one controller restart. USB2 hubs have checked route/TT records; the total remains eight devices, including hubs. The validation record separates executed QEMU gates, host-only TT checks and pending physical coverage. Native/GUI public ABIs stay frozen. SuperSpeed hubs, arbitrary controller faults and physical hardware remain separate.
 
 Use `cargo xtask run --desktop --usb [--toolchain | --rust] [--disk build/disks/work.ext4]` for an opt-in QEMU session with xHCI keyboard/mouse and PS/2 retained. `cargo xtask usb-image` builds the production USB desktop ISO. These commands write only repository build files.
 
@@ -768,3 +768,29 @@ Run `cargo xtask xhci-test` for attached/empty/absent controllers plus submitted
 [USB milestone](../milestones/USB_INPUT.md) · [validation and limits](../validation/USB_INPUT.md)
 
 `cargo xtask xhci-packet-test` independently exercises full-speed EP0 `8 → 64` Evaluate Context using an unbound model, with output-context readback and full descriptor/configuration transfers. The command does not admit a USB network driver.
+
+`cargo xtask usb-hotplug-test` adds empty-controller attachment, ten held-key removal/reconnect
+cycles per topology, mouse release, nested powered USB2 hubs and exact PTY bytes after clean
+shutdown. `cargo xtask usb-recovery-test` checks actual EP0 STALL/reset/dequeue/descriptor retry
+and one real controller halt/restart with independent UART and resumed input. Results and prior
+attempts are retained in `build/usb-hotplug-test/` and `build/usb-recovery-test/`. Keep the original
+USB Boot/Report, xHCI, PS/2 and desktop gates. Both new gates retain the 180-second session and
+five-second interaction budgets. QEMU's default eight-port hub has a short power-mask descriptor;
+the valid topology uses `usb-hub,ports=4,port-power=on` and the parser keeps strict length checks.
+
+### USB test machines without COM1 or PS/2
+
+Run `cargo xtask usb-diagnostics-test` to build and verify `build/images/anova-usb-diagnostics.iso`. Use this new image on the existing test medium, connect a wired keyboard/mouse directly before boot, and photograph the bottom `USB BOOT DIAGNOSTICS V1` panel if input remains unavailable. Record the machine model and physical port group. The current driver selects only the first xHCI controller; other USB host-controller families are not supported. Change one port group at a time and reboot with devices attached. The screen is the boot snapshot; runtime faults still require separate evidence. Read [USB validation](../validation/USB_INPUT.md) for the error markers and remaining bounds.
+
+For `phase=pci reason=register-range`, rebuild the diagnostic image with the capability-mapping
+fix. Keep the same ports and firmware settings for the first comparison. The new panel records
+`USB:PCI` vendor/device IDs, `USB:REGS` with `ecp=` in bytes, `USB:HANDOFF` and `USB:APERTURE`
+when reached. `USB:REG_RANGE` identifies a rejected span and its bound. A failing photo should
+include these lines and the final rejection. No COM1 or PS/2 input is required for this path.
+
+Scratchpad follow-up: the controller buffer limit is now 512 instead of 32. A separate owned 4 KiB DMA pointer array prevents overlap with command/event rings; zero buffers allocate no array. Allocation errors release unpublished buffers through ownership, while existing controller halt/quarantine rules retain published DMA. The boot log reports requested count, limit and raw HCSPARAMS2. QEMU-only checks construct 0/33/512 buffers, inspect every pointer and reject 513. This checks allocation/layout, not physical controller consumption. Hardware retest remains pending; controllers requiring more than 512 buffers remain unsupported.
+## Explicit USB protocol speed tables (2026-11-25)
+
+The Intel 8086:A12F physical follow-up now parses explicit PSI tables for USB2 low/full/high speed and symmetric SuperSpeed 5 Gb/s. Eight shared maps and byte port indices keep asynchronous stack use bounded. Slot Context retains controller IDs while packet/TT logic uses USB speed classes. Unsupported speeds are skipped per port; SuperSpeedPlus, asymmetric transport and nonzero Slot Type remain unsupported. Rebuild the diagnostic ISO and retain USB:PROTOCOL/USB:PORT_SKIP plus the final error from the physical retest. Detailed boundaries and local evidence are in the USB validation record.
+
+On 2026-11-26 the owner reported normal USB keyboard/mouse operation after testing the speed-table fix image (SHA-256 07b34f7cb0b7713e198bbe32e65bb5d329d6c6cefcf7017b844f570ab7a22cc7) on the previously photographed Intel 8086:a12f machine. This closes the reported no-input blocker for that setup. This is owner-reported physical evidence; other controllers, physical hub/hotplug/recovery stress, SuperSpeedPlus and unrestricted HID remain independently unverified. Main-push-only CI remains unchanged; no remote CI pass is claimed.

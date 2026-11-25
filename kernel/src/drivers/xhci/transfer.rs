@@ -64,6 +64,10 @@ impl TransferRing {
     pub fn buffer(&self) -> u64 {
         self.base() + 1024
     }
+    /// The next unsubmitted TRB and its producer cycle, used only after endpoint quiescence.
+    pub fn dequeue(&self) -> u64 {
+        (self.base() + self.index as u64 * 16) | u64::from(self.cycle)
+    }
     /// Caller serializes one TD per ring. A published cycle bit transfers ownership to hardware.
     pub fn submit(&mut self, pointer: u64, status: u32, control: u32) -> u64 {
         let offset = self.index * 16;

@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Validate USB configuration trees independently of controller DMA and desktop policy.
+//! Validate USB descriptors, HID reports, hub topology and xHCI register walks without DMA.
 #![no_std]
 
 pub mod hid;
+pub mod topology;
+pub mod xhci;
 
 pub const MAX_INTERFACES: usize = 4;
 pub const MAX_DESCRIPTOR: usize = 2048;
@@ -28,7 +30,7 @@ pub struct Configuration {
 }
 
 /// Retain only alternate zero; validate every descriptor, including unsupported siblings.
-/// This bounded root HID profile admits one interrupt IN endpoint per HID interface.
+/// The bounded HID/hub profile admits one interrupt IN endpoint per supported interface.
 pub fn configuration(bytes: &[u8]) -> Result<Configuration, &'static str> {
     if bytes.len() < 9
         || bytes.len() > MAX_DESCRIPTOR
@@ -109,7 +111,7 @@ pub fn configuration(bytes: &[u8]) -> Result<Configuration, &'static str> {
                     }
                     endpoint_bits |= bit;
                     let f = &mut result.interfaces[i];
-                    if f.class == 3 && d[2] & 0x80 != 0 && d[3] & 3 == 3 {
+                    if matches!(f.class, 3 | 9) && d[2] & 0x80 != 0 && d[3] & 3 == 3 {
                         let packet = u16::from_le_bytes([d[4], d[5]]);
                         if f.endpoint != 0 || packet == 0 || packet > MAX_PACKET as u16 || d[6] == 0
                         {

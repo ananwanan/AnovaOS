@@ -296,11 +296,15 @@ fn capabilities(
 #[cfg(feature = "xhci")]
 pub(super) fn first_xhci() -> Result<Option<Function>, i64> {
     let mut found = None;
-    walk(|f, _| {
+    walk(|f, id| {
         if found.is_none() && f.read(8) >> 8 == 0x0c0330 && f.read(0x0c) & 0x007f_0000 == 0 {
             serial::write(format_args!(
-                "[USB:PCI] bdf={:02x}:{:02x}.{} class=0c0330\n",
-                f.bus, f.device, f.function
+                "[USB:PCI] bdf={:02x}:{:02x}.{} vendor={:04x} device={:04x} class=0c0330\n",
+                f.bus,
+                f.device,
+                f.function,
+                id & 0xffff,
+                id >> 16
             ));
             found = Some(f);
         }
