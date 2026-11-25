@@ -3,6 +3,10 @@
 
 **English** | [简体中文](../../zh-CN/guides/STATUS.md)
 
+## Desktop boot diagnostics (2026-11-22)
+
+A normal desktop keeps its windows visible when both input devices are unavailable. Read the boot snapshot with `cat /boot.log` on COM1. To enable copies on a writable virtio work disk, run `mkdir /persist/logs` once before the next boot. See the [follow-up checks](../validation/M17.1.md).
+
 ## M18.1 GCC first stage locally accepted (2026-11-22)
 
 The separate M18.1 profile admits a new BusyBox applet set and host-built GMP/MPFR/MPC
@@ -701,3 +705,39 @@ rerun passed all 48 tests. Strict host Clippy and the bare-metal
 formatting, Python/workflow parsing, bilingual documentation, 454-file purpose
 coverage and `git diff --check`. Remote CI was configured, not accepted by these
 local results; at that historical delivery the workflow triggered on `dev` pushes/PRs or manual dispatch; current policy is main-push only.
+
+## USB keyboard and mouse
+
+The opt-in USB driver delivers Boot/Report keyboards and relative mice through the existing desktop. USB.6 now implements cooperative root/hub attachment, held-input release, stopped-slot/DMA reclamation, bounded endpoint recovery and one controller restart. USB2 hubs have checked route/TT records; the total remains eight devices, including hubs. The validation record separates executed QEMU gates, host-only TT checks and pending physical coverage. Native/GUI public ABIs stay frozen. SuperSpeed hubs, arbitrary controller faults and physical hardware remain separate.
+
+[USB milestone](../milestones/USB_INPUT.md) · [validation and limits](../validation/USB_INPUT.md)
+
+When both input devices are unavailable, the desktop now displays USB boot diagnostics automatically. No keyboard, mouse or COM1 is needed to read the panel. Connect devices before boot and photograph the panel; it is a boot snapshot, not a live log. Physical compatibility remains pending.
+
+The physical boot photo reports xHCI `00:14.0` rejected at PCI discovery with
+`register-range`, before HID enumeration. The first-page-only capability mapping has been
+replaced by bounded on-demand mapping for firmware handoff and measured-BAR revalidation.
+Physical compatibility remains unresolved until the updated diagnostic image is tested.
+
+Scratchpad follow-up: the controller buffer limit is now 512 instead of 32. A separate owned 4 KiB DMA pointer array prevents overlap with command/event rings; zero buffers allocate no array. Allocation errors release unpublished buffers through ownership, while existing controller halt/quarantine rules retain published DMA. The boot log reports requested count, limit and raw HCSPARAMS2. QEMU-only checks construct 0/33/512 buffers, inspect every pointer and reject 513. This checks allocation/layout, not physical controller consumption. Hardware retest remains pending; controllers requiring more than 512 buffers remain unsupported.
+
+## Open physical USB blocker (2026-11-25)
+
+The latest owner photo from the scratchpad-fix image identifies PCI `00:14.0`, vendor/device
+`8086:a12f`, class `0c0330`. Discovery reached xECP `0x8000`, legacy capability `0x846c`
+with BIOS=0/OS=1, and a measured `0x10000` BAR. HCSPARAMS2 is `0x14200054` and the
+scratchpad requirement is 34, below the new 512 limit. The previous register-range and
+scratchpad admission failures were passed in this boot; DMA operation is not yet established.
+
+**Historical failure (resolved on 2026-11-26):** `USB:REJECT phase=pci reason=port-protocol-speed-table`. At that time the Supported
+Protocol parser rejected every nonzero Protocol Speed ID Count. HID enumeration
+has not started, so physical keyboard/mouse usability remains unaccepted. Next implement
+bounded Protocol Speed ID table parsing and speed interpretation for port reset and device
+contexts, with malformed-table tests and independent QEMU/physical validation. Do not merely
+remove the rejection or infer physical success from the existing QEMU gates. The photo does
+not contain the speed-table entries, so their exact values remain unknown.
+## Explicit USB protocol speed tables (2026-11-25)
+
+The Intel 8086:A12F physical follow-up now parses explicit PSI tables for USB2 low/full/high speed and symmetric SuperSpeed 5 Gb/s. Eight shared maps and byte port indices keep asynchronous stack use bounded. Slot Context retains controller IDs while packet/TT logic uses USB speed classes. Unsupported speeds are skipped per port; SuperSpeedPlus, asymmetric transport and nonzero Slot Type remain unsupported. Rebuild the diagnostic ISO and retain USB:PROTOCOL/USB:PORT_SKIP plus the final error from the physical retest. Detailed boundaries and local evidence are in the USB validation record.
+
+On 2026-11-26 the owner reported normal USB keyboard/mouse operation after testing the speed-table fix image (SHA-256 07b34f7cb0b7713e198bbe32e65bb5d329d6c6cefcf7017b844f570ab7a22cc7) on the previously photographed Intel 8086:a12f machine. This closes the reported no-input blocker for that setup. This is owner-reported physical evidence; other controllers, physical hub/hotplug/recovery stress, SuperSpeedPlus and unrestricted HID remain independently unverified. Main-push-only CI remains unchanged; no remote CI pass is claimed.

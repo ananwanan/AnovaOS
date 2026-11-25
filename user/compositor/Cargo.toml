@@ -16,4 +16,5 @@ bench = false
 [dependencies]
 anova-rt = { path = "../rt" }
 anova-gui = { path = "../../crates/gui" }
+anova-gui-runtime = { path = "../../crates/gui-runtime" }
 anova-gui-user = { path = "../gui-common" }

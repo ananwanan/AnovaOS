@@ -7,10 +7,11 @@ use super::*;
 use anova_graphics::Surface;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
+#[cfg(unix)]
+use std::os::unix::net::UnixStream;
 use std::{
     io::{Read, Write},
     net::TcpStream,
-    os::unix::net::UnixStream,
 };
 
 const WIDTH: u32 = 800;
@@ -261,10 +262,16 @@ macro_rules! qmp_stream {
         }
     };
 }
+#[cfg(unix)]
 qmp_stream!(UnixStream);
 qmp_stream!(TcpStream);
 
 impl Qmp {
+    #[cfg(not(unix))]
+    pub(super) fn connect(_: &Path, _: &Path, _: Instant) -> Result<Self> {
+        Err("This verification profile requires a Unix-domain QMP socket".into())
+    }
+    #[cfg(unix)]
     pub(super) fn connect(socket: &Path, log: &Path, start: Instant) -> Result<Self> {
         let stream = loop {
             match UnixStream::connect(socket) {
@@ -583,7 +590,16 @@ mod tests {
     fn qmp_reply(reply: &[u8]) -> Result<()> {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
         let temp = Temporary::new(root, "qmp-host-test")?;
+        #[cfg(unix)]
         let (client, server) = UnixStream::pair()?;
+        #[cfg(not(unix))]
+        let (client, server) = {
+            let listener = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))?;
+            (
+                TcpStream::connect(listener.local_addr()?)?,
+                listener.accept()?.0,
+            )
+        };
         let reply = reply.to_vec();
         let server_thread = thread::spawn(move || {
             let mut server = BufReader::new(server);

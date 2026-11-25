@@ -64,7 +64,7 @@ The current system uses one BSP, 32 process/thread slots, a non-preemptible
 kernel, a fixed 16 MiB heap and masked peripheral IRQs with polled device I/O.
 Writable ext2 files are bounded at 4 MiB; controlled ext4 files allow 256 MiB; tmpfs and readonly shared-file caches
 remain at 1 MiB. Ext2 has no journal or power-loss recovery. General Linux/glibc,
-SMP, USB/physical hardware support, native Rust `std` and reconstructed compilers
+SMP, physical USB/hardware support, native Rust `std` and reconstructed compilers
 remain unverified. The guest-generated UEFI optical image has bounded non-GUI
 acceptance. See [M18.3](docs/en/validation/M18.3.md),
 [status](docs/en/guides/STATUS.md) and [compatibility](docs/en/COMPATIBILITY.md).
@@ -104,6 +104,8 @@ toolchain dependency download separately from local acceptance.
 The owner deferred M16 remote closeout and authorized M17 development on `feat/m17-desktop`. `cargo xtask desktop-build` builds the launcher and existing host-built C/C++/Rust clients, plus an explicit Linux boundary fixture; `cargo xtask run --desktop [--disk build/disks/work.ext4]` selects the opt-in session. `cargo xtask desktop-test` verifies the accepted bounded profile. See [M17.1 local acceptance](docs/en/validation/M17.1.md). M17.2 adds the real PTY terminal: focus the launcher and press `t`; use `F5` for a new shell and `F4` to close. `cargo xtask run --desktop --toolchain --disk build/disks/pty-work.ext4` adds the verified M11 tools to an explicitly Linux-personality work disk. See [PTY contract](docs/en/milestones/M17_PTY.md) and [M17.2 evidence](docs/en/validation/M17.2.md). M17.3 adds the [bounded file/editor loop](docs/en/milestones/M17_FILES.md); `cargo xtask desktop-files-fault-test` verifies real GUI boundary/storage failures, exact recovery copies and retry. See [local validation](docs/en/validation/M17.3.md).
 
 ## Build and boot
+
+A normal desktop keeps its windows visible when both input devices are unavailable. Read the boot snapshot with `cat /boot.log` on COM1. To enable copies on a writable virtio work disk, run `mkdir /persist/logs` once before the next boot.
 
 Use x86_64 Ubuntu 24.04 or WSL2 with rustup, QEMU 8.2.2, xorriso, curl,
 dpkg-deb, GCC/G++, make, musl-tools, QEMU-user, Python 3 and e2fsprogs.
@@ -197,3 +199,31 @@ git diff --check
 Original code, documentation and examples use [Apache-2.0](LICENSE);
 [NOTICE](NOTICE) and third-party licenses retain their own attribution and terms.
 See [licensing](docs/en/guides/LICENSING.md).
+
+## USB keyboard and mouse
+
+The opt-in USB driver delivers Boot/Report keyboards and relative mice through the existing desktop. USB.6 now implements cooperative root/hub attachment, held-input release, stopped-slot/DMA reclamation, bounded endpoint recovery and one controller restart. USB2 hubs have checked route/TT records; the total remains eight devices, including hubs. The validation record separates executed QEMU gates, host-only TT checks and pending physical coverage. Native/GUI public ABIs stay frozen. SuperSpeed hubs, arbitrary controller faults and physical hardware remain separate.
+
+Use `cargo xtask run --desktop --usb [--toolchain | --rust] [--disk build/disks/work.ext4]` for an opt-in QEMU session with xHCI keyboard/mouse and PS/2 retained. `cargo xtask usb-image` builds the production USB desktop ISO. These commands write only repository build files.
+
+[USB milestone](docs/en/milestones/USB_INPUT.md) · [validation and limits](docs/en/validation/USB_INPUT.md)
+
+Use `cargo xtask usb-hotplug-test` for live root/nested USB2 hub input and held-state/DMA
+retirement, and `cargo xtask usb-recovery-test` for actual EP0 STALL and controller restart.
+Keep `xhci-test`, both `usb-input-test` modes and the independent PS/2/desktop/UART gates.
+
+When both input devices are unavailable, the desktop now displays USB boot diagnostics automatically. No keyboard, mouse or COM1 is needed to read the panel. Connect devices before boot and photograph the panel; it is a boot snapshot, not a live log. Physical compatibility remains pending.
+
+`cargo xtask usb-diagnostics-test` verifies the production image and also writes `build/images/anova-usb-diagnostics.iso`. See the [USB test guide](docs/en/validation/USB_INPUT.md).
+
+The physical `phase=pci reason=register-range` report prompted a fix for firmware-handoff
+capabilities beyond the first 4 KiB. The driver now maps advertised capability pages within
+its 256 KiB ceiling and rechecks the measured BAR. The updated image still needs a physical retest.
+
+Scratchpad follow-up: the controller buffer limit is now 512 instead of 32. A separate owned 4 KiB DMA pointer array prevents overlap with command/event rings; zero buffers allocate no array. Allocation errors release unpublished buffers through ownership, while existing controller halt/quarantine rules retain published DMA. The boot log reports requested count, limit and raw HCSPARAMS2. QEMU-only checks construct 0/33/512 buffers, inspect every pointer and reject 513. This checks allocation/layout, not physical controller consumption. Hardware retest remains pending; controllers requiring more than 512 buffers remain unsupported.
+
+Historical physical blocker (2026-11-25, resolved by the owner report below): Intel 8086:a12f now passes register mapping/ownership and the 34-buffer Scratchpad admission check, but fails with port-protocol-speed-table before HID enumeration. Protocol Speed ID table support is the next implementation task; physical keyboard/mouse acceptance remains open.
+
+USB now parses explicit protocol speed tables for low/full/high speed and symmetric 5 Gb/s, keeping controller IDs separate from USB speed classes. Unsupported speeds are skipped per port. The owner reports normal input on Intel 8086:A12F; see the dated USB validation record.
+
+On 2026-11-26 the owner reported normal USB keyboard/mouse operation after testing the speed-table fix image (SHA-256 07b34f7cb0b7713e198bbe32e65bb5d329d6c6cefcf7017b844f570ab7a22cc7) on the previously photographed Intel 8086:a12f machine. This closes the reported no-input blocker for that setup. This is owner-reported physical evidence; other controllers, physical hub/hotplug/recovery stress, SuperSpeedPlus and unrestricted HID remain independently unverified. Main-push-only CI remains unchanged; no remote CI pass is claimed.

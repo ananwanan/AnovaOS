@@ -730,6 +730,8 @@ impl Kernel {
             }
             #[cfg(feature = "graphics")]
             crate::drivers::input::poll();
+            #[cfg(all(feature = "xhci", not(feature = "graphics")))]
+            crate::drivers::xhci::poll(|_, _| {});
             self.terminal.poll();
             self.linux_wake();
             for i in 0..CAPACITY {
@@ -1018,6 +1020,8 @@ fn run(bytes: &[u8], args: &[&str], pid: u64) -> Result<Outcome, loader::LoadErr
             ));
         }
         if args.first() == Some(&"/bin/init") {
+            #[cfg(feature = "desktop")]
+            crate::boot_log::publish(&mut kernel.fs);
             kernel.network =
                 crate::net::Stack::attach().map_err(|_| anova_memory::Error::OutOfMemory)?;
         }

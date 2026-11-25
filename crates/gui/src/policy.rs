@@ -561,7 +561,8 @@ impl<'a> Compositor<'a> {
         }
     }
 
-    fn mark(&mut self, rect: Rect) {
+    /// Recompose a clipped area, including changes to server-owned overlays.
+    pub fn mark(&mut self, rect: Rect) {
         if let Some(clipped) = rect.intersection(Rect::new(0, 0, self.width, self.height)) {
             self.damage = Some(self.damage.map_or(clipped, |damage| damage.union(clipped)));
         }

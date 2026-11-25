@@ -54,7 +54,7 @@ GitHub Actions 暂时**仅在推送 `main` 时运行**，关闭 PR、手动和�
 
 系统当前为单 BSP、32 个进程/线程槽、内核不可抢占、固定 16 MiB 堆；外设 IRQ 保持屏蔽，
 设备 I/O 采用轮询。ext2 可写文件上限 4 MiB，受控 ext4 文件上限 256 MiB，tmpfs 和只读共享文件缓存上限仍为 1 MiB。
-ext2 没有日志或断电恢复。通用 Linux/glibc、SMP、USB/实机支持、原生 Rust `std`、
+ext2 没有日志或断电恢复。通用 Linux/glibc、SMP、USB 实机支持、原生 Rust `std`、
 编译器源码重建仍待验证。guest 生成的 UEFI 光盘镜像已验收有界无 GUI 配置。详见
 [M18.3](docs/zh-CN/validation/M18.3.md)、
 [当前状态](docs/zh-CN/guides/STATUS.md)和[兼容范围](docs/zh-CN/COMPATIBILITY.md)。
@@ -88,6 +88,8 @@ M17.1–M17.5 均有声明桌面配置的本地 QEMU 证据，包括实时资源
 所有者已暂缓 M16 远端收尾，授权在 `feat/m17-desktop` 开始 M17。`cargo xtask desktop-build` 构建启动器及宿主构建的既有 C/C++/Rust 客户端，并包含显式 Linux 边界探针；`cargo xtask run --desktop [--disk build/disks/work.ext4]` 选择显式桌面会话。`cargo xtask desktop-test` 验证已验收的有界配置。见 [M17.1 本地验收](docs/zh-CN/validation/M17.1.md)。M17.2 已加入真实 PTY 终端：聚焦启动器按 `t`，`F5` 重开 shell，`F4` 关闭。`cargo xtask run --desktop --toolchain --disk build/disks/pty-work.ext4` 将已验证的 M11 工具加入显式 Linux personality 工作盘。详见 [PTY 契约](docs/zh-CN/milestones/M17_PTY.md)及 [M17.2 证据](docs/zh-CN/validation/M17.2.md)。M17.3 已加入[有界文件/编辑闭环](docs/zh-CN/milestones/M17_FILES.md)；`cargo xtask desktop-files-fault-test` 验证真实 GUI 边界/存储故障、精确恢复副本和重试，见[本地验收](docs/zh-CN/validation/M17.3.md)。
 
 ## 构建与启动
+
+普通桌面在键盘和鼠标均不可用时仍显示窗口。可在 COM1 执行 `cat /boot.log` 查看启动记录。在可写 virtio 工作盘上执行一次 `mkdir /persist/logs`，从下次启动起即可保留副本。
 
 宿主使用 x86_64 Ubuntu 24.04 或 WSL2，安装 rustup、QEMU 8.2.2、xorriso、curl、
 dpkg-deb、GCC/G++、make、musl-tools、QEMU-user、Python 3 和 e2fsprogs。
@@ -173,3 +175,31 @@ git diff --check
 
 原创代码、文档与示例采用 [Apache-2.0](LICENSE)；[NOTICE](NOTICE) 和第三方许可证保留
 各自的归属与条款，详见[许可指南](docs/zh-CN/guides/LICENSING.md)。
+
+## USB 键鼠
+
+可选 USB 驱动通过现有桌面提供 Boot/Report 键盘和相对鼠标输入。USB.6 已实现协作式根端口／Hub 插拔、按住状态释放、停止端点后的槽位／DMA 回收、有界端点恢复和一次控制器重启。USB2 Hub 使用经检查的路由／TT 记录；总量仍限制为八个设备（含 Hub）。验证记录分别列明实际执行的 QEMU 门禁、仅宿主 TT 检查和待完成的实机覆盖。native/GUI 公共 ABI 保持冻结。SuperSpeed Hub、任意控制器故障及实机仍需独立验收。
+
+使用 `cargo xtask run --desktop --usb [--toolchain | --rust] [--disk build/disks/work.ext4]` 启动可选 QEMU 会话，连接 xHCI 键鼠并保留 PS/2。`cargo xtask usb-image` 构建生产 USB 桌面 ISO；这些命令只写入仓库构建文件。
+
+[USB 里程碑](docs/zh-CN/milestones/USB_INPUT.md) · [验证与限制](docs/zh-CN/validation/USB_INPUT.md)
+
+使用 `cargo xtask usb-hotplug-test` 验证根端口／嵌套 USB2 Hub 的实时输入与按住状态／DMA 回收，
+使用 `cargo xtask usb-recovery-test` 验证真实 EP0 STALL 和控制器重启。保留 `xhci-test`、
+两种 `usb-input-test` 模式及独立 PS/2／桌面／串口门禁。
+
+键盘和鼠标均不可用时，桌面现自动显示 USB 启动诊断，无需键鼠或 COM1 即可读取。请在开机前连接设备并拍摄面板；它是启动快照，不是实时日志。实机兼容性仍待验收。
+
+`cargo xtask usb-diagnostics-test` 验证生产镜像，并生成 `build/images/anova-usb-diagnostics.iso`。见 [USB 测试指南](docs/zh-CN/validation/USB_INPUT.md)。
+
+实机报告 `phase=pci reason=register-range` 后，已修复固件接管能力位于首个 4 KiB 之外时的
+错误拒绝。驱动现按控制器公布的位置在 256 KiB 上限内映射能力页，并再次校验实际 BAR 范围。
+更新后的镜像仍需实机复测。
+
+Scratchpad 后续：控制器缓冲区上限由 32 提高至 512。独立持有的 4 KiB DMA 指针表避免与命令／事件环重叠；数量为零时不分配地址表。分配失败时通过所有权释放未发布缓冲区，已发布 DMA 继续遵循原有停止确认／隔离规则。启动日志记录实际数量、上限和原始 HCSPARAMS2。仅 QEMU 测试配置构建 0／33／512 个缓冲区，检查每个指针并拒绝 513；这验证分配与布局，不证明实机控制器消费正常。仍需实机复测，要求超过 512 个缓冲区的控制器仍不支持。
+
+历史实机阻塞（2026-11-25，已由下述用户反馈关闭）：Intel 8086:a12f 已越过寄存器映射／接管和 34 个 Scratchpad 的准入检查，但在 HID 枚举前报 port-protocol-speed-table。下一项开发为 Protocol Speed ID 表支持；实机键鼠仍未验收。
+
+USB 现解析低速／全速／高速和对称 5 Gb/s 的显式协议速度表，区分控制器 ID 与 USB 速度类别；未支持速度按端口跳过。用户反馈 Intel 8086:A12F 键鼠已正常，详见带日期的 USB 验证记录。
+
+2026-11-26，用户在此前照片中的 Intel 8086:a12f 机器测试速度表修复镜像（SHA-256 07b34f7cb0b7713e198bbe32e65bb5d329d6c6cefcf7017b844f570ab7a22cc7）后，反馈 USB 键盘／鼠标已正常。本配置的无输入阻塞据此关闭。这是用户报告的实机证据；其他控制器、实机 Hub／插拔／恢复压力、SuperSpeedPlus 及无限制 HID 仍需独立验证。CI 仍仅由 main 推送触发，不宣称远端 CI 通过。

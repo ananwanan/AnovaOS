@@ -1,4 +1,4 @@
-//! Decode bounded set-1 keyboard and three-byte PS/2 mouse input without hardware access.
+//! Decode bounded PS/2 and USB HID input and aggregate physical state without hardware access.
 //!
 //! This crate allocates nothing and has no interrupt or synchronization assumptions. A caller
 //! serializes access and supplies device bytes after removing command responses and transport
@@ -217,7 +217,7 @@ impl Default for Keyboard {
     }
 }
 
-/// Three standard buttons, with PS/2 bit positions retained for diagnostics.
+/// Aggregate button bits: the low three retain PS/2 meanings; USB can supply five more.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Buttons(u8);
 
@@ -367,6 +367,7 @@ pub enum Event {
     Key(KeyEvent),
     Pointer(PointerEvent),
     Reset(ResetReason),
+    Wheel(i16),
 }
 
 /// Serial bounded dispatcher. The caller drains it frequently and owns hardware lifecycle.
@@ -377,6 +378,12 @@ pub enum Event {
 /// the same invalidation, then ignores incoming bytes until connect. Capacity zero is rejected.
 pub struct Dispatcher<const N: usize> {
     keyboard: Keyboard,
+    aggregate: Keyboard,
+    sources: [[u64; 4]; 33],
+    source_buttons: [u8; 33],
+    usb_repeat: Option<PhysicalKey>,
+    usb_generation: u64,
+    reset_epoch: u64,
     mouse: Mouse,
     pointer: Pointer,
     events: [Option<Event>; N],
@@ -395,6 +402,12 @@ impl<const N: usize> Dispatcher<N> {
         };
         Some(Self {
             keyboard: Keyboard::new(),
+            aggregate: Keyboard::new(),
+            sources: [[0; 4]; 33],
+            source_buttons: [0; 33],
+            usb_repeat: None,
+            usb_generation: 0,
+            reset_epoch: 0,
             mouse: Mouse::new(),
             pointer,
             events: [None; N],
@@ -429,7 +442,7 @@ impl<const N: usize> Dispatcher<N> {
             return;
         }
         match self.keyboard.feed(byte) {
-            Ok(Some(event)) => self.push(Event::Key(event)),
+            Ok(Some(event)) => self.source_key(0, event.key, event.state),
             Ok(None) => {}
             Err(_) => self.reset(ResetReason::MalformedInput),
         }
@@ -441,21 +454,153 @@ impl<const N: usize> Dispatcher<N> {
         }
         match self.mouse.feed(byte) {
             Ok(Some(packet)) => {
-                let dy = -packet.dy;
-                self.pointer.move_by(packet.dx, dy);
-                self.pointer.buttons = packet.buttons;
-                self.push(Event::Pointer(PointerEvent {
-                    x: self.pointer.x,
-                    y: self.pointer.y,
-                    dx: packet.dx,
-                    dy,
-                    buttons: packet.buttons,
-                    changed: packet.changed,
-                    overflow: packet.overflow,
-                }));
+                self.source_pointer(
+                    0,
+                    packet.dx,
+                    -packet.dy,
+                    packet.buttons.bits(),
+                    packet.overflow,
+                );
             }
             Ok(None) => {}
             Err(_) => self.reset(ResetReason::MalformedInput),
+        }
+    }
+
+    fn source_key(&mut self, source: usize, key: PhysicalKey, state: KeyState) {
+        if key == PhysicalKey::PAUSE {
+            self.push(Event::Key(KeyEvent {
+                key,
+                state,
+                modifiers: self.aggregate.modifiers(),
+            }));
+            return;
+        }
+        let index = key.index();
+        let mask = 1u64 << (index % 64);
+        let old = self.sources.iter().any(|s| s[index / 64] & mask != 0);
+        if state == KeyState::Released {
+            self.sources[source][index / 64] &= !mask;
+        } else {
+            self.sources[source][index / 64] |= mask;
+        }
+        let new = self.sources.iter().any(|s| s[index / 64] & mask != 0);
+        if old == new && !(state == KeyState::Repeat && new) {
+            return;
+        }
+        if key.extended {
+            let _ = self.aggregate.feed(0xe0);
+        }
+        if let Ok(Some(event)) = self.aggregate.feed(key.code | if new { 0 } else { 128 }) {
+            self.push(Event::Key(event));
+        }
+    }
+
+    fn source_pointer(&mut self, source: usize, dx: i16, dy: i16, buttons: u8, overflow: bool) {
+        self.source_buttons[source] = buttons;
+        let buttons = Buttons(self.source_buttons.iter().fold(0, |a, b| a | b));
+        let changed = Buttons(self.pointer.buttons.bits() ^ buttons.bits());
+        self.pointer.move_by(dx, dy);
+        self.pointer.buttons = buttons;
+        self.push(Event::Pointer(PointerEvent {
+            x: self.pointer.x,
+            y: self.pointer.y,
+            dx,
+            dy,
+            buttons,
+            changed,
+            overflow,
+        }));
+    }
+
+    /// A complete validated interface snapshot. State from other sources is retained.
+    pub fn feed_usb(&mut self, source: usize, sample: anova_usb::hid::Sample) {
+        if !self.connected || !(1..self.sources.len()).contains(&source) {
+            return;
+        }
+        let epoch = self.reset_epoch;
+        let mut desired = [0u64; 4];
+        for usage in 0..256 {
+            if sample.keys[usage / 64] & (1 << (usage % 64)) != 0
+                && let Some(key) = usb_key(usage as u8)
+            {
+                let i = key.index();
+                desired[i / 64] |= 1 << (i % 64);
+            }
+        }
+        // Modifiers are committed before ordinary keys; text sees the new full modifier set.
+        for pass in 0..2 {
+            for index in 0..256 {
+                let key = PhysicalKey {
+                    code: (index % 128) as u8,
+                    extended: index >= 128,
+                };
+                let modifier = matches!(key.code, 0x2a | 0x36 | 0x1d | 0x38);
+                if modifier != (pass == 0) {
+                    continue;
+                }
+                let mask = 1 << (index % 64);
+                let new = desired[index / 64] & mask != 0;
+                let old = self.sources[source][index / 64] & mask != 0;
+                if new != old {
+                    self.source_key(
+                        source,
+                        key,
+                        if new {
+                            KeyState::Pressed
+                        } else {
+                            KeyState::Released
+                        },
+                    );
+                    if self.reset_epoch != epoch {
+                        return;
+                    }
+                    if !modifier {
+                        self.usb_generation = self.usb_generation.wrapping_add(1);
+                        if new {
+                            self.usb_repeat = Some(key);
+                        } else if self.usb_repeat == Some(key)
+                            && !self.sources[1..].iter().any(|s| s[index / 64] & mask != 0)
+                        {
+                            self.usb_repeat = (0..256)
+                                .find(|&i| {
+                                    !matches!(i % 128, 0x2a | 0x36 | 0x1d | 0x38)
+                                        && self.sources[1..]
+                                            .iter()
+                                            .any(|s| s[i / 64] & (1 << (i % 64)) != 0)
+                                })
+                                .map(|i| PhysicalKey {
+                                    code: (i % 128) as u8,
+                                    extended: i >= 128,
+                                });
+                        }
+                    }
+                }
+            }
+        }
+        if sample.wheel != 0 {
+            self.push(Event::Wheel(sample.wheel));
+            if self.reset_epoch != epoch {
+                return;
+            }
+        }
+        if sample.x != 0 || sample.y != 0 || self.source_buttons[source] != sample.buttons {
+            self.source_pointer(source, sample.x, sample.y, sample.buttons, false);
+        }
+    }
+
+    pub fn usb_generation(&self) -> u64 {
+        self.usb_generation
+    }
+
+    pub fn repeat_usb(&mut self) {
+        if let Some(key) = self.usb_repeat {
+            if key.extended {
+                let _ = self.aggregate.feed(0xe0);
+            }
+            if let Ok(Some(event)) = self.aggregate.feed(key.code) {
+                self.push(Event::Key(event));
+            }
         }
     }
 
@@ -470,7 +615,12 @@ impl<const N: usize> Dispatcher<N> {
     }
 
     pub fn reset(&mut self, reason: ResetReason) {
+        self.reset_epoch = self.reset_epoch.wrapping_add(1);
         self.keyboard.reset();
+        self.aggregate.reset();
+        self.sources = [[0; 4]; 33];
+        self.source_buttons = [0; 33];
+        self.usb_repeat = None;
         self.mouse.reset();
         self.pointer.buttons = Buttons(0);
         self.events = [None; N];
@@ -501,3 +651,71 @@ impl<const N: usize> Dispatcher<N> {
 
 #[cfg(test)]
 mod tests;
+
+/// USB keyboard usages to the existing physical set-1 vocabulary; no layout translation.
+pub fn usb_key(usage: u8) -> Option<PhysicalKey> {
+    let code = match usage {
+        4..=29 => [
+            0x1e, 0x30, 0x2e, 0x20, 0x12, 0x21, 0x22, 0x23, 0x17, 0x24, 0x25, 0x26, 0x32, 0x31,
+            0x18, 0x19, 0x10, 0x13, 0x1f, 0x14, 0x16, 0x2f, 0x11, 0x2d, 0x15, 0x2c,
+        ][usize::from(usage - 4)],
+        30..=38 => usage - 28,
+        39 => 0x0b,
+        40 => 0x1c,
+        41 => 1,
+        42 => 0x0e,
+        43 => 0x0f,
+        44 => 0x39,
+        45 => 0x0c,
+        46 => 0x0d,
+        47 => 0x1a,
+        48 => 0x1b,
+        49 | 50 => 0x2b,
+        51 => 0x27,
+        52 => 0x28,
+        53 => 0x29,
+        54 => 0x33,
+        55 => 0x34,
+        56 => 0x35,
+        57 => 0x3a,
+        58..=67 => usage + 1,
+        68 => 0x57,
+        69 => 0x58,
+        70 => 0xb7,
+        71 => 0x46,
+        73 => 0xd2,
+        74 => 0xc7,
+        75 => 0xc9,
+        76 => 0xd3,
+        77 => 0xcf,
+        78 => 0xd1,
+        79 => 0xcd,
+        80 => 0xcb,
+        81 => 0xd0,
+        82 => 0xc8,
+        83 => 0x45,
+        84 => 0xb5,
+        85 => 0x37,
+        86 => 0x4a,
+        87 => 0x4e,
+        88 => 0x9c,
+        89..=97 => [0x4f, 0x50, 0x51, 0x4b, 0x4c, 0x4d, 0x47, 0x48, 0x49][usize::from(usage - 89)],
+        98 => 0x52,
+        99 => 0x53,
+        100 => 0x56,
+        101 => 0xdd,
+        224 => 0x1d,
+        225 => 0x2a,
+        226 => 0x38,
+        227 => 0xdb,
+        228 => 0x9d,
+        229 => 0x36,
+        230 => 0xb8,
+        231 => 0xdc,
+        _ => return None,
+    };
+    Some(PhysicalKey {
+        code: code & 127,
+        extended: code & 128 != 0,
+    })
+}

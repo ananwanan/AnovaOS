@@ -29,7 +29,15 @@ anova-storage = { path = "../crates/storage" }
 
 smoltcp = { version = "=0.12.0", default-features = false, features = ["alloc", "medium-ethernet", "proto-ipv4", "socket-tcp", "socket-udp"] }
 
+anova-usb = { path = "../crates/usb", optional = true }
+
 [features]
+xhci = ["dep:anova-usb"]
+usb-boot-only = ["xhci"]
+usb-input-test = ["xhci"]
+usb-recovery-test = ["usb-input-test"]
+usb-test-control-timeout = ["xhci", "qemu-test"]
+usb-test-control-stall = ["xhci", "qemu-test"]
 ext4-write = []
 bootstrap-metrics = []
 graphics = ["dep:anova-graphics", "dep:anova-input"]

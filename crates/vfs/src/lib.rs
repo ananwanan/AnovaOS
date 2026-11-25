@@ -252,6 +252,16 @@ impl<'a> Vfs<'a> {
         }
         Ok(fs)
     }
+    /// Expose a sealed kernel snapshot as a read-only regular file on the initramfs.
+    pub fn publish_boot_log(&mut self, bytes: &'a [u8]) -> Result<(), i64> {
+        self.insert(
+            ROOT,
+            "boot.log",
+            Data::Borrowed(bytes, false),
+            Mount::Initramfs,
+        )?;
+        Ok(())
+    }
     /// Publish only the mount root and immutable ABI marker; all other names load on demand.
     pub fn mount_disk<F: Filesystem + 'static>(&mut self, disk: F) -> Result<(), i64> {
         self.mount_backend(anova_storage::try_box(disk)?)

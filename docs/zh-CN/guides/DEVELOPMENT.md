@@ -458,7 +458,9 @@ bzip2、中断/重启保留和宿主测量的前台 UART 预算。见 [M16.5](..
 
 `cargo xtask desktop-build` 构建原生监督器及宿主构建的既有 C/C++/Rust 客户端，并显式准入一个小型 Linux personality 边界探针，不下载编译器种子。`cargo xtask desktop-image` 生成 `build/images/anova-desktop.iso`，`cargo xtask run --desktop [--disk build/disks/work.ext4]` 启动桌面及独立 COM1 shell。先聚焦启动器，使用 `1`/`2`/`3` 启动或停止、`r` 替换会话、`q` 退出。
 
-`cargo xtask desktop-test` 通过仅回环 TCP QMP 执行五次无窗口 QEMU 启动，验证实际物理输入/故障/重启、任务/FD 压力、精确保存内容、普通 ext4 重启、ext2 及缺设备回退。证据位于 `build/desktop-test/`，`desktop-test.result.txt` 报告整体结果，失败不会被掩盖。显式 `desktop test` 会话（专用测试 ISO 自动选择）启用启动器 `f`/`b` 原始客户端探针和 F12 合成器 UD2，不属于普通桌面快捷键。选定的 5 秒操作/UART 预算及原资源限额已本地通过。实测边界和保留记录见 [M17.1](../validation/M17.1.md)。此项保留 M17.1 配置；另行验收的 M17.2 终端见下文。
+普通桌面在键盘和鼠标均不可用时仍显示窗口。可在 COM1 执行 `cat /boot.log` 查看启动记录。在可写 virtio 工作盘上执行一次 `mkdir /persist/logs`，从下次启动起即可保留副本。 无盘或只读启动时，快照保留在内存。桌面内核保存从入口到 init 尝试挂载工作盘期间最后 32 KiB 的常规内核消息。日志目录不存在时跳过写盘。每次成功保存占用 `boot-1.log` 至 `boot-4.log` 的首个空位；移出或删除旧文件后即可复用。写入中断遗留的 `boot.tmp` 会阻止发布新日志，可检查后移走或删除。致命异常及此后的 GUI 日志仍输出到 COM1。USB 专用桌面镜像现可在无输入时自动显示 USB 启动详情。
+
+`cargo xtask desktop-test` 通过仅回环 TCP QMP 执行六次无窗口 QEMU 启动，验证实际物理输入/故障/重启、任务/FD 压力、精确保存内容、普通 ext4 重启、ext2 及缺设备回退。证据位于 `build/desktop-test/`，`desktop-test.result.txt` 报告整体结果，失败不会被掩盖。显式 `desktop test` 会话（专用测试 ISO 自动选择）启用启动器 `f`/`b` 原始客户端探针和 F12 合成器 UD2，不属于普通桌面快捷键。选定的 5 秒操作/UART 预算及原资源限额已本地通过。实测边界和保留记录见 [M17.1](../validation/M17.1.md)。此项保留 M17.1 配置；另行验收的 M17.2 终端见下文。
 
 ## M17.2 真实 PTY 终端
 
@@ -541,3 +543,39 @@ M15 的 `bootstrap-gcc-test`、`bootstrap-rust-test`、`bootstrap-kernel-test`
 `build/foundation/capacity-*/guest-kernel.elf`，应保留相互匹配的报告及 ELF。
 镜像门禁导出 guest 生成的 ISO，并验证提取字节、真实启动和恢复，最终打包在 guest 中完成。
 已验收的源码/种子身份及保留路径见 [M18.3](../validation/M18.3.md)。
+
+## USB 键鼠
+
+可选 USB 驱动通过现有桌面提供 Boot/Report 键盘和相对鼠标输入。USB.6 已实现协作式根端口／Hub 插拔、按住状态释放、停止端点后的槽位／DMA 回收、有界端点恢复和一次控制器重启。USB2 Hub 使用经检查的路由／TT 记录；总量仍限制为八个设备（含 Hub）。验证记录分别列明实际执行的 QEMU 门禁、仅宿主 TT 检查和待完成的实机覆盖。native/GUI 公共 ABI 保持冻结。SuperSpeed Hub、任意控制器故障及实机仍需独立验收。
+
+使用 `cargo xtask run --desktop --usb [--toolchain | --rust] [--disk build/disks/work.ext4]` 启动可选 QEMU 会话，连接 xHCI 键鼠并保留 PS/2。`cargo xtask usb-image` 构建生产 USB 桌面 ISO；这些命令只写入仓库构建文件。
+
+使用 `cargo xtask xhci-test` 检查带设备／空／无控制器、实际提交的 EP0 超时和真实 STALL；使用 `cargo xtask usb-input-test --boot`、`cargo xtask usb-input-test` 分别验证 USB-only、共存、全速 USB、PS/2-only 和无输入的独立会话。UART、QMP、scanout、精确 PTY 字节／状态和结果保存在 `build/usb-boot-test/`、`build/usb-input-test/` 及 `build/usb-input/`；重跑会保留旧尝试。桌面会话看门狗为 180 秒，按键／echo scanout 上限为五秒；控制器会话保留 90 秒。物理输入不转换为 COM1 文本。
+
+[USB 里程碑](../milestones/USB_INPUT.md) · [验证与限制](../validation/USB_INPUT.md)
+
+`cargo xtask xhci-packet-test` 使用未绑定的模型独立验证全速 EP0 `8 → 64` Evaluate Context，包含输出上下文回读及完整设备／配置描述符传输；该命令不接纳 USB 网络驱动。
+
+`cargo xtask usb-hotplug-test` 新增空控制器启动后插入、每种拓扑十轮按住键拔除／重连、鼠标释放、
+嵌套且可控供电的 USB2 Hub，以及正常关机后的精确 PTY 字节检查。`cargo xtask usb-recovery-test`
+验证真实 EP0 STALL、复位、dequeue 更新和描述符重试，以及真实控制器 halt 后的一次重启，
+并独立检查 UART 和恢复后的输入。结果与旧尝试保存在 `build/usb-hotplug-test/` 和
+`build/usb-recovery-test/`。保留原有 USB Boot/Report、xHCI、PS/2 和桌面门禁。
+两个新门禁仍使用 180 秒会话与五秒交互预算。QEMU 默认八端口 Hub 的供电位图描述符偏短；
+有效拓扑使用 `usb-hub,ports=4,port-power=on`，解析器继续严格校验长度。
+
+### 没有 COM1 或 PS/2 的 USB 测试机
+
+运行 `cargo xtask usb-diagnostics-test`，构建并验证 `build/images/anova-usb-diagnostics.iso`。沿用原有测试介质写入这张新镜像，开机前将有线键鼠直接连接；若仍无输入，拍摄底部 `USB BOOT DIAGNOSTICS V1` 面板，并记录电脑型号和物理端口组。当前驱动只选择第一个 xHCI 控制器，不支持其他 USB 主控制器类型。每次只更换一组端口，并保持设备连接后重启。屏幕是启动快照，运行时故障仍需单独证据。错误标记和边界见 [USB 验证](../validation/USB_INPUT.md)。
+
+遇到 `phase=pci reason=register-range`，请重建含能力映射修复的诊断镜像。首次对比保留相同
+端口和固件设置。新面板记录 `USB:PCI` 厂商／设备 ID、`USB:REGS` 的字节单位 `ecp=`，以及
+执行到相应阶段时的 `USB:HANDOFF` 和 `USB:APERTURE`。`USB:REG_RANGE` 标明拒绝的区间及
+上限。失败照片应包括这些行和最终拒绝原因。此路径不需要 COM1 或 PS/2 输入。
+
+Scratchpad 后续：控制器缓冲区上限由 32 提高至 512。独立持有的 4 KiB DMA 指针表避免与命令／事件环重叠；数量为零时不分配地址表。分配失败时通过所有权释放未发布缓冲区，已发布 DMA 继续遵循原有停止确认／隔离规则。启动日志记录实际数量、上限和原始 HCSPARAMS2。仅 QEMU 测试配置构建 0／33／512 个缓冲区，检查每个指针并拒绝 513；这验证分配与布局，不证明实机控制器消费正常。仍需实机复测，要求超过 512 个缓冲区的控制器仍不支持。
+## 显式 USB 协议速度表（2026-11-25）
+
+Intel 8086:A12F 实机后续已加入 USB2 低速／全速／高速及对称 SuperSpeed 5 Gb/s 的显式 PSI 表解析。八组共享映射及字节端口索引限制异步栈占用；Slot Context 使用控制器 ID，数据包／TT 逻辑使用 USB 速度类别。未支持速度按端口跳过；SuperSpeedPlus、非对称传输及非零 Slot Type 仍不支持。重建诊断 ISO 后进行实机复测，保留 USB:PROTOCOL／USB:PORT_SKIP 及最后的错误；详细范围与本地证据见 USB 验证记录。
+
+2026-11-26，用户在此前照片中的 Intel 8086:a12f 机器测试速度表修复镜像（SHA-256 07b34f7cb0b7713e198bbe32e65bb5d329d6c6cefcf7017b844f570ab7a22cc7）后，反馈 USB 键盘／鼠标已正常。本配置的无输入阻塞据此关闭。这是用户报告的实机证据；其他控制器、实机 Hub／插拔／恢复压力、SuperSpeedPlus 及无限制 HID 仍需独立验证。CI 仍仅由 main 推送触发，不宣称远端 CI 通过。
