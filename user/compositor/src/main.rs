@@ -4,8 +4,10 @@
 //! Run window policy and damage composition in a protected native user process.
 //! Kernel authority only exposes copied IPC, physical events and checked synchronous scanout.
 //! The explicit GPU probe exercises bounded offscreen rendering with user-selected CPU fallback.
+//! A no-input desktop exposes bounded USB boot diagnostics without requiring a serial console.
 
 mod gpu;
+mod input_notice;
 
 use anova_gui::{Compositor, Error, Reply, Request, STORAGE_PIXELS, reply_kind, transport as t};
 use anova_gui_runtime::render::Canvas;
@@ -35,9 +37,14 @@ static STORAGE: PrivateStorage = PrivateStorage(UnsafeCell::new(Storage {
     frame: [0; SCREEN_PIXELS],
 }));
 
-fn present(core: &mut Compositor<'_>, frame: &mut [u32], width: u32, input_notice: bool) {
+fn present(
+    core: &mut Compositor<'_>,
+    frame: &mut [u32],
+    width: u32,
+    notice: Option<&input_notice::InputNotice>,
+) {
     if let Some(rect) = core.render(frame).unwrap() {
-        if input_notice && rect.y < NOTICE_HEIGHT as i32 {
+        if let Some(notice) = notice {
             let rows = NOTICE_HEIGHT.min((frame.len() / width as usize) as u32);
             let strip = &mut frame[..(width * rows) as usize];
             strip.fill(0x58351b);
@@ -49,9 +56,10 @@ fn present(core: &mut Compositor<'_>, frame: &mut [u32], width: u32, input_notic
             .text(
                 4,
                 4,
-                "No keyboard or mouse detected. Use the COM1 serial shell.",
+                "No keyboard or mouse detected. USB boot details below.",
                 0xffffff,
             );
+            notice.draw(frame, width);
         }
         let offset = rect.y as usize * width as usize + rect.x as usize;
         let scanout = t::Scanout {
@@ -176,14 +184,15 @@ fn run(test: bool, restart: bool, desktop: bool) -> u32 {
     )
     .unwrap();
     let frame = &mut storage.frame[..(display.width * display.height) as usize];
-    present(&mut core, frame, display.width, false);
+    let diagnostics = desktop.then(input_notice::InputNotice::load);
+    present(&mut core, frame, display.width, None);
     gui::log(format_args!(
         "[GUI:SERVER_READY] pid={} session={session} userspace=true\n",
         rt::info().unwrap().process_id
     ));
     let mut envelope = t::Envelope::default();
     let mut no_input = false;
-    let notice = anova_gui::Rect::new(0, 0, display.width, NOTICE_HEIGHT);
+    let notice = anova_gui::Rect::new(0, 0, display.width, display.height);
     let mut no_input_deadline = None;
     loop {
         for _ in 0..8 {
@@ -209,7 +218,12 @@ fn run(test: bool, restart: bool, desktop: bool) -> u32 {
                     let reply = request(&mut core, &envelope, desktop);
                     reset_old_focus(&mut core, previous, window);
                     // A successful PRESENT reply follows actual CPU scanout completion.
-                    present(&mut core, frame, display.width, desktop && no_input);
+                    present(
+                        &mut core,
+                        frame,
+                        display.width,
+                        diagnostics.as_ref().filter(|_| no_input),
+                    );
                     deliver(&mut core, envelope.client, &reply);
                 }
                 _ => panic!("GUI invalid kernel envelope"),
@@ -282,7 +296,7 @@ fn run(test: bool, restart: bool, desktop: bool) -> u32 {
                 _ => panic!("GUI invalid physical event kind"),
             };
             reset_old_focus(&mut core, previous, window);
-            present(&mut core, frame, display.width, false);
+            present(&mut core, frame, display.width, None);
             if let Some(routed) = routed {
                 deliver(&mut core, routed.client, &routed.reply);
             }
@@ -302,7 +316,12 @@ fn run(test: bool, restart: bool, desktop: bool) -> u32 {
                 ));
             }
         }
-        present(&mut core, frame, display.width, desktop && no_input);
+        present(
+            &mut core,
+            frame,
+            display.width,
+            diagnostics.as_ref().filter(|_| no_input),
+        );
         if no_input && desktop && test {
             return 74;
         }

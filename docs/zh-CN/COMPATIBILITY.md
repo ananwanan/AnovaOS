@@ -241,3 +241,10 @@ Linux 普通文件的标量 `read` 通过逐页受检复制，每次可读取最
 ## 可选 USB 输入范围
 
 USB 输入范围使用 QEMU `qemu-xhci`、`usb-kbd` 和相对 `usb-mouse`，独立于 Linux 可执行文件兼容性。Boot 与 Report 协议进入同一合成器／图形 PTY，保留 PS/2 和 COM1。Report ID、键盘位图、复合描述符链和附加按钮有有界宿主夹具；QEMU 模拟键鼠传输有单独端到端证据。这不代表任意 USB 设备或实机控制器可用。参阅 [USB 范围](milestones/USB_INPUT.md)和[证据](validation/USB_INPUT.md)。
+
+## USB 输入生命周期范围
+
+可选 xHCI 路径支持 Boot/Report 键盘和相对鼠标。已实现 USB2 Hub 描述符、根端口／Hub 热插拔、
+设备独立状态释放以及有界回收／恢复。实测 QEMU 模型和故障范围见
+[USB 验证](validation/USB_INPUT.md)。TT 选择具有宿主测试；高速 TT 传输、低速实机、USB3 Hub、
+64 字节实机控制器上下文、LED 和任意 HID 布局仍待验证。Linux ABI 及冻结的 native/GUI 公共 ABI 不变。

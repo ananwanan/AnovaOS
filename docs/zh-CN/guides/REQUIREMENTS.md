@@ -84,6 +84,6 @@
 ## USB 键鼠
 
 DEV-006 要求按 USB.1～USB.5 顺序在真实传输链路验收键鼠，复用 PS/2 的统一输入接口，保留无设备桌面与串口恢复。
-USB.6 的外置 Hub、热插拔与异常恢复仅进入后续规划。
+USB.6 新增有界 USB2 Hub、热插拔与恢复，并使用独立 QEMU 门禁；实机验收仍分别进行。
 
 [USB 开发里程碑](../milestones/USB_INPUT.md) · [测试指南及证据](../validation/USB_INPUT.md)

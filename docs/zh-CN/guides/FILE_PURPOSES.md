@@ -236,7 +236,7 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `kernel/src/drivers/input.rs` | 管理 i8042 初始化/轮询/超时，向获准用户合成器独占交接物理事件，并保留诊断/生命周期检查。 |
 | `kernel/src/drivers/mod.rs` | 管理 BSP 设备初始化、持久 VFS 交接及可选 scheduler-polled PS/2 输入。 |
 | `kernel/src/drivers/network.rs` | 管理 modern virtio-net split queues、帧/DMA 边界、所有权屏障及 reset/quarantine。 |
-| `kernel/src/drivers/pci.rs` | 枚举 PCI 桥和函数，准入有界 modern virtio MMIO capabilities/BAR。 |
+| `kernel/src/drivers/pci.rs` | 枚举 PCI 桥和函数，记录 xHCI 标识并准入有界 virtio／xHCI MMIO BAR。 |
 | `kernel/src/drivers/virtio.rs` | 管理 coherent split block queue、checked transfers/FLUSH、失败元数据诊断、超时、reset 和 DMA 隔离。 |
 | `kernel/src/fs/mod.rs` | 将 checked native user buffers 桥接到共享 VFS 和轮询 canonical terminal；BSP IF=0 调用，阻塞仅保留 syscall frame 副本，不保留锁。 |
 | `kernel/src/fs/tty.rs` | 实现有界 COM1/四 PTY line discipline、准确写入/poll/唤醒条件、配置、前台信号和 hangup。 |
@@ -592,17 +592,23 @@ LICENSE/NOTICE 与上游许可原样保留。Markdown 在开头使用英文用�
 | `tests/guest/m18/llvm_demangle.sh` | 编译上游 demangle 源码，链接并运行夹具，保留原始失败。 |
 | `xtask/src/m18_llvm.rs` | 执行有界 guest LLVM 组件构建，比较干净重复运行并保留恢复证据。 |
 | `kernel/src/drivers/xhci/mod.rs` | 管理控制器、命令提交、完成匹配和失败后的 DMA 生命周期。 |
-| `kernel/src/drivers/xhci/registers.rs` | 校验 MMIO、固件接管、协议端口范围及有界根端口复位。 |
-| `kernel/src/drivers/xhci/rings.rs` | 布局 DMA32 存储，发布命令 TRB 并跨回绕消费事件 TRB。 |
+| `kernel/src/drivers/xhci/registers.rs` | 映射有界能力页以完成接管，重新校验测得 BAR，并管理协议端口范围／复位。 |
+| `kernel/src/drivers/xhci/rings.rs` | 持有 DMA32 环和独立 Scratchpad 指针页，验证有界分配并发布／消费 TRB。 |
 | `docs/en/milestones/USB_INPUT.md` | 定义 USB 所有权、HID 输入交付阶段及 USB.6 设计。 |
 | `docs/en/validation/USB_INPUT.md` | 区分实际结果与宿主、QEMU 和实机 USB 验收步骤。 |
 | `docs/zh-CN/milestones/USB_INPUT.md` | 定义 USB 所有权、HID 输入交付阶段及 USB.6 设计。 |
 | `docs/zh-CN/validation/USB_INPUT.md` | 区分实际结果与宿主、QEMU 和实机 USB 验收步骤。 |
-
-| `crates/usb/Cargo.toml` | Define the no_std descriptor and HID validation crate. |
-| `crates/usb/src/lib.rs` | Validate bounded USB device/configuration/interface/endpoint descriptors. |
+| `crates/usb/Cargo.toml` | 定义 no_std 描述符、HID、拓扑和 xHCI 寄存器校验。 |
+| `crates/usb/src/lib.rs` | 校验 USB 描述符并导出有界 HID、拓扑和 xHCI 寄存器辅助函数。 |
+| `crates/usb/src/xhci.rs` | 校验有界能力链、寄存器区间及显式协议速度 ID 映射，并提供宿主负例。 |
 | `crates/usb/src/hid.rs` | Parse bounded HID layouts and transactionally decode boot/report input. |
 | `kernel/src/drivers/xhci/device.rs` | Own device contexts, EP0 enumeration and interrupt endpoint records. |
 | `kernel/src/drivers/xhci/transfer.rs` | Publish transfer TRBs and read completed coherent DMA payloads. |
-
 | `xtask/src/usb_input.rs` | Drive independent USB/PS2 desktop topologies and inspect exact graphical PTY bytes. |
+| `crates/usb/src/topology.rs` | 校验 USB2 Hub 描述符、默认 TT 模式、有界路由和继承的 TT 标识。 |
+| `kernel/src/drivers/xhci/task.rs` | 可失败地分配并固定单 BSP USB 工作任务，以协作方式轮询执行。 |
+| `kernel/src/drivers/xhci/lifecycle.rs` | 释放输入、回收已停止的槽位并执行有界设备／控制器恢复。 |
+| `kernel/src/drivers/xhci/hub.rs` | 为 USB2 Hub 供电并监控状态，枚举子设备和回收子树。 |
+| `xtask/src/usb_hotplug.rs` | 验证运行时插入、按住状态释放、DMA／slot 复用、嵌套 Hub 和真实恢复。 |
+| `user/compositor/src/input_notice.rs` | 读取有界 USB 启动诊断并自动绘制无输入覆盖层。 |
+| `xtask/src/usb_diagnostics.rs` | 通过真实 QEMU 画面验证生产镜像无输入诊断及输入恢复后的移除。 |

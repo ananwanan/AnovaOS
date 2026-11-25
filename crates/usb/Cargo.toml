@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Validate bounded USB descriptor trees and HID reports without hardware or allocation.
+# Validate USB descriptors, HID/topology and xHCI register walks without hardware or allocation.
 [package]
 name = "anova-usb"
 version.workspace = true

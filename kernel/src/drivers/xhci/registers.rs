@@ -1,41 +1,41 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Validate xHCI BAR subregions, firmware ownership and root-port protocol/reset operations.
+//! Map bounded xHCI capability pages for firmware handoff, then validate measured BAR subregions.
+//! Decode shared protocol speed maps and separate boot ownership from cooperative port resets.
 
 use super::super::pci::Function;
 use crate::arch::x86_64::{cpu, paging::EarlyMapper};
+use crate::serial;
 use anova_platform::{PM_HZ, PhysAddr, VirtAddr, acpi::PmTimer, pm_elapsed};
+use anova_usb::xhci::{REGISTER_LIMIT, extended_capabilities, register_end};
 use core::ptr::{read_volatile, write_volatile};
 
 // The fourth 256 KiB PCI window shares the existing virtio page-table branch.
 const WINDOW: u64 = 0xffff_c000_006c_0000;
-const LIMIT: u64 = 256 * 1024;
 
 #[derive(Clone, Copy)]
 pub(super) struct Region {
     base: u64,
-    bytes: u64,
+    bytes: u32,
 }
 
 impl Region {
     fn region(self, offset: u32, bytes: u32) -> Result<Self, &'static str> {
-        if offset & 3 != 0 || bytes < 4 || u64::from(offset) + u64::from(bytes) > self.bytes {
-            return Err("register-range");
-        }
+        checked_end(offset, bytes, self.bytes)?;
         Ok(Self {
             base: self.base + u64::from(offset),
-            bytes: u64::from(bytes),
+            bytes,
         })
     }
 
     // Callers use only fixed DWORD offsets inside a subregion validated at discovery.
     pub(super) fn read(self, offset: u32) -> u32 {
-        debug_assert!(offset & 3 == 0 && u64::from(offset) + 4 <= self.bytes);
+        debug_assert!(register_end(offset, 4, self.bytes).is_ok());
         // SAFETY: The validated offset names an aligned UC register on the sole BSP.
         unsafe { read_volatile((self.base + u64::from(offset)) as *const u32) }
     }
 
     pub(super) fn write(self, offset: u32, value: u32) {
-        debug_assert!(offset & 3 == 0 && u64::from(offset) + 4 <= self.bytes);
+        debug_assert!(register_end(offset, 4, self.bytes).is_ok());
         // SAFETY: The owning driver writes a validated, aligned UC register at IF=0.
         unsafe { write_volatile((self.base + u64::from(offset)) as *mut u32, value) };
     }
@@ -43,6 +43,55 @@ impl Region {
     pub(super) fn address(self, offset: u32, value: u64) {
         self.write(offset, value as u32);
         self.write(offset + 4, (value >> 32) as u32);
+    }
+}
+
+fn checked_end(offset: u32, bytes: u32, limit: u32) -> Result<u32, &'static str> {
+    register_end(offset, bytes, limit).inspect_err(|_| {
+        serial::write(format_args!(
+            "[USB:REG_RANGE] offset={offset:#x} bytes={bytes:#x} limit={limit:#x}\n"
+        ));
+    })
+}
+
+/// Firmware may place xECP outside the first page. Before ownership is transferred,
+/// trust only advertised register spans within our ceiling and firmware MMIO map;
+/// probing BAR size while firmware uses the controller would disturb its decoding.
+/// Track touched bytes and revalidate against the measured BAR before allocating DMA.
+struct Bootstrap {
+    physical: u64,
+    mapped: u64,
+    used: u32,
+}
+
+impl Bootstrap {
+    fn region(
+        &mut self,
+        mapper: &mut EarlyMapper<'_>,
+        offset: u32,
+        bytes: u32,
+    ) -> Result<Region, &'static str> {
+        let end = checked_end(offset, bytes, REGISTER_LIMIT)?;
+        for page in offset / 4096..=(end - 1) / 4096 {
+            let bit = 1u64 << page;
+            if self.mapped & bit != 0 {
+                continue;
+            }
+            let delta = u64::from(page) * 4096;
+            let physical = self.physical.checked_add(delta).ok_or("bar-overflow")?;
+            if physical >= 1 << 52 {
+                return Err("bar-overflow");
+            }
+            mapper
+                .try_mmio(PhysAddr(physical), VirtAddr(WINDOW + delta))
+                .map_err(|_| "bar-map")?;
+            self.mapped |= bit;
+        }
+        self.used = self.used.max(end);
+        Ok(Region {
+            base: WINDOW + u64::from(offset),
+            bytes,
+        })
     }
 }
 
@@ -64,15 +113,22 @@ pub(super) fn wait(
     Err(reason)
 }
 
-fn handoff(cap: Region, timer: PmTimer) -> Result<(), &'static str> {
-    let mut offset = (cap.read(0x10) >> 16) * 4;
-    while offset != 0 {
-        // Claim the controller before probing BAR size. Reject capability chains
-        // outside the bootstrap page rather than accessing an unmeasured aperture.
-        let entry = cap.region(offset, 4)?;
+fn handoff(
+    bootstrap: &mut Bootstrap,
+    mapper: &mut EarlyMapper<'_>,
+    first: u32,
+    timer: PmTimer,
+) -> Result<(), &'static str> {
+    extended_capabilities(first, REGISTER_LIMIT, |offset| {
+        let entry = bootstrap.region(mapper, offset, 4)?;
         let header = entry.read(0);
         if header & 255 == 1 {
-            let legacy = cap.region(offset, 8)?;
+            let legacy = bootstrap.region(mapper, offset, 8)?;
+            serial::write(format_args!(
+                "[USB:HANDOFF] legacy={offset:#x} bios={} os={}\n",
+                (header >> 16) & 1,
+                (header >> 24) & 1
+            ));
             legacy.write(0, header | 1 << 24);
             wait(timer, "bios-handoff-timeout", || {
                 legacy.read(0) & (1 << 16 | 1 << 24) == 1 << 24
@@ -80,13 +136,8 @@ fn handoff(cap: Region, timer: PmTimer) -> Result<(), &'static str> {
             // Disable legacy SMIs. Write zeros to W1C status fields.
             legacy.write(4, 0);
         }
-        let next = (header >> 8) & 255;
-        if next == 0 {
-            break;
-        }
-        offset += next * 4;
-    }
-    Ok(())
+        Ok(header)
+    })
 }
 
 #[derive(Clone, Copy)]
@@ -97,6 +148,8 @@ pub(super) struct Registers {
     pub doorbell: Region,
     pub port_regs: Region,
     pub protocols: [u8; 256],
+    pub speeds: [[u8; 16]; 8],
+    pub speed_groups: [u8; 256],
     pub context_bytes: usize,
     pub slots: u8,
     pub ports: u8,
@@ -114,21 +167,29 @@ impl Registers {
         if base == 0 || base & 4095 != 0 || base >= 1 << 52 {
             return Err("bar-address");
         }
-        mapper
-            .try_mmio(PhysAddr(base), VirtAddr(WINDOW))
-            .map_err(|_| "bar-map")?;
-        pci.command(pci.read(4) as u16 | 2);
-        let cap = Region {
-            base: WINDOW,
-            bytes: 4096,
+        let mut bootstrap = Bootstrap {
+            physical: base,
+            mapped: 0,
+            used: 0,
         };
+        let cap = bootstrap.region(mapper, 0, 0x20)?;
+        pci.command(pci.read(4) as u16 | 2);
         let header = cap.read(0);
         let length = header & 255;
         if !(0x0096..=0x012f).contains(&(header >> 16)) || length < 0x20 {
             return Err("controller-version");
         }
-        let op = cap.region(length, 0x3c)?;
-        handoff(cap, timer)?;
+        let first = (cap.read(0x10) >> 16) * 4;
+        serial::write(format_args!(
+            "[USB:REGS] bar={base:#x} cap={length:#x} ecp={first:#x}\n"
+        ));
+        serial::write(format_args!(
+            "[USB:REGS] runtime={:#x} doorbells={:#x}\n",
+            cap.read(0x18) & !31,
+            cap.read(0x14) & !3
+        ));
+        let op = bootstrap.region(mapper, length, 0x3c)?;
+        handoff(&mut bootstrap, mapper, first, timer)?;
         wait(timer, "controller-not-ready", || {
             op.read(4) & (1 << 11) == 0
         })?;
@@ -137,19 +198,19 @@ impl Registers {
         let bytes = pci
             .halted_bar0_size(base)
             .map_err(|_| "bar-size")?
-            .min(LIMIT);
-        if base.checked_add(bytes).is_none_or(|end| end > 1 << 52) {
+            .min(u64::from(REGISTER_LIMIT)) as u32;
+        serial::write(format_args!(
+            "[USB:APERTURE] bytes={bytes:#x} bootstrap_end={:#x}\n",
+            bootstrap.used
+        ));
+        checked_end(0, bootstrap.used, bytes).map_err(|_| "capability-bar-range")?;
+        if base
+            .checked_add(u64::from(bytes))
+            .is_none_or(|end| end > 1 << 52)
+        {
             return Err("bar-overflow");
         }
-        for offset in (4096..bytes).step_by(4096) {
-            mapper
-                .try_mmio(PhysAddr(base + offset), VirtAddr(WINDOW + offset))
-                .map_err(|_| "bar-map")?;
-        }
-        let bar = Region {
-            base: WINDOW,
-            bytes,
-        };
+        let bar = bootstrap.region(mapper, 0, bytes)?;
         let params = bar.read(4);
         let slots = (params as u8).min(8);
         let ports = (params >> 24) as u8;
@@ -158,7 +219,10 @@ impl Registers {
         }
         let params2 = bar.read(8);
         let scratchpads = (((params2 >> 21) & 31) << 5 | (params2 >> 27)) as usize;
-        if scratchpads > 32 {
+        serial::write(format_args!(
+            "[USB:SCRATCH] requested={scratchpads} limit=512 hcsparams2={params2:#x}\n"
+        ));
+        if scratchpads > 512 {
             return Err("scratchpad-limit");
         }
         let rt = bar.read(0x18) & !31;
@@ -166,8 +230,10 @@ impl Registers {
         let port_bytes = u32::from(ports) * 16;
         let port_regs = bar.region(length + 0x400, port_bytes)?;
         let mut protocols = [0; 256];
-        let mut offset = (bar.read(0x10) >> 16) * 4;
-        while offset != 0 {
+        let mut speeds = [[0; 16]; 8];
+        let mut speed_groups = [0; 256];
+        let mut groups = 0;
+        extended_capabilities(first, bytes, |offset| {
             let entry = bar.region(offset, 4)?;
             let header = entry.read(0);
             if header & 255 == 2 {
@@ -184,10 +250,31 @@ impl Registers {
                 {
                     return Err("port-protocol-range");
                 }
-                // Nonstandard protocol speed IDs need their own interpretation before reset.
-                if range >> 28 != 0 {
-                    return Err("port-protocol-speed-table");
+                let count_psi = (range >> 28) as usize;
+                let next = (header >> 8) & 255;
+                if next != 0 && next * 4 < 16 + count_psi as u32 * 4 {
+                    return Err("protocol-speed-overlap");
                 }
+                let table = bar.region(offset, 16 + count_psi as u32 * 4)?;
+                if protocol.read(12) & 31 != 0 {
+                    return Err("protocol-slot-type");
+                }
+                let mut entries = [0; 15];
+                for (index, entry) in entries[..count_psi].iter_mut().enumerate() {
+                    *entry = table.read(16 + index as u32 * 4);
+                }
+                let map = anova_usb::xhci::speed_map(major, &entries[..count_psi])?;
+                serial::write(format_args!(
+                    "[USB:PROTOCOL] major={major} first={first} ports={count} psi={count_psi}\n"
+                ));
+                if groups == speeds.len() {
+                    return Err("protocol-group-limit");
+                }
+                speeds[groups] = map;
+                for group in &mut speed_groups[first..first + count] {
+                    *group = groups as u8;
+                }
+                groups += 1;
                 for owner in &mut protocols[first..first + count] {
                     if *owner != 0 {
                         return Err("port-protocol-overlap");
@@ -195,12 +282,8 @@ impl Registers {
                     *owner = major;
                 }
             }
-            let next = (header >> 8) & 255;
-            if next == 0 {
-                break;
-            }
-            offset = offset.checked_add(next * 4).ok_or("protocol-offset")?;
-        }
+            Ok(header)
+        })?;
         let op_end = length + 0x400 + port_bytes;
         let doorbell_bytes = (u32::from(slots) + 1) * 4;
         let interrupt = bar.region(rt.checked_add(32).ok_or("runtime-offset")?, 32)?;
@@ -215,6 +298,8 @@ impl Registers {
             doorbell,
             port_regs,
             protocols,
+            speeds,
+            speed_groups,
             context_bytes: if bar.read(0x10) & 4 != 0 { 64 } else { 32 },
             slots,
             ports,
@@ -236,8 +321,8 @@ impl Registers {
         wait(self.timer, "halt-timeout", || self.op.read(4) & 1 != 0)
     }
 
-    /// Called only during BSP boot, before asynchronous device requests exist.
-    pub fn reset_port(self, port: u8) -> Result<Option<u8>, &'static str> {
+    /// Yield between port reset/recovery observations so other tasks remain runnable.
+    pub async fn reset_port(self, port: u8) -> Result<Option<u8>, &'static str> {
         if port == 0 || port > self.ports {
             return Err("root-port-range");
         }
@@ -257,46 +342,76 @@ impl Registers {
         const CHANGES: u32 = 0x7f << 17;
         self.port_regs.write(offset, (status & RW) | 1 << 9);
         let start = cpu::in32(self.timer.port);
-        wait(self.timer, "port-power-timeout", || {
+        wait_async(self.timer, "port-power-timeout", || {
             u64::from(pm_elapsed(
                 start,
                 cpu::in32(self.timer.port),
                 self.timer.mask,
             )) >= PM_HZ / 10
-        })?;
+        })
+        .await?;
         if read() & 1 == 0 {
             return Err("root-port-disconnected");
         }
         if protocol == 2 || read() & 2 == 0 {
             let reset = if protocol == 2 { 1 << 4 } else { 1 << 31 };
             self.port_regs.write(offset, (read() & RW) | reset);
-            wait(self.timer, "port-reset-timeout", || {
+            wait_async(self.timer, "port-reset-timeout", || {
                 let current = read();
                 current & 1 == 0 || current & (1 << 4 | 1 << 31) == 0 && current & 2 != 0
-            })?;
+            })
+            .await?;
         }
         let status = read();
-        let speed = ((status >> 10) & 15) as u8;
+        let id = ((status >> 10) & 15) as usize;
+        let speed = self.speeds[usize::from(self.speed_groups[usize::from(port)])][id];
         if status & 3 != 3 || status & (15 << 5) != 0 {
             return Err("root-port-not-enabled");
         }
         if !(protocol == 2 && (1..=3).contains(&speed) || protocol == 3 && speed == 4) {
-            return Err("root-port-speed");
+            serial::write(format_args!(
+                "[USB:PORT_SKIP] port={port} speed_id={id} reason=unsupported-speed\n"
+            ));
+            return Ok(None);
         }
         self.port_regs
             .write(offset, (status & RW) | (status & CHANGES));
         // USB 2.0 7.1.7.5 requires at least 10 ms reset recovery before device requests.
         let start = cpu::in32(self.timer.port);
-        wait(self.timer, "port-recovery-timeout", || {
+        wait_async(self.timer, "port-recovery-timeout", || {
             u64::from(pm_elapsed(
                 start,
                 cpu::in32(self.timer.port),
                 self.timer.mask,
             )) >= PM_HZ / 100
-        })?;
+        })
+        .await?;
         if read() & 3 != 3 {
             return Err("root-port-disconnected");
         }
         Ok(Some(speed))
     }
+}
+
+/// One bounded observation per scheduler turn; the PM timer bounds lost completions.
+pub(super) async fn wait_async(
+    timer: PmTimer,
+    reason: &'static str,
+    mut ready: impl FnMut() -> bool,
+) -> Result<(), &'static str> {
+    let start = cpu::in32(timer.port);
+    let scheduler_start = crate::arch::x86_64::apic::monotonic_ns();
+    for _ in 0..4_000_000 {
+        if ready() {
+            return Ok(());
+        }
+        if u64::from(pm_elapsed(start, cpu::in32(timer.port), timer.mask)) >= PM_HZ
+            || crate::arch::x86_64::apic::monotonic_ns().saturating_sub(scheduler_start)
+                >= 1_000_000_000
+        {
+            break;
+        }
+        super::task::next_turn().await;
+    }
+    Err(reason)
 }

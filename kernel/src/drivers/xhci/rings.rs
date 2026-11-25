@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Own coherent DMA32 command/event storage with headroom for all 32 admitted HID completions.
+//! Own DMA32 rings and a separate scratchpad pointer page for up to 512 controller buffers.
 
 use crate::mm::DmaPage;
 use alloc::vec::Vec;
@@ -10,21 +10,21 @@ use core::{
 
 const DCBAA: usize = 0;
 const ERST: usize = 128;
-const SCRATCH_ARRAY: usize = 256;
+const SCRATCHPAD_LIMIT: usize = 4096 / 8;
 const COMMAND: usize = 1024;
 const EVENTS: usize = 2048;
 const COMMAND_ENTRIES: usize = 16;
 const EVENT_ENTRIES: usize = 64;
 const _: () = assert!(EVENT_ENTRIES > 8 * anova_usb::MAX_INTERFACES + 16);
 const STRIDE: usize = 16;
-const _: () = assert!(9 * 8 <= ERST && ERST + 16 <= SCRATCH_ARRAY);
-const _: () =
-    assert!(SCRATCH_ARRAY + 32 * 8 <= COMMAND && COMMAND + COMMAND_ENTRIES * STRIDE <= EVENTS);
+const _: () = assert!(9 * 8 <= ERST && ERST + 16 <= COMMAND);
+const _: () = assert!(COMMAND + COMMAND_ENTRIES * STRIDE <= EVENTS);
 const _: () = assert!(EVENTS + EVENT_ENTRIES * STRIDE <= 4096);
 
 pub(super) struct Rings {
     page: DmaPage,
     scratchpads: Vec<DmaPage>,
+    scratch_array: Option<DmaPage>,
     producer: usize,
     producer_cycle: bool,
     consumer: usize,
@@ -38,13 +38,38 @@ pub(super) struct Completion {
 }
 
 impl Rings {
+    #[cfg(feature = "qemu-test")]
+    pub fn test_scratchpads() -> Result<(), &'static str> {
+        for count in [0, 33, 512] {
+            let rings = Self::new(count)?;
+            assert_eq!(rings.scratchpads.len(), count);
+            for (index, page) in rings.scratchpads.iter().enumerate() {
+                let array = rings
+                    .scratch_array
+                    .as_ref()
+                    .ok_or("scratchpad-array-missing")?;
+                // SAFETY: The checked index addresses a live aligned entry; no DMA is published.
+                let actual = unsafe { read_volatile(array.pointer().add(index * 8).cast::<u64>()) };
+                assert_eq!(actual, page.physical());
+            }
+            assert_eq!(rings.read(COMMAND), 0);
+            assert_eq!(rings.read(EVENTS), 0);
+        }
+        assert!(matches!(Self::new(513), Err("scratchpad-limit")));
+        crate::serial::write(format_args!(
+            "[USB:SCRATCH_TEST] counts=0,33,512 overflow=reject passed=true\n"
+        ));
+        Ok(())
+    }
+
     pub fn new(count: usize) -> Result<Self, &'static str> {
-        if count > 32 {
+        if count > SCRATCHPAD_LIMIT {
             return Err("scratchpad-limit");
         }
         let mut rings = Self {
             page: DmaPage::new().map_err(|_| "ring-allocation")?,
             scratchpads: Vec::new(),
+            scratch_array: None,
             producer: 0,
             producer_cycle: true,
             consumer: 0,
@@ -54,13 +79,29 @@ impl Rings {
             .scratchpads
             .try_reserve_exact(count)
             .map_err(|_| "scratchpad-allocation")?;
+        if count > 0 {
+            rings.scratch_array = Some(DmaPage::new().map_err(|_| "scratchpad-array-allocation")?);
+        }
         for i in 0..count {
             let page = DmaPage::new().map_err(|_| "scratchpad-allocation")?;
-            rings.write_address(SCRATCH_ARRAY + i * 8, page.physical());
+            let array = rings
+                .scratch_array
+                .as_ref()
+                .ok_or("scratchpad-array-missing")?;
+            // SAFETY: i < count <= 512; each aligned u64 lies in the owned 4 KiB DMA page.
+            // Hardware has not received DCBAA yet; partial allocation drops all owned pages.
+            unsafe { write_volatile(array.pointer().add(i * 8).cast::<u64>(), page.physical()) };
             rings.scratchpads.push(page);
         }
         if count > 0 {
-            rings.write_address(DCBAA, rings.physical(SCRATCH_ARRAY));
+            rings.write_address(
+                DCBAA,
+                rings
+                    .scratch_array
+                    .as_ref()
+                    .ok_or("scratchpad-array-missing")?
+                    .physical(),
+            );
         }
         rings.write_address(ERST, rings.physical(EVENTS));
         rings.write(ERST + 8, EVENT_ENTRIES as u32);
@@ -110,7 +151,7 @@ impl Rings {
     }
 
     /// Boot commands are serialized until the matching completion retires this TRB.
-    pub fn submit(&mut self, kind: u8, slot: u8, pointer: u64) -> u64 {
+    pub fn submit(&mut self, kind: u8, slot: u8, pointer: u64, endpoint: u8) -> u64 {
         let offset = COMMAND + self.producer * STRIDE;
         let cycle = u32::from(self.producer_cycle);
         self.producer += 1;
@@ -128,7 +169,7 @@ impl Rings {
         fence(Ordering::Release);
         self.write(
             offset + 12,
-            u32::from(slot) << 24 | u32::from(kind) << 10 | cycle,
+            u32::from(slot) << 24 | u32::from(endpoint) << 16 | u32::from(kind) << 10 | cycle,
         );
         fence(Ordering::SeqCst);
         self.physical(offset)

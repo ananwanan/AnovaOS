@@ -191,7 +191,7 @@ pub fn init(timer: PmTimer) {
                 serial::write(format_args!(
                     "[INPUT:FALLBACK] keyboard=false pointer=false reason={reason}; COM1 available\n"
                 ));
-                if !usb_available() {
+                if !usb_poll_available() {
                     return;
                 }
                 (false, false)
@@ -365,13 +365,16 @@ pub fn gui_event() -> Result<anova_gui::transport::HardwareEvent, i64> {
     let state = unsafe { &mut *OWNER.0.get() }
         .as_mut()
         .ok_or(anova_abi::UNSUPPORTED)?;
-    if !state.keyboard && !state.pointer && !usb_available() {
-        return Err(anova_abi::UNSUPPORTED);
-    }
     if !state.gui {
         return Err(anova_abi::PERMISSION_DENIED);
     }
-    let event = state.dispatcher.pop_event().ok_or(anova_abi::WOULD_BLOCK)?;
+    let event = state.dispatcher.pop_event().ok_or_else(|| {
+        if !state.keyboard && !state.pointer && !usb_available() {
+            anova_abi::UNSUPPORTED
+        } else {
+            anova_abi::WOULD_BLOCK
+        }
+    })?;
     #[cfg(feature = "usb-input-test")]
     if let Event::Key(key) = event {
         serial::write(format_args!(
@@ -489,6 +492,17 @@ fn usb_available() -> bool {
     #[cfg(feature = "xhci")]
     {
         crate::drivers::xhci::input_available()
+    }
+    #[cfg(not(feature = "xhci"))]
+    {
+        false
+    }
+}
+
+fn usb_poll_available() -> bool {
+    #[cfg(feature = "xhci")]
+    {
+        crate::drivers::xhci::controller_available()
     }
     #[cfg(not(feature = "xhci"))]
     {

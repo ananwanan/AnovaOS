@@ -448,3 +448,17 @@ Preserve `cargo xtask m18-llvm-test` and its independently source-built `LLVMDem
 archive, observed dependency closure, real executable, exact two-disk comparison and
 compile/link failure and reboot retention checks. See [M18.2](docs/en/validation/M18.2.md).
 Accept the LLVM backend, linker, rustc, Cargo, std and prescribed stage0 separately.
+
+## USB input lifecycle continuing acceptance
+
+The opt-in xHCI input path now includes cooperative USB2 root/hub hotplug and bounded
+retirement/recovery. Preserve `cargo xtask usb-hotplug-test`, `cargo xtask usb-recovery-test`,
+`cargo xtask usb-diagnostics-test` and its real no-input scanout/input-recovery checks,
+both `usb-input-test` modes, `xhci-test`, `xhci-packet-test` and independent PS/2/desktop/COM1
+gates. Read [USB input](docs/en/milestones/USB_INPUT.md) and its
+[evidence](docs/en/validation/USB_INPUT.md). Commands/control/power/reset waits must yield
+at runtime. Keep eight total device slots including hubs, five route levels, device-local
+held input, confirmed Stop/Reset/Disable Slot before DMA reuse, monotonic lifetimes and
+the one-controller-restart budget. Never recycle DMA after an unconfirmed halt/reset.
+Physical hardware, high-speed TT transport, SuperSpeed hubs and arbitrary faults require
+their own evidence. Preserve native/GUI public ABIs and main-push-only Actions.

@@ -325,7 +325,7 @@ pub fn verify(root: &Path, boot: bool) -> Result<()> {
 }
 /// Archive existing regular evidence before publishing current Running/Pending states.
 /// A previous successful result must never describe a new, incomplete or failed invocation.
-fn begin_attempt(work: &Path) -> Result<()> {
+pub(super) fn begin_attempt(work: &Path) -> Result<()> {
     let result = work.join("result.txt");
     output_path(&result)?;
     if result.exists() {
@@ -427,7 +427,7 @@ fn type_text(d: &mut Driver, text: &str) -> Result<()> {
     }
     Ok(())
 }
-fn ack_key(d: &mut Driver, key: &str, code: u16, down: bool) -> Result<()> {
+pub(super) fn ack_key(d: &mut Driver, key: &str, code: u16, down: bool) -> Result<()> {
     let began = Instant::now();
     let from = d.output.position();
     raw_key(d, key, down)?;
@@ -443,7 +443,7 @@ fn ack_key(d: &mut Driver, key: &str, code: u16, down: bool) -> Result<()> {
     }
     Ok(())
 }
-fn type_command(d: &mut Driver, text: &str) -> Result<()> {
+pub(super) fn type_command(d: &mut Driver, text: &str) -> Result<()> {
     type_text(d, text)?;
     ack_key(d, "ret", 28, true)?;
     ack_key(d, "ret", 28, false)

@@ -468,6 +468,32 @@ workflow 解析、双语文档、454 个文件用途覆盖及 `git diff --check`
 
 ## USB 键鼠
 
-可选 USB.2–USB.5 已实现根设备枚举、Boot/Report 键盘和相对鼠标，并接入现有桌面。Boot 与 Report 各通过五种独立 QEMU 拓扑，包含全速／高速；桌面、PTY、串口、存储及运行时回归通过。验证记录区分模拟设备、仅宿主及实机覆盖范围。native/GUI 公共 ABI 保持冻结。USB.6 Hub、运行时热插拔和完整恢复另行验收。实机待验。
+可选 USB 驱动通过现有桌面提供 Boot/Report 键盘和相对鼠标输入。USB.6 已实现协作式根端口／Hub 插拔、按住状态释放、停止端点后的槽位／DMA 回收、有界端点恢复和一次控制器重启。USB2 Hub 使用经检查的路由／TT 记录；总量仍限制为八个设备（含 Hub）。验证记录分别列明实际执行的 QEMU 门禁、仅宿主 TT 检查和待完成的实机覆盖。native/GUI 公共 ABI 保持冻结。SuperSpeed Hub、任意控制器故障及实机仍需独立验收。
 
 [USB 里程碑](../milestones/USB_INPUT.md) · [验证与限制](../validation/USB_INPUT.md)
+
+键盘和鼠标均不可用时，桌面现自动显示 USB 启动诊断，无需键鼠或 COM1 即可读取。请在开机前连接设备并拍摄面板；它是启动快照，不是实时日志。实机兼容性仍待验收。
+
+实机启动照片显示 xHCI `00:14.0` 在 PCI 发现阶段以 `register-range` 拒绝，尚未枚举 HID。
+固件接管时仅允许首个页面的限制已替换为有界按需映射，并在测量 BAR 后重新校验。
+更新后的诊断镜像仍需在实机测试，实机问题尚未确认解决。
+
+Scratchpad 后续：控制器缓冲区上限由 32 提高至 512。独立持有的 4 KiB DMA 指针表避免与命令／事件环重叠；数量为零时不分配地址表。分配失败时通过所有权释放未发布缓冲区，已发布 DMA 继续遵循原有停止确认／隔离规则。启动日志记录实际数量、上限和原始 HCSPARAMS2。仅 QEMU 测试配置构建 0／33／512 个缓冲区，检查每个指针并拒绝 513；这验证分配与布局，不证明实机控制器消费正常。仍需实机复测，要求超过 512 个缓冲区的控制器仍不支持。
+
+## 历史实机 USB 阻塞（2026-11-25）
+
+用户使用 Scratchpad 修复镜像后的最新照片确认 PCI `00:14.0`、厂商／设备 `8086:a12f`、
+类 `0c0330`。发现过程已到达 xECP `0x8000`、旧式能力 `0x846c`（BIOS=0／OS=1），测得
+BAR 为 `0x10000`。HCSPARAMS2 为 `0x14200054`，Scratchpad 需求为 34，低于新上限 512。
+本次启动已越过先前 register-range 和 Scratchpad 准入失败，但尚未证明 DMA 运行正常。
+
+**历史失败（2026-11-26 已解决）：** `USB:REJECT phase=pci reason=port-protocol-speed-table`。Supported Protocol
+解析器当时拒绝所有非零 Protocol Speed ID Count。HID 尚未开始枚举，因此实机键鼠可用性
+仍未验收。下一步实现有界 Protocol Speed ID 表解析，以及端口复位和设备上下文所需的速度
+解释，增加畸形表测试并分别验证 QEMU 和实机。不能仅删除拒绝条件，也不能以已有 QEMU 门禁
+推断实机成功。照片未包含速度表条目，其具体值仍未知。
+## 显式 USB 协议速度表（2026-11-25）
+
+Intel 8086:A12F 实机后续已加入 USB2 低速／全速／高速及对称 SuperSpeed 5 Gb/s 的显式 PSI 表解析。八组共享映射及字节端口索引限制异步栈占用；Slot Context 使用控制器 ID，数据包／TT 逻辑使用 USB 速度类别。未支持速度按端口跳过；SuperSpeedPlus、非对称传输及非零 Slot Type 仍不支持。重建诊断 ISO 后进行实机复测，保留 USB:PROTOCOL／USB:PORT_SKIP 及最后的错误；详细范围与本地证据见 USB 验证记录。
+
+2026-11-26，用户在此前照片中的 Intel 8086:a12f 机器测试速度表修复镜像（SHA-256 07b34f7cb0b7713e198bbe32e65bb5d329d6c6cefcf7017b844f570ab7a22cc7）后，反馈 USB 键盘／鼠标已正常。本配置的无输入阻塞据此关闭。这是用户报告的实机证据；其他控制器、实机 Hub／插拔／恢复压力、SuperSpeedPlus 及无限制 HID 仍需独立验证。CI 仍仅由 main 推送触发，不宣称远端 CI 通过。
